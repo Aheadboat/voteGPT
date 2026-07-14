@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract is complete. F1 — Development and Test Foundation is active in REFACTOR after local verification; public GitHub and live CI verification remain before Human Gate B.
+R0 — Durable Project Contract is complete. F1 — Development and Test Foundation is VERIFIED and awaiting Human Gate B approval; it is not `DONE`.
 
 ## Primary journeys
 
