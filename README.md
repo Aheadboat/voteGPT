@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract is complete. F1 — Development and Test Foundation is VERIFIED and awaiting Human Gate B approval; it is not `DONE`.
+R0 — Durable Project Contract and F1 — Development and Test Foundation are complete. No feature is active; F2 remains `TODO` pending explicit authorization.
 
 ## Primary journeys
 
