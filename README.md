@@ -4,7 +4,11 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract and F1 — Development and Test Foundation are complete. No feature is active; F2 remains `TODO` pending explicit authorization.
+R0 — Durable Project Contract and F1 — Development and Test Foundation are complete. F2 — Identity and Public Shell is active in RED after Human Gate A approval.
+
+## Local identity setup
+
+Copy `.env.example` to `.env.local` and provide every value. `BETTER_AUTH_SECRET` must be a random value of at least 32 characters; `BETTER_AUTH_URL` is the app origin; `EMAIL_SERVER` is an SMTP transport URL; and the Google values come from an OAuth web client. Use `DATABASE_URL=pglite://.data/votegpt` for local PGlite or a PostgreSQL URL. Run `npm run db:migrate` before using PostgreSQL; it refuses to run when `DATABASE_URL` is missing.
 
 ## Primary journeys
 

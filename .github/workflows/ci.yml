@@ -11,6 +11,28 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: votegpt_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d votegpt_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      BETTER_AUTH_SECRET: ci-test-secret-at-least-thirty-two-characters
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/votegpt_test
+      EMAIL_FROM: voteGPT CI <noreply@example.com>
+      EMAIL_SERVER: smtp://127.0.0.1:2525
+      GOOGLE_CLIENT_ID: ci-google-client
+      GOOGLE_CLIENT_SECRET: ci-google-secret
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -23,6 +45,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Validate and apply database migrations
+        run: npm run db:check && npm run db:migrate
+
+      - name: Run PostgreSQL auth contract
+        run: npm run test:postgres
 
       - name: Run non-E2E checks
         run: npm run check

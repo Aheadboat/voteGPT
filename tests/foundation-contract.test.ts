@@ -41,6 +41,9 @@ describe("development foundation", () => {
       lint: "eslint . --max-warnings=0",
       build: "next build",
       "test:e2e": "playwright test",
+      "test:postgres": "vitest run --config vitest.postgres.config.mts",
+      "db:check": "drizzle-kit check --dialect=postgresql --out=drizzle",
+      "db:migrate": "drizzle-kit migrate",
       check: "npm test && npm run typecheck && npm run lint && npm run build",
     })
   })
@@ -62,6 +65,8 @@ describe("development foundation", () => {
     const workflow = readFileSync(workflowPath, "utf8")
     const commands = [
       "npm ci",
+      "npm run db:check && npm run db:migrate",
+      "npm run test:postgres",
       "npm run check",
       "npx playwright install --with-deps chromium",
       "npm run test:e2e",
@@ -85,6 +90,23 @@ describe("development foundation", () => {
 
     const example = readFileSync(examplePath, "utf8")
     expect(findUnsafeEnvironmentEntries(example)).toEqual([])
-    expect(example).toContain("No environment variables are required for F1.")
+    expect(example.trim().split(/\r?\n/).sort()).toEqual(
+      [
+        "BETTER_AUTH_SECRET=",
+        "BETTER_AUTH_URL=",
+        "DATABASE_URL=",
+        "EMAIL_FROM=",
+        "EMAIL_SERVER=",
+        "GOOGLE_CLIENT_ID=",
+        "GOOGLE_CLIENT_SECRET=",
+      ].sort(),
+    )
+  })
+
+  it("fails closed before a migration can target an implicit database", () => {
+    const config = readRepositoryFile("drizzle.config.ts")
+
+    expect(config).toContain("DATABASE_URL is required for database migrations")
+    expect(config).not.toContain("postgres://localhost")
   })
 })

@@ -15,6 +15,7 @@
 # local environment values
 .env*
 !.env.example
+/.data/
 
 # deployment and tooling
 .vercel/

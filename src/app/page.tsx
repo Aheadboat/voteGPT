@@ -1,6 +1,6 @@
 export default function HomePage() {
   return (
-    <main>
+    <main id="main-content">
       <div className="landing">
         <section className="intro" aria-labelledby="page-title">
           <p className="status">
