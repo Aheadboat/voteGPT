@@ -45,6 +45,39 @@ function readMarkdownSection(contents: string, heading: string): string {
   )
 }
 
+function readRoadmapItem(contents: string, id: string): string {
+  const normalizedContents = contents.replace(/\r\n/g, "\n")
+  const headings = [
+    ...normalizedContents.matchAll(new RegExp("^## " + id + "\\b.*$", "gm")),
+  ]
+  const heading = headings[0]?.[0]
+
+  if (headings.length !== 1 || !heading) {
+    throw new Error("Expected one roadmap item: " + id)
+  }
+
+  return readMarkdownSection(normalizedContents, heading)
+}
+
+function readCoordinationField(item: string, label: string): string {
+  const coordination = readMarkdownSection(item, "### Coordination record")
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const value = coordination
+    .match(
+      new RegExp(
+        "^\\s*-\\s+\\*\\*" + escapedLabel + ":\\*\\*\\s*(\\S.*)\\s*$",
+        "m",
+      ),
+    )?.[1]
+    ?.trim()
+
+  if (!value) {
+    throw new Error("Missing or empty coordination field: " + label)
+  }
+
+  return value
+}
+
 function expectTokensInOrder(contents: string, tokens: string[]): void {
   let previousIndex = -1
 
@@ -172,6 +205,7 @@ describe("concurrent roadmap delivery contract", () => {
       "### Concurrency admission and shared ownership",
     )
     const execution = readMarkdownSection(roadmap, "## Execution contract")
+    const executionAdmission = execution.match(/^- ADMISSION:.*$/m)?.[0] ?? ""
 
     expect(sourceOfTruth).not.toContain("single roadmap item")
     expect(sourceOfTruth).toContain("At most two roadmap items may be active")
@@ -183,16 +217,60 @@ describe("concurrent roadmap delivery contract", () => {
     expect(admission).toContain("`CONDITIONAL`")
     expect(admission).toContain("`FAIL`")
     expect(admission).toContain("Every dependency must be `DONE` on `main`")
+
+    for (const activationContract of [protocol, execution]) {
+      expect(activationContract).toMatch(
+        /explicit user authorization[^.\n]*(?:coordinator-only|only the coordinator)[^.\n]*inert activation setup/i,
+      )
+      expect(activationContract).toMatch(
+        /coordinator-owned activation PR\/CI\/merge on `main`[^.\n]*single authoritative active\/admission record/i,
+      )
+      expect(activationContract).toMatch(
+        /integrat(?:e|es|ed|ing) the activation merge into every feature branch[^.\n]*before (?:any )?agent dispatch[^.\n]*`?DISCOVER\/DESIGN\/PLAN`?/i,
+      )
+    }
+
+    for (const admissionContract of [admission, executionAdmission]) {
+      const pass =
+        admissionContract.match(
+          /`PASS`(?:(?!`CONDITIONAL`)[^\n])*/,
+        )?.[0] ?? ""
+      const conditional =
+        admissionContract.match(/`CONDITIONAL`(?:(?!`FAIL`)[^\n])*/)?.[0] ??
+        ""
+      const fail = admissionContract.match(/`FAIL`[^\n]*/)?.[0] ?? ""
+
+      expect(pass).toMatch(/settled interfaces|interfaces must be settled/)
+      expect(pass).toMatch(
+        /disjoint mutable files(?: and|\/) external state|mutable files and external state must be disjoint/,
+      )
+      expect(pass).toMatch(/independent tests|tests must be independent/)
+      expect(pass).toContain("separate worktrees")
+      expect(pass).toContain("merge order")
+      expect(conditional).toMatch(/exactly one[^\n]*(?:owner|owns)/)
+      expect(conditional).toContain("every deferred surface")
+      expect(conditional).toContain("serialized integration point")
+      expect(conditional).toContain("merge order")
+      expect(fail).toContain("coupled")
+      expect(fail).toMatch(/run(?:s)?\b[^\n]*\bsequentially\b/)
+    }
+
+    expect(readRoadmapItem(roadmap, "R1")).not.toContain(
+      "For initial F4/F5 work",
+    )
     expect(execution).not.toContain("At most one roadmap item may be active")
     expect(execution).toContain("At most two roadmap items may be active")
   })
 
   it("isolates feature work from current dependency-complete main", () => {
     const agents = readRepositoryFile("AGENTS.md")
+    const roadmap = readRepositoryFile("ROADMAP.md")
     const isolation = readMarkdownSection(
       agents,
       "### Branch and worktree isolation",
     )
+    const execution = readMarkdownSection(roadmap, "## Execution contract")
+    const executionIsolation = execution.match(/^- ISOLATION:.*$/m)?.[0] ?? ""
     const gitignoreLines = readRepositoryFile(".gitignore")
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -206,6 +284,11 @@ describe("concurrent roadmap delivery contract", () => {
     expect(isolation).toContain(
       "`git merge-base --is-ancestor <current-main> <feature-head>`",
     )
+    for (const isolationContract of [isolation, executionIsolation]) {
+      expect(isolationContract).toMatch(
+        /(?:check fails|failed check|otherwise)[^\n]*integrat(?:e|es) current `main`[^\n]*focused and full verification[^\n]*before review or merge/i,
+      )
+    }
     expect(gitignoreLines).toContain("/.worktrees/")
   })
 
@@ -337,6 +420,47 @@ describe("concurrent roadmap delivery contract", () => {
     expect(record).toContain(
       "Conversation state and agent reports alone never advance status.",
     )
+
+    const statuses = readRoadmapStatuses(roadmap)
+    const activeItems = [...statuses].filter(
+      ([, status]) => status !== "TODO" && status !== "DONE",
+    )
+    const coordinationFields = [
+      "Phase",
+      "Branch",
+      "Base commit",
+      "Integrated-main commit",
+      "Admission result",
+      "Assigned feature lead",
+      "Ownership",
+      "Merge order",
+      "Feature PR/CI",
+      "Blockers",
+      "Feature merge",
+      "Post-merge evidence",
+      "Closeout PR/CI/merge",
+      "Next Human Gate",
+    ]
+
+    for (const [id, status] of activeItems) {
+      const item = readRoadmapItem(roadmap, id)
+      const values = new Map(
+        coordinationFields.map((field) => [
+          field,
+          readCoordinationField(item, field),
+        ]),
+      )
+      const phase = values.get("Phase") ?? ""
+
+      expect(status.toUpperCase()).toContain(
+        phase.replace(/[`*_]/g, "").trim().toUpperCase(),
+      )
+      for (const commitField of ["Base commit", "Integrated-main commit"]) {
+        expect(values.get(commitField), id + " " + commitField).toMatch(
+          /^`?[0-9a-f]{40}`?$/i,
+        )
+      }
+    }
   })
 
   it("recovers feature and closeout conflicts without stale approval", () => {
@@ -413,8 +537,29 @@ describe("concurrent roadmap delivery contract", () => {
       ).get("R1"),
     ).toBe("DONE")
 
+    const syntheticRoadmap = [
+      "## R1 - Active [IN PROGRESS (GREEN)]",
+      "",
+      "### Coordination record",
+      "",
+      "- **Phase:** GREEN",
+      "- **Branch:** `codex/r1`",
+      "",
+      "## F4 - Future [TODO]",
+      "",
+      "### Coordination record",
+      "",
+      "- **Phase:** TODO",
+    ].join("\n")
+    const syntheticR1 = readRoadmapItem(syntheticRoadmap, "R1")
+
+    expect(syntheticR1).toContain("`codex/r1`")
+    expect(syntheticR1).not.toContain("F4")
+    expect(readCoordinationField(syntheticR1, "Phase")).toBe("GREEN")
+
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
+    const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
     const laterRoadmapIds = [
@@ -441,6 +586,10 @@ describe("concurrent roadmap delivery contract", () => {
     for (const id of laterRoadmapIds) {
       expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
     }
+    expect(readme).not.toContain("is implemented and verified")
+    expect(implementationPlan).toContain(
+      "contents.indexOf(token, previousIndex + 1)",
+    )
 
     if (r1Status !== "DONE") {
       expect(activeIds).toEqual(["R1"])
