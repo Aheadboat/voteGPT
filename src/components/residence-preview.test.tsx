@@ -1292,6 +1292,93 @@ describe("residence preview", () => {
     expect(signIn).toHaveFocus();
   });
 
+  it.each(["initial", "retry"] as const)(
+    "does not restore private data when a deferred %s saved load completes after resolver 401",
+    async (loadKind) => {
+      const savedRequest = deferredResponse();
+      const resolutionRequest = deferredResponse();
+      let getAttempt = 0;
+      installResidenceFetch({
+        savedGet: () => {
+          getAttempt += 1;
+          if (loadKind === "initial") {
+            return savedRequest.promise;
+          }
+          return getAttempt === 1
+            ? jsonResponse(
+                {
+                  status: "unavailable",
+                  message:
+                    "Saved residence is temporarily unavailable. Try again later.",
+                },
+                503,
+              )
+            : savedRequest.promise;
+        },
+        resolve: () => resolutionRequest.promise,
+      });
+      installGeolocation();
+      const signInFocusPendingStates: boolean[] = [];
+      const recordSignInFocus = (event: FocusEvent) => {
+        const target = event.target;
+        if (
+          target instanceof HTMLAnchorElement &&
+          target.getAttribute("href") === "/sign-in"
+        ) {
+          signInFocusPendingStates.push(
+            screen
+              .getByRole("button", { name: "Check residence" })
+              .hasAttribute("disabled"),
+          );
+        }
+      };
+      document.addEventListener("focusin", recordSignInFocus);
+
+      try {
+        render(<ResidencePreview />);
+        if (loadKind === "retry") {
+          fireEvent.click(
+            await screen.findByRole("button", {
+              name: /Retry.*saved residence/i,
+            }),
+          );
+        } else {
+          expect(screen.getByText(/Loading saved residence/i)).toBeVisible();
+        }
+
+        enterAddress();
+        const checkResidence = screen.getByRole("button", {
+          name: "Check residence",
+        });
+        expect(checkResidence).toBeDisabled();
+        expect(screen.queryByRole("link", { name: /Sign in/i })).toBeNull();
+
+        await act(async () => {
+          resolutionRequest.resolve(
+            jsonResponse(unauthenticatedResidenceResponse, 401),
+          );
+        });
+
+        const signIn = await screen.findByRole("link", { name: /Sign in/i });
+        expect(checkResidence).toBeEnabled();
+        expect(signIn).toHaveFocus();
+        expect(signInFocusPendingStates).toEqual([false]);
+        expect(screen.queryByText(savedAddress)).toBeNull();
+
+        await act(async () => {
+          savedRequest.resolve(
+            jsonResponse({ status: "saved", residence: savedResidence }),
+          );
+        });
+
+        expect(screen.queryByText(savedAddress)).toBeNull();
+        expect(screen.getByRole("link", { name: /Sign in/i })).toHaveFocus();
+      } finally {
+        document.removeEventListener("focusin", recordSignInFocus);
+      }
+    },
+  );
+
   it("confirms deletion, preserves failures, and focuses manual entry after success", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
