@@ -59,6 +59,7 @@ export type ProviderOutcome =
 export type ParseResidenceInput = (value: unknown) => ResidenceInput | null;
 
 export type CreateResolutionToken = (
+  input: ResidenceInput,
   resolution: Extract<ResolutionOutcome, { status: "matched" | "partial" }>,
   userId: string,
   secret: string,
@@ -114,6 +115,21 @@ const tokenVersion = "v1";
 const tokenLifetimeMilliseconds = 10 * 60 * 1_000;
 const tokenPurpose = "voteGPT/residence-resolution/v1";
 const providerTimeoutMilliseconds = 5_000;
+const maximumPublicCollectionSize = 64;
+const maximumPublicTextLength = 2_048;
+const maximumDecodePasses = 4;
+const decimalDigitZeroCodePoints = [
+  0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6,
+  0xc66, 0xce6, 0xd66, 0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090,
+  0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0,
+  0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50,
+  0xabf0, 0xff10, 0x104a0, 0x10d30, 0x10d40, 0x11066, 0x110f0,
+  0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650, 0x116c0,
+  0x116d0, 0x116da, 0x11730, 0x118e0, 0x11950, 0x11bf0, 0x11c50,
+  0x11d50, 0x11da0, 0x11de0, 0x11f50, 0x16130, 0x16a60, 0x16ac0,
+  0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec,
+  0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0,
+] as const;
 const sourceUrlsByName: ReadonlyMap<string, string> = new Map([
   [
     "Google Civic Information API",
@@ -170,13 +186,19 @@ export const parseResidenceInput: ParseResidenceInput = (value) => {
 };
 
 export const createResolutionToken: CreateResolutionToken = (
+  input,
   resolution,
   userId,
   secret,
   now,
 ) => {
-  const normalizedResolution = copyResolvedResidence(resolution);
-  if (!isResolvedResidence(normalizedResolution)) {
+  let normalizedResolution: ResolvedResidence;
+  try {
+    normalizedResolution = copyResolvedResidence(resolution);
+  } catch {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
+  if (!isPublicResidenceResolution(normalizedResolution, input)) {
     throw new Error("Cannot sign an invalid residence resolution.");
   }
 
@@ -413,7 +435,7 @@ function isResolutionTokenPayload(
     Date.parse(value.expiresAt) - Date.parse(value.issuedAt) !==
       tokenLifetimeMilliseconds ||
     Date.parse(value.expiresAt) <= now.getTime() ||
-    !isResolvedResidence(value.resolution)
+    !isPublicResidenceResolution(value.resolution)
   ) {
     return false;
   }
@@ -421,7 +443,10 @@ function isResolutionTokenPayload(
   return true;
 }
 
-function isResolvedResidence(value: unknown): value is ResolvedResidence {
+export function isPublicResidenceResolution(
+  value: unknown,
+  input?: ResidenceInput,
+): value is Extract<ResolutionOutcome, { status: "matched" | "partial" }> {
   if (
     !isRecord(value) ||
     !hasExactKeys(
@@ -430,15 +455,20 @@ function isResolvedResidence(value: unknown): value is ResolvedResidence {
     ) ||
     (value.status !== "matched" && value.status !== "partial") ||
     !Array.isArray(value.divisions) ||
+    value.divisions.length > maximumPublicCollectionSize ||
     !value.divisions.every(isDivision) ||
     !isSource(value.source) ||
     !Array.isArray(value.coverageNotes) ||
-    !value.coverageNotes.every((note) => typeof note === "string")
+    value.coverageNotes.length > maximumPublicCollectionSize ||
+    !value.coverageNotes.every(isBoundedPublicText)
   ) {
     return false;
   }
 
-  return true;
+  return (
+    input === undefined ||
+    !reflectsResidenceInput(value as ResolvedResidence, input)
+  );
 }
 
 function isDivision(value: unknown): value is ResolvedResidence["divisions"][number] {
@@ -447,9 +477,9 @@ function isDivision(value: unknown): value is ResolvedResidence["divisions"][num
     hasExactKeys(value, new Set(["type", "name", "id", "idScheme"])) &&
     typeof value.type === "string" &&
     divisionTypes.has(value.type as DivisionType) &&
-    typeof value.name === "string" &&
-    typeof value.id === "string" &&
-    typeof value.idScheme === "string"
+    isBoundedPublicText(value.name) &&
+    isBoundedPublicText(value.id) &&
+    isBoundedPublicText(value.idScheme)
   );
 }
 
@@ -467,18 +497,275 @@ function isSource(value: unknown): value is ResolvedResidence["source"] {
         "vintage",
       ]),
     ) ||
-    typeof value.name !== "string" ||
-    typeof value.url !== "string" ||
+    !isBoundedPublicText(value.name) ||
+    !isBoundedPublicText(value.url) ||
     sourceUrlsByName.get(value.name) !== value.url ||
     !isIsoDate(value.checkedAt) ||
     !(value.effectiveAt === null || isIsoDate(value.effectiveAt)) ||
-    !(value.benchmark === undefined || typeof value.benchmark === "string") ||
-    !(value.vintage === undefined || typeof value.vintage === "string")
+    !(
+      value.benchmark === undefined || isBoundedPublicText(value.benchmark)
+    ) ||
+    !(value.vintage === undefined || isBoundedPublicText(value.vintage))
   ) {
     return false;
   }
 
   return true;
+}
+
+function reflectsResidenceInput(
+  resolution: ResolvedResidence,
+  input: ResidenceInput,
+) {
+  const fields = publicResolutionFields(resolution);
+  return input.kind === "address"
+    ? reflectsAddress(fields, input.address)
+    : reflectsCoordinates(fields, input.latitude, input.longitude);
+}
+
+type PublicResolutionField = {
+  kind: "identifier" | "prose" | "timestamp";
+  text: string;
+};
+
+function publicResolutionFields(
+  resolution: ResolvedResidence,
+): PublicResolutionField[] {
+  return [
+    ...resolution.coverageNotes.map((text) => ({ kind: "prose" as const, text })),
+    ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
+      { kind: "identifier" as const, text: id },
+      { kind: "identifier" as const, text: idScheme },
+      { kind: "prose" as const, text: name },
+    ]),
+    { kind: "timestamp", text: resolution.source.checkedAt },
+    ...(resolution.source.effectiveAt === null
+      ? []
+      : [{ kind: "timestamp" as const, text: resolution.source.effectiveAt }]),
+    ...(resolution.source.benchmark === undefined
+      ? []
+      : [{ kind: "identifier" as const, text: resolution.source.benchmark }]),
+    ...(resolution.source.vintage === undefined
+      ? []
+      : [{ kind: "identifier" as const, text: resolution.source.vintage }]),
+  ];
+}
+
+function reflectsAddress(fields: PublicResolutionField[], address: string) {
+  const normalizedAddress = normalizeWordTokens(address).join("");
+  if (normalizedAddress.length === 0) {
+    return true;
+  }
+
+  for (const field of fields) {
+    const layers = decodePublicText(field.text);
+    if (layers === null) {
+      return true;
+    }
+
+    if (
+      layers.some((layer) =>
+        containsJoinedTokenSequence(
+          normalizeWordTokens(layer),
+          normalizedAddress,
+        ),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function reflectsCoordinates(
+  fields: PublicResolutionField[],
+  latitude: number,
+  longitude: number,
+) {
+  for (const field of fields) {
+    const layers = decodePublicText(field.text);
+    if (layers === null) {
+      return true;
+    }
+    const fieldKind = field.kind;
+    if (fieldKind === "timestamp") {
+      continue;
+    }
+    if (
+      layers.some((layer) =>
+        containsCoordinate(layer, latitude, longitude),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function decodePublicText(value: string) {
+  const layers = [value];
+  let decoded = value;
+  for (let pass = 0; pass < maximumDecodePasses; pass += 1) {
+    const next = decodePublicTextLayer(decoded);
+    if (next === null) {
+      return null;
+    }
+    if (next === decoded) {
+      return layers;
+    }
+    decoded = next;
+    layers.push(decoded);
+  }
+
+  return decodePublicTextLayer(decoded) === null || /%[\da-f]{2}/iu.test(decoded)
+    ? null
+    : layers;
+}
+
+function decodePublicTextLayer(value: string) {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "+") {
+      decoded += " ";
+      continue;
+    }
+    if (character !== "%") {
+      decoded += character;
+      continue;
+    }
+
+    if (!isPercentEscape(value, index)) {
+      if (isLiteralPercentage(value, index)) {
+        decoded += character;
+        continue;
+      }
+      return null;
+    }
+
+    let end = index;
+    while (isPercentEscape(value, end)) {
+      end += 3;
+    }
+    try {
+      decoded += decodeURIComponent(value.slice(index, end));
+    } catch {
+      return null;
+    }
+    index = end - 1;
+  }
+
+  return decoded;
+}
+
+function isPercentEscape(value: string, index: number) {
+  return value[index] === "%" && /^[\da-f]{2}$/iu.test(value.slice(index + 1, index + 3));
+}
+
+function isLiteralPercentage(value: string, index: number) {
+  const previous = value[index - 1];
+  const next = value[index + 1];
+  return (
+    previous !== undefined &&
+    /\p{N}/u.test(previous) &&
+    (next === undefined || /[\s\p{P}]/u.test(next))
+  );
+}
+
+function normalizeWordTokens(value: string) {
+  const normalized = normalizeUnicodeNumbers(value)
+    .toLowerCase()
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+  return normalized.length === 0 ? [] : normalized.split(/\s+/u);
+}
+
+function containsJoinedTokenSequence(tokens: string[], target: string) {
+  for (let start = 0; start < tokens.length; start += 1) {
+    let offset = 0;
+    for (let end = start; end < tokens.length; end += 1) {
+      const token = tokens[end];
+      if (!target.startsWith(token, offset)) {
+        break;
+      }
+      offset += token.length;
+      if (offset === target.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function normalizeUnicodeNumbers(value: string) {
+  const folded = value.normalize("NFKD").replace(/\p{M}+/gu, "");
+  return Array.from(folded, (character) => {
+    const codePoint = character.codePointAt(0);
+    const zero = decimalDigitZeroCodePoints.find(
+      (candidate) =>
+        codePoint !== undefined &&
+        codePoint >= candidate &&
+        codePoint <= candidate + 9,
+    );
+    return zero === undefined || codePoint === undefined
+      ? character
+      : String(codePoint - zero);
+  }).join("");
+}
+
+function containsCoordinate(
+  value: string,
+  latitude: number,
+  longitude: number,
+) {
+  const normalized = normalizeNumericText(value);
+  const labelled = /\b(?:coordinates?|gps|lat(?:itude)?|l(?:on|ng|ongitude))\b/iu.test(
+    normalized,
+  );
+  const numericText = labelled
+    ? normalized.replace(/(?<=\d)[,/](?=\d)/gu, ".")
+    : normalized;
+  const numericPattern =
+    /(?<![\p{L}\p{N}])[+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?(?![\p{L}\p{N}])/giu;
+
+  for (const match of numericText.matchAll(numericPattern)) {
+    const token = match[0];
+    const number = Number(token);
+    if (number !== latitude && number !== longitude) {
+      continue;
+    }
+
+    const wholeField = numericText.trim() === token;
+    if (
+      wholeField ||
+      labelled ||
+      /[+\-.e]/iu.test(token)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeNumericText(value: string) {
+  return normalizeUnicodeNumbers(value.replaceAll("\uff0f", "."))
+    .toLowerCase()
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, "")
+    .replaceAll("\u2212", "-")
+    .replaceAll("\u066b", ".");
+}
+
+function isBoundedPublicText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumPublicTextLength
+  );
 }
 
 function isIsoDate(value: unknown): value is string {
