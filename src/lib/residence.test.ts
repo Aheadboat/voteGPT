@@ -194,6 +194,149 @@ describe("resolution token", () => {
   });
 
   it.each([
+    {
+      case: "raw address",
+      input: addressInput,
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: [`Resolved for ${addressInput.address}.`],
+      },
+    },
+    {
+      case: "percent-encoded address",
+      input: addressInput,
+      resolution: {
+        ...resolvedResidence,
+        source: {
+          ...resolvedResidence.source,
+          benchmark: encodeURIComponent(addressInput.address),
+        },
+      },
+    },
+    {
+      case: "double-encoded address",
+      input: addressInput,
+      resolution: {
+        ...resolvedResidence,
+        source: {
+          ...resolvedResidence.source,
+          vintage: encodeURIComponent(encodeURIComponent(addressInput.address)),
+        },
+      },
+    },
+    {
+      case: "form-encoded address",
+      input: addressInput,
+      resolution: {
+        ...resolvedResidence,
+        divisions: [
+          {
+            ...resolvedResidence.divisions[0],
+            name: addressInput.address.replaceAll(" ", "+"),
+          },
+        ],
+      },
+    },
+    {
+      case: "Unicode case, whitespace, and punctuation address",
+      input: addressInput,
+      resolution: {
+        ...resolvedResidence,
+        divisions: [
+          {
+            ...resolvedResidence.divisions[0],
+            id: "private:１２３—FIXTURE   AVENUE／EXAMPLE CITY／CA ９００００",
+          },
+        ],
+      },
+    },
+    {
+      case: "raw latitude",
+      input: coordinateInput,
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: [`Latitude ${coordinateInput.latitude}`],
+      },
+    },
+    {
+      case: "encoded longitude",
+      input: coordinateInput,
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: [
+          `Longitude ${encodeURIComponent(String(coordinateInput.longitude))}`,
+        ],
+      },
+    },
+  ] satisfies Array<{
+    case: string;
+    input: ResidenceInput;
+    resolution: Extract<
+      ResolutionOutcome,
+      { status: "matched" | "partial" }
+    >;
+  }>)("refuses to sign $case reflected by public facts", ({ resolution }) => {
+    expect(() =>
+      createResolutionToken(resolution, userId, secret, now),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it.each([
+    {
+      case: "too many divisions",
+      resolution: {
+        ...resolvedResidence,
+        divisions: Array.from({ length: 65 }, (_, index) => ({
+          ...resolvedResidence.divisions[0],
+          id: `ocd-division/country:us/state:ex/cd:${index}`,
+        })),
+      },
+    },
+    {
+      case: "too many coverage notes",
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: Array.from(
+          { length: 65 },
+          (_, index) => `Coverage note ${index}`,
+        ),
+      },
+    },
+    {
+      case: "overlong public text",
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["x".repeat(2_049)],
+      },
+    },
+  ] satisfies Array<{
+    case: string;
+    resolution: Extract<
+      ResolutionOutcome,
+      { status: "matched" | "partial" }
+    >;
+  }>)("refuses to sign $case", ({ resolution }) => {
+    expect(() =>
+      createResolutionToken(resolution, userId, secret, now),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it("rejects a correctly signed token whose public resolution exceeds bounds", () => {
+    const token = signResolutionPayload({
+      version: "v1",
+      userId,
+      issuedAt: now.toISOString(),
+      expiresAt: "2026-07-14T20:10:00.000Z",
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["x".repeat(2_049)],
+      },
+    });
+
+    expect(verifyResolutionToken(token, userId, secret, now)).toBeNull();
+  });
+
+  it.each([
     [
       "future issuance",
       "2026-07-14T20:01:00.000Z",

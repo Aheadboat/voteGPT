@@ -336,6 +336,70 @@ describe("POST /api/v1/location/resolve", () => {
     expect(providerFetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      case: "percent-encoded address",
+      input: {
+        kind: "address" as const,
+        address: "742 Private Route Avenue, Example City, CA 90000",
+      },
+      leak:
+        "742%20Private%20Route%20Avenue%2C%20Example%20City%2C%20CA%2090000",
+    },
+    {
+      case: "form-encoded and case-varied address",
+      input: {
+        kind: "address" as const,
+        address: "742 Private Route Avenue, Example City, CA 90000",
+      },
+      leak: "７４２+PRIVATE+ROUTE+AVENUE／EXAMPLE+CITY／CA+９００００",
+    },
+    {
+      case: "encoded latitude",
+      input: {
+        kind: "coordinates" as const,
+        latitude: 38.8977,
+        longitude: -77.0365,
+      },
+      leak: "Latitude 38%2E8977",
+    },
+    {
+      case: "Unicode-punctuated longitude",
+      input: {
+        kind: "coordinates" as const,
+        latitude: 38.8977,
+        longitude: -77.0365,
+      },
+      leak: "Longitude −77／0365",
+    },
+  ])("fails closed on $case in otherwise public facts", async ({ input, leak }) => {
+    vi.spyOn(residenceModule, "resolveResidence").mockResolvedValue({
+      status: "matched",
+      divisions: [
+        {
+          type: "county",
+          name: "Safe Example County",
+          id: "ocd-division/country:us/state:ex/county:safe",
+          idScheme: "ocd",
+        },
+      ],
+      source: {
+        name: "Google Civic Information API",
+        url: "https://developers.google.com/civic-information",
+        checkedAt: now.toISOString(),
+        effectiveAt: null,
+      },
+      coverageNotes: [leak],
+    });
+    const providerFetch = vi.fn<typeof globalThis.fetch>();
+    vi.stubGlobal("fetch", providerFetch);
+
+    const response = await POST(resolveRequest(input));
+
+    await expectPrivateJson(response, 503, unavailableResidenceResponse);
+    expect(providerFetch).not.toHaveBeenCalled();
+  });
+
   it("maps safe no-match, ambiguity, and final-unavailable responses without tokens", async () => {
     const cases = [
       {

@@ -1192,6 +1192,75 @@ describe("saved residence persistence", () => {
     const reflectedResolutions = [
       {
         address,
+        label: "percent-encoded coverage note",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: ["Resolved for 456%20Oak%20Avenue."],
+        },
+      },
+      {
+        address,
+        label: "form-encoded division name",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            {
+              ...replacementResolution.divisions[0],
+              name: "456+Oak+Avenue",
+            },
+          ],
+        },
+      },
+      {
+        address,
+        label: "double-encoded division id",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            {
+              ...replacementResolution.divisions[0],
+              id: "private:%2534%2535%2536%2520Oak%2520Avenue",
+            },
+          ],
+        },
+      },
+      {
+        address,
+        label: "Unicode-punctuated division id scheme",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            {
+              ...replacementResolution.divisions[0],
+              idScheme: "４５６—OAK／AVENUE",
+            },
+          ],
+        },
+      },
+      {
+        address,
+        label: "punctuation-folded source benchmark",
+        resolution: {
+          ...replacementResolution,
+          source: {
+            ...replacementResolution.source,
+            benchmark: "456.Oak.Avenue",
+          },
+        },
+      },
+      {
+        address,
+        label: "double-encoded source vintage",
+        resolution: {
+          ...replacementResolution,
+          source: {
+            ...replacementResolution.source,
+            vintage: "456%2520Oak%2520Avenue",
+          },
+        },
+      },
+      {
+        address,
         label: "coverage note",
         resolution: {
           ...replacementResolution,
