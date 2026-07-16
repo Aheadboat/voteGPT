@@ -747,6 +747,50 @@ describe("residence preview", () => {
     ).toHaveLength(0);
   });
 
+  it("does not steal external focus when a candidate expires", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    installResidenceFetch({
+      resolve: () =>
+        jsonResponse({
+          ...matchedResidenceResponse,
+          expiresAt: "2026-07-14T20:06:00.000Z",
+        }),
+    });
+    installGeolocation();
+
+    render(
+      <>
+        <nav aria-label="Site tools">
+          <button type="button">Open voting help</button>
+        </nav>
+        <ResidencePreview />
+      </>,
+    );
+    await act(async () => {});
+    expect(screen.getByText(/No residence (?:is )?saved/i)).toBeVisible();
+    enterAddress();
+    await act(async () => {});
+    const consent = screen.getByRole("checkbox", { name: consentCopy });
+    fireEvent.click(consent);
+    expect(screen.getByRole("button", { name: "Save residence" })).toBeEnabled();
+    const externalControl = screen.getByRole("button", {
+      name: "Open voting help",
+    });
+    externalControl.focus();
+    expect(externalControl).toHaveFocus();
+
+    act(() => vi.advanceTimersByTime(60_000));
+
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+    const expired = screen.getByText(/preview.*expired|expired.*preview/i);
+    expect(expired.closest('[role="status"], [aria-live]')).not.toBeNull();
+    expect(externalControl).toHaveFocus();
+  });
+
   it("returns focus to manual entry after a successful save removes its control", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
@@ -1062,7 +1106,10 @@ describe("residence preview", () => {
     enterAddress();
     const consent = await screen.findByRole("checkbox", { name: consentCopy });
     fireEvent.click(consent);
-    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+    const saveButton = screen.getByRole("button", { name: "Save residence" });
+    saveButton.focus();
+    expect(saveButton).toHaveFocus();
+    fireEvent.click(saveButton);
 
     expect(
       await screen.findByText(/Sign in again before managing a saved residence/i),
@@ -1075,10 +1122,9 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
-    expect(screen.getByRole("link", { name: /Sign in/i })).toHaveAttribute(
-      "href",
-      "/sign-in",
-    );
+    const signIn = screen.getByRole("link", { name: /Sign in/i });
+    expect(signIn).toHaveAttribute("href", "/sign-in");
+    expect(signIn).toHaveFocus();
   });
 
   it("clears private owner state and offers sign-in recovery after DELETE 401", async () => {
@@ -1109,7 +1155,10 @@ describe("residence preview", () => {
     fireEvent.click(
       within(saved).getByRole("button", { name: "Delete saved residence" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Confirm deletion" }));
+    const confirm = screen.getByRole("button", { name: "Confirm deletion" });
+    confirm.focus();
+    expect(confirm).toHaveFocus();
+    fireEvent.click(confirm);
 
     expect(
       await screen.findByText(/Sign in again before managing a saved residence/i),
@@ -1122,10 +1171,9 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
-    expect(screen.getByRole("link", { name: /Sign in/i })).toHaveAttribute(
-      "href",
-      "/sign-in",
-    );
+    const signIn = screen.getByRole("link", { name: /Sign in/i });
+    expect(signIn).toHaveAttribute("href", "/sign-in");
+    expect(signIn).toHaveFocus();
   });
 
   it("confirms deletion, preserves failures, and focuses manual entry after success", async () => {
@@ -1305,6 +1353,13 @@ describe("residence preview", () => {
       name: /(?:Residence preview|Preview residence) match/i,
     });
     expect(savedMatch).not.toBe(previewMatch);
+    const savedSource = within(savedMatch).getByRole("region", {
+      name: /Saved (?:residence|home) source and freshness/i,
+    });
+    const previewSource = within(previewMatch).getByRole("region", {
+      name: /(?:Residence preview|Preview residence) source and freshness/i,
+    });
+    expect(savedSource).not.toBe(previewSource);
   });
 
   it("posts an exact address once while pending, clears success, and starts a fresh explicit check", async () => {
@@ -1408,7 +1463,7 @@ describe("residence preview", () => {
     ).toBeInTheDocument();
 
     const provenance = within(result).getByRole("region", {
-      name: "Source and freshness",
+      name: /^(?:Source and freshness|Residence preview source and freshness)$/i,
     });
     expect(
       within(provenance).getByRole("link", {
