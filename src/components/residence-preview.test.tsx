@@ -10,10 +10,7 @@ import {
   unauthenticatedResidenceResponse,
   unavailableResidenceResponse,
 } from "../../tests/fixtures/residence-responses";
-import type {
-  ResolutionErrorResponse,
-  ResolutionResponse,
-} from "@/lib/residence";
+import type { ResolutionResponse } from "@/lib/residence";
 import type { SavedResidenceView } from "@/lib/saved-residence";
 import { ResidencePreview } from "./residence-preview";
 
@@ -715,7 +712,7 @@ describe("residence preview", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
     let saveAttempt = 0;
-    const fetchMock = installResidenceFetch({
+    installResidenceFetch({
       savedGet: () =>
         jsonResponse({ status: "saved", residence: savedResidence }),
       resolve: () => jsonResponse(matchedResidenceResponse),
