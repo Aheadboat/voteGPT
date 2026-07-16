@@ -64,6 +64,38 @@ function jsonResponse(
   });
 }
 
+const malformedUnauthorizedResponses = [
+  ["an empty body", () => new Response(null, { status: 401 })],
+  [
+    "a non-JSON body",
+    () =>
+      new Response("SENTINEL_UNTRUSTED_401_COPY", {
+        headers: { "content-type": "text/plain" },
+        status: 401,
+      }),
+  ],
+  ["a JSON primitive", () => jsonResponse("SENTINEL_UNTRUSTED_401_COPY", 401)],
+  [
+    "a malformed DTO",
+    () =>
+      jsonResponse(
+        {
+          status: "wrong",
+          message: "SENTINEL_UNTRUSTED_401_COPY",
+        },
+        401,
+      ),
+  ],
+] as const;
+
+const malformedUnauthorizedOperationCases = (
+  ["resolve", "save", "delete"] as const
+).flatMap((operation) =>
+  malformedUnauthorizedResponses.map(
+    ([bodyKind, response]) => [operation, bodyKind, response] as const,
+  ),
+);
+
 function installGeolocation(
   implementation: Geolocation["getCurrentPosition"] = vi.fn(),
 ) {
@@ -1208,6 +1240,71 @@ describe("residence preview", () => {
     expect(signIn).toHaveFocus();
   });
 
+  it.each(malformedUnauthorizedOperationCases)(
+    "invalidates private state after %s HTTP 401 with %s",
+    async (operation, _bodyKind, unauthorizedResponse) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+      installResidenceFetch({
+        savedGet: () =>
+          jsonResponse({ status: "saved", residence: savedResidence }),
+        resolve:
+          operation === "resolve"
+            ? unauthorizedResponse
+            : () => jsonResponse(matchedResidenceResponse),
+        ...(operation === "save" ? { save: unauthorizedResponse } : {}),
+        ...(operation === "delete" ? { remove: unauthorizedResponse } : {}),
+      });
+      installGeolocation();
+
+      render(<ResidencePreview />);
+      const saved = await screen.findByRole("region", {
+        name: "Saved residence",
+      });
+      expect(within(saved).getByText(savedAddress)).toBeVisible();
+
+      enterAddress();
+      if (operation !== "resolve") {
+        const consent = await screen.findByRole("checkbox", {
+          name: consentCopy,
+        });
+        fireEvent.click(consent);
+
+        if (operation === "save") {
+          fireEvent.click(
+            screen.getByRole("button", { name: "Save residence" }),
+          );
+        } else {
+          fireEvent.click(
+            within(saved).getByRole("button", {
+              name: "Delete saved residence",
+            }),
+          );
+          fireEvent.click(
+            screen.getByRole("button", { name: "Confirm deletion" }),
+          );
+        }
+      }
+
+      expect(
+        await screen.findByText(
+          "Sign in again before managing a saved residence.",
+        ),
+      ).toBeVisible();
+      expect(document.body).not.toHaveTextContent(
+        "SENTINEL_UNTRUSTED_401_COPY",
+      );
+      expect(screen.queryByText(savedAddress)).toBeNull();
+      expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Confirm deletion" }),
+      ).toBeNull();
+      const signIn = screen.getByRole("link", { name: /Sign in/i });
+      expect(signIn).toHaveAttribute("href", "/sign-in");
+      expect(signIn).toHaveFocus();
+    },
+  );
+
   it("clears private owner state and offers sign-in recovery after DELETE 401", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
@@ -1500,6 +1597,52 @@ describe("residence preview", () => {
       expect(browserWrites).not.toContain(secret);
       expect(decodeURIComponent(window.location.href)).not.toContain(secret);
     }
+  });
+
+  it("restores focus to confirmation after a recoverable delete failure re-enables it", async () => {
+    const deleteRequest = deferredResponse();
+    installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      remove: () => deleteRequest.promise,
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    const confirm = screen.getByRole("button", { name: "Confirm deletion" });
+    fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+
+    document.body.tabIndex = -1;
+    document.body.focus();
+    document.body.removeAttribute("tabindex");
+    expect(document.body).toHaveFocus();
+
+    await act(async () => {
+      deleteRequest.resolve(
+        jsonResponse(
+          {
+            status: "unavailable",
+            message:
+              "Saved residence is temporarily unavailable. Try again later.",
+          },
+          503,
+        ),
+      );
+    });
+
+    expect(
+      await screen.findByText(/Saved residence is temporarily unavailable/i),
+    ).toBeVisible();
+    expect(confirm).toBeEnabled();
+    expect(confirm).toHaveFocus();
+    expect(screen.getByText(savedAddress)).toBeVisible();
   });
 
   it("treats an already-empty DELETE response as safe deletion recovery", async () => {
