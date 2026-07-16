@@ -205,6 +205,22 @@ describe("resolution token", () => {
       input: { kind: "address" as const, address: "API" },
     },
     {
+      case: "address substring in otherwise public prose",
+      input: { kind: "address" as const, address: "API" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Capitol divisions may be unavailable."],
+      },
+    },
+    {
+      case: "literal percentage prose",
+      input: { kind: "address" as const, address: "Q" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Coverage is 50% complete."],
+      },
+    },
+    {
       case: "single-character address",
       input: { kind: "address" as const, address: "Q" },
     },
@@ -216,17 +232,24 @@ describe("resolution token", () => {
       case: "division-ID-fragment coordinates",
       input: { kind: "coordinates" as const, latitude: 1, longitude: 2 },
     },
-  ])("signs safe $case", ({ input }) => {
+  ] satisfies Array<{
+    case: string;
+    input: ResidenceInput;
+    resolution?: Extract<
+      ResolutionOutcome,
+      { status: "matched" | "partial" }
+    >;
+  }>)("signs safe $case", ({ input, resolution }) => {
     const { resolutionToken } = createResolutionToken(
       input,
-      resolvedResidence,
+      resolution ?? resolvedResidence,
       userId,
       secret,
       now,
     );
 
     expect(verifyResolutionToken(resolutionToken, userId, secret, now)).toEqual(
-      resolvedResidence,
+      resolution ?? resolvedResidence,
     );
   });
 
@@ -322,6 +345,14 @@ describe("resolution token", () => {
       },
     },
     {
+      case: "invalid UTF-8 suffix after an encoded address",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 123%20Main%20Street%C3"],
+      },
+    },
+    {
       case: "address nested beyond the decode limit",
       input: { kind: "address", address: "123 Main Street" },
       resolution: {
@@ -359,6 +390,46 @@ describe("resolution token", () => {
       resolution: {
         ...resolvedResidence,
         coverageNotes: ["Latitude%3A+1"],
+      },
+    },
+    {
+      case: "labelled zero coordinate",
+      input: { kind: "coordinates", latitude: 0, longitude: 20 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude: 0"],
+      },
+    },
+    {
+      case: "whole-field short coordinate",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["1"],
+      },
+    },
+    {
+      case: "decimal coordinate equivalent",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 1.0"],
+      },
+    },
+    {
+      case: "scientific coordinate equivalent",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 1e0"],
+      },
+    },
+    {
+      case: "Unicode coordinate equivalent",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude \u0661\u066b\u0660"],
       },
     },
   ] satisfies Array<{
