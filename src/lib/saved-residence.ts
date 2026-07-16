@@ -9,7 +9,10 @@ import {
   savedResidence,
   savedResidenceDivision,
 } from "@/db/schema";
-import type { ResolutionResponse } from "./residence";
+import {
+  isPublicResidenceResolution,
+  type ResolutionResponse,
+} from "./residence";
 
 type ResolvedPreviewResponse = Extract<
   ResolutionResponse,
@@ -127,8 +130,6 @@ const encryptedAddressError =
   "Saved residence encrypted address is invalid.";
 const savedResidenceRecordError = "Saved residence record is invalid.";
 const savedResidenceRotationError = "Saved residence key rotation failed.";
-const maximumPersistedCollectionSize = 64;
-const maximumPersistedStringLength = 2_048;
 const divisionTypes = new Set<SavedResidenceDivision["type"]>([
   "country",
   "state",
@@ -745,41 +746,10 @@ function copySavedResidenceResolution(
 ): SavedResidenceResolution {
   try {
     if (
-      !Array.isArray(resolution.divisions) ||
-      resolution.divisions.length > maximumPersistedCollectionSize ||
-      !Array.isArray(resolution.coverageNotes) ||
-      resolution.coverageNotes.length > maximumPersistedCollectionSize
-    ) {
-      throw new Error(savedResidenceRecordError);
-    }
-
-    const requiredPublicText: unknown[] = [
-      ...resolution.coverageNotes,
-      ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
-        id,
-        idScheme,
-        name,
-      ]),
-      resolution.source.name,
-      resolution.source.url,
-      resolution.source.checkedAt,
-    ];
-    const optionalPublicText: unknown[] = [
-      resolution.source.effectiveAt,
-      resolution.source.benchmark,
-      resolution.source.vintage,
-    ];
-    if (
-      requiredPublicText.some(
-        (text) =>
-          !isBoundedPublicText(text) || reflectsFullAddress(text, address),
-      ) ||
-      optionalPublicText.some(
-        (text) =>
-          text !== null &&
-          text !== undefined &&
-          (!isBoundedPublicText(text) || reflectsFullAddress(text, address)),
-      )
+      !isPublicResidenceResolution(resolution, {
+        kind: "address",
+        address,
+      })
     ) {
       throw new Error(savedResidenceRecordError);
     }
@@ -805,38 +775,6 @@ function copySavedResidenceResolution(
   } catch {
     throw new Error(savedResidenceRecordError);
   }
-}
-
-function isBoundedPublicText(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.trim().length > 0 &&
-    value.length <= maximumPersistedStringLength
-  );
-}
-
-function reflectsFullAddress(value: string, address: string) {
-  const canonicalValue = canonicalizeReflectionText(value);
-  const canonicalAddress = canonicalizeReflectionText(address);
-  if (canonicalAddress.length === 0) {
-    return false;
-  }
-  const escapedAddress = canonicalAddress.replace(
-    /[.*+?^${}()|[\]\\]/g,
-    "\\$&",
-  );
-  return new RegExp(
-    `(?:^|[^\\p{L}\\p{N}])${escapedAddress}(?:$|[^\\p{L}\\p{N}])`,
-    "u",
-  ).test(canonicalValue);
-}
-
-function canonicalizeReflectionText(value: string) {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/gu, " ");
 }
 
 function savedDivision(value: {

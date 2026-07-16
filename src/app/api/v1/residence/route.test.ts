@@ -788,6 +788,7 @@ function validBodyFor(method: "POST" | "DELETE") {
 
 function signedToken(ownerId: string, issuedAt: Date) {
   return residenceModule.createResolutionToken(
+    { kind: "address", address: savedResidenceView.address },
     resolution,
     ownerId,
     secret,

@@ -13,6 +13,7 @@ import {
 import { Pool } from "pg";
 import {
   createResolutionToken,
+  type ResidenceInput,
   type ResolutionErrorResponse,
   type ResolutionOutcome,
   type ResolutionResponse,
@@ -127,7 +128,11 @@ test("resolves a manual residence with equal provenance and coverage", async ({
 }, testInfo) => {
   const requests = await queueResidenceResponses(page, [
     {
-      body: signedResidenceResponse(matchedResidenceResponse, primaryUserId),
+      body: signedResidenceResponse(
+        { kind: "address", address: manualAddress },
+        matchedResidenceResponse,
+        primaryUserId,
+      ),
       status: 200,
     },
   ]);
@@ -239,7 +244,11 @@ test("uses device location once and labels Census coverage as partial", async ({
 }, testInfo) => {
   const requests = await queueResidenceResponses(page, [
     {
-      body: signedResidenceResponse(partialResidenceResponse, primaryUserId),
+      body: signedResidenceResponse(
+        { kind: "coordinates", ...deviceCoordinates },
+        partialResidenceResponse,
+        primaryUserId,
+      ),
       status: 200,
     },
   ]);
@@ -361,8 +370,16 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
   page,
 }, testInfo) => {
   test.setTimeout(60_000);
-  const responseA = signedResidenceResponse(residenceA, primaryUserId);
-  const responseB = signedResidenceResponse(residenceB, primaryUserId);
+  const responseA = signedResidenceResponse(
+    { kind: "address", address: addressA },
+    residenceA,
+    primaryUserId,
+  );
+  const responseB = signedResidenceResponse(
+    { kind: "address", address: addressB },
+    residenceB,
+    primaryUserId,
+  );
   const saveRequestA = {
     address: addressA,
     consent: { accepted: true, version: "saved-residence-v1" },
@@ -628,7 +645,11 @@ test("deleting a second account cascades its private residence and revokes its s
 }) => {
   await context.clearCookies();
   await installSessionCookie(context, secondarySessionToken);
-  const responseC = signedResidenceResponse(residenceC, secondaryUserId);
+  const responseC = signedResidenceResponse(
+    { kind: "address", address: addressC },
+    residenceC,
+    secondaryUserId,
+  );
   const saveRequestC = {
     address: addressC,
     consent: { accepted: true, version: "saved-residence-v1" },
@@ -858,6 +879,7 @@ async function installSessionCookie(
 }
 
 function signedResidenceResponse(
+  input: ResidenceInput,
   source: ResolvedResidence | Extract<ResolutionResponse, { status: "matched" | "partial" }>,
   userId: string,
 ): Extract<ResolutionResponse, { status: "matched" | "partial" }> {
@@ -870,7 +892,7 @@ function signedResidenceResponse(
 
   return {
     ...resolution,
-    ...createResolutionToken(resolution, userId, authSecret, new Date()),
+    ...createResolutionToken(input, resolution, userId, authSecret, new Date()),
   };
 }
 

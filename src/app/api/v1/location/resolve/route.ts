@@ -61,6 +61,7 @@ export async function POST(request: Request): Promise<Response> {
     if (outcome.status === "matched" || outcome.status === "partial") {
       const issuedAt = new Date();
       const token = createResolutionToken(
+        input,
         outcome,
         authenticatedUserId,
         secret,

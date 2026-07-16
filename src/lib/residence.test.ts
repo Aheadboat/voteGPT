@@ -189,7 +189,13 @@ describe("resolution token", () => {
     >;
 
     expect(() =>
-      createResolutionToken(unsafeSourceResolution, userId, secret, now),
+      createResolutionToken(
+        addressInput,
+        unsafeSourceResolution,
+        userId,
+        secret,
+        now,
+      ),
     ).toThrow("Cannot sign an invalid residence resolution.");
   });
 
@@ -200,6 +206,14 @@ describe("resolution token", () => {
       resolution: {
         ...resolvedResidence,
         coverageNotes: [`Resolved for ${addressInput.address}.`],
+      },
+    },
+    {
+      case: "single-character address without a bypass",
+      input: { kind: "address", address: "Q" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for q."],
       },
     },
     {
@@ -275,9 +289,9 @@ describe("resolution token", () => {
       ResolutionOutcome,
       { status: "matched" | "partial" }
     >;
-  }>)("refuses to sign $case reflected by public facts", ({ resolution }) => {
+  }>)("refuses to sign $case reflected by public facts", ({ input, resolution }) => {
     expect(() =>
-      createResolutionToken(resolution, userId, secret, now),
+      createResolutionToken(input, resolution, userId, secret, now),
     ).toThrow("Cannot sign an invalid residence resolution.");
   });
 
@@ -317,7 +331,7 @@ describe("resolution token", () => {
     >;
   }>)("refuses to sign $case", ({ resolution }) => {
     expect(() =>
-      createResolutionToken(resolution, userId, secret, now),
+      createResolutionToken(addressInput, resolution, userId, secret, now),
     ).toThrow("Cannot sign an invalid residence resolution.");
   });
 
@@ -377,6 +391,7 @@ describe("resolution token", () => {
     >;
 
     const { resolutionToken, expiresAt } = createResolutionToken(
+      addressInput,
       unsafeResolution,
       userId,
       secret,
@@ -422,6 +437,7 @@ describe("resolution token", () => {
 
   it("verifies only an untampered token for the same user before expiry", () => {
     const { resolutionToken } = createResolutionToken(
+      addressInput,
       resolvedResidence,
       userId,
       secret,

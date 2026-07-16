@@ -59,6 +59,7 @@ export type ProviderOutcome =
 export type ParseResidenceInput = (value: unknown) => ResidenceInput | null;
 
 export type CreateResolutionToken = (
+  input: ResidenceInput,
   resolution: Extract<ResolutionOutcome, { status: "matched" | "partial" }>,
   userId: string,
   secret: string,
@@ -114,6 +115,9 @@ const tokenVersion = "v1";
 const tokenLifetimeMilliseconds = 10 * 60 * 1_000;
 const tokenPurpose = "voteGPT/residence-resolution/v1";
 const providerTimeoutMilliseconds = 5_000;
+const maximumPublicCollectionSize = 64;
+const maximumPublicTextLength = 2_048;
+const maximumDecodePasses = 4;
 const sourceUrlsByName: ReadonlyMap<string, string> = new Map([
   [
     "Google Civic Information API",
@@ -170,13 +174,19 @@ export const parseResidenceInput: ParseResidenceInput = (value) => {
 };
 
 export const createResolutionToken: CreateResolutionToken = (
+  input,
   resolution,
   userId,
   secret,
   now,
 ) => {
-  const normalizedResolution = copyResolvedResidence(resolution);
-  if (!isResolvedResidence(normalizedResolution)) {
+  let normalizedResolution: ResolvedResidence;
+  try {
+    normalizedResolution = copyResolvedResidence(resolution);
+  } catch {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
+  if (!isPublicResidenceResolution(normalizedResolution, input)) {
     throw new Error("Cannot sign an invalid residence resolution.");
   }
 
@@ -413,7 +423,7 @@ function isResolutionTokenPayload(
     Date.parse(value.expiresAt) - Date.parse(value.issuedAt) !==
       tokenLifetimeMilliseconds ||
     Date.parse(value.expiresAt) <= now.getTime() ||
-    !isResolvedResidence(value.resolution)
+    !isPublicResidenceResolution(value.resolution)
   ) {
     return false;
   }
@@ -421,7 +431,10 @@ function isResolutionTokenPayload(
   return true;
 }
 
-function isResolvedResidence(value: unknown): value is ResolvedResidence {
+export function isPublicResidenceResolution(
+  value: unknown,
+  input?: ResidenceInput,
+): value is Extract<ResolutionOutcome, { status: "matched" | "partial" }> {
   if (
     !isRecord(value) ||
     !hasExactKeys(
@@ -430,15 +443,20 @@ function isResolvedResidence(value: unknown): value is ResolvedResidence {
     ) ||
     (value.status !== "matched" && value.status !== "partial") ||
     !Array.isArray(value.divisions) ||
+    value.divisions.length > maximumPublicCollectionSize ||
     !value.divisions.every(isDivision) ||
     !isSource(value.source) ||
     !Array.isArray(value.coverageNotes) ||
-    !value.coverageNotes.every((note) => typeof note === "string")
+    value.coverageNotes.length > maximumPublicCollectionSize ||
+    !value.coverageNotes.every(isBoundedPublicText)
   ) {
     return false;
   }
 
-  return true;
+  return (
+    input === undefined ||
+    !reflectsResidenceInput(value as ResolvedResidence, input)
+  );
 }
 
 function isDivision(value: unknown): value is ResolvedResidence["divisions"][number] {
@@ -447,9 +465,9 @@ function isDivision(value: unknown): value is ResolvedResidence["divisions"][num
     hasExactKeys(value, new Set(["type", "name", "id", "idScheme"])) &&
     typeof value.type === "string" &&
     divisionTypes.has(value.type as DivisionType) &&
-    typeof value.name === "string" &&
-    typeof value.id === "string" &&
-    typeof value.idScheme === "string"
+    isBoundedPublicText(value.name) &&
+    isBoundedPublicText(value.id) &&
+    isBoundedPublicText(value.idScheme)
   );
 }
 
@@ -467,18 +485,91 @@ function isSource(value: unknown): value is ResolvedResidence["source"] {
         "vintage",
       ]),
     ) ||
-    typeof value.name !== "string" ||
-    typeof value.url !== "string" ||
+    !isBoundedPublicText(value.name) ||
+    !isBoundedPublicText(value.url) ||
     sourceUrlsByName.get(value.name) !== value.url ||
     !isIsoDate(value.checkedAt) ||
     !(value.effectiveAt === null || isIsoDate(value.effectiveAt)) ||
-    !(value.benchmark === undefined || typeof value.benchmark === "string") ||
-    !(value.vintage === undefined || typeof value.vintage === "string")
+    !(
+      value.benchmark === undefined || isBoundedPublicText(value.benchmark)
+    ) ||
+    !(value.vintage === undefined || isBoundedPublicText(value.vintage))
   ) {
     return false;
   }
 
   return true;
+}
+
+function reflectsResidenceInput(
+  resolution: ResolvedResidence,
+  input: ResidenceInput,
+) {
+  const fingerprints =
+    input.kind === "address"
+      ? [publicTextFingerprint(input.address)]
+      : [
+          publicTextFingerprint(String(input.latitude)),
+          publicTextFingerprint(String(input.longitude)),
+        ];
+  return publicResolutionText(resolution).some((text) => {
+    const publicFingerprint = publicTextFingerprint(text);
+    return fingerprints.some((fingerprint) =>
+      publicFingerprint.includes(fingerprint),
+    );
+  });
+}
+
+function publicResolutionText(resolution: ResolvedResidence) {
+  return [
+    ...resolution.coverageNotes,
+    ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
+      id,
+      idScheme,
+      name,
+    ]),
+    resolution.source.name,
+    resolution.source.url,
+    resolution.source.checkedAt,
+    ...(resolution.source.effectiveAt === null
+      ? []
+      : [resolution.source.effectiveAt]),
+    ...(resolution.source.benchmark === undefined
+      ? []
+      : [resolution.source.benchmark]),
+    ...(resolution.source.vintage === undefined
+      ? []
+      : [resolution.source.vintage]),
+  ];
+}
+
+function publicTextFingerprint(value: string) {
+  let decoded = value;
+  for (let pass = 0; pass < maximumDecodePasses; pass += 1) {
+    const formDecoded = decoded.replaceAll("+", " ");
+    let next = formDecoded;
+    try {
+      next = decodeURIComponent(formDecoded);
+    } catch {
+      // Fold the safely decoded form syntax even when percent escapes are bad.
+    }
+    if (next === decoded) {
+      break;
+    }
+    decoded = next;
+  }
+  return decoded
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, "");
+}
+
+function isBoundedPublicText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumPublicTextLength
+  );
 }
 
 function isIsoDate(value: unknown): value is string {
