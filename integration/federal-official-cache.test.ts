@@ -151,9 +151,12 @@ describe("PostgreSQL federal official cache", () => {
         repository.replaceRoster(
           replacement("H000001", ["S000001", "S000002"], NOW),
         ),
-      ).rejects.toThrow(
-        "synthetic roster write failure after profile replacement",
-      );
+      ).rejects.toMatchObject({
+        message: expect.stringMatching(/^Failed query:/),
+        cause: {
+          message: "synthetic roster write failure after profile replacement",
+        },
+      });
     } finally {
       await pool.query(
         "DROP TRIGGER IF EXISTS f5_reject_roster_write ON federal_official_cache",
