@@ -145,6 +145,50 @@ function expectedAuthorizedPairActiveIds(statuses: Map<string, string>) {
     .map(([id]) => id)
 }
 
+function expectedAutonomousBatchActiveIds(statuses: Map<string, string>) {
+  const batchIds = ["F4", "F5", "F6", "G1", "F7", "F8"]
+  const batchStatuses = new Map(
+    batchIds.map((id) => [id, statuses.get(id) ?? "TODO"] as const),
+  )
+
+  for (const [id, status] of batchStatuses) {
+    if (status !== "TODO" && status !== "DONE") {
+      expectedActivePhase(status)
+    }
+    if (id === "F5" && status !== "TODO" && batchStatuses.get("F4") === "TODO") {
+      throw new Error("F5 cannot activate before F4")
+    }
+  }
+
+  if (batchStatuses.get("F5") === "DONE" && batchStatuses.get("F4") !== "DONE") {
+    throw new Error("F5 cannot close before F4")
+  }
+
+  for (const [id, dependency] of [
+    ["F6", "F5"],
+    ["G1", "F6"],
+    ["F7", "G1"],
+    ["F8", "F7"],
+  ] as const) {
+    if (
+      batchStatuses.get(id) !== "TODO" &&
+      batchStatuses.get(dependency) !== "DONE"
+    ) {
+      throw new Error(id + " cannot activate before " + dependency + " is DONE")
+    }
+  }
+
+  const activeIds = [...batchStatuses]
+    .filter(([, status]) => status !== "TODO" && status !== "DONE")
+    .map(([id]) => id)
+
+  if (activeIds.length > 2) {
+    throw new Error("At most two autonomous batch items may be active")
+  }
+
+  return activeIds
+}
+
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
@@ -571,6 +615,62 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
+  it("scopes standing F4-F8 authorization to an isolated integration branch", () => {
+    const agents = readRepositoryFile("AGENTS.md")
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const readme = readRepositoryFile("README.md")
+    const agentBatch = readMarkdownSection(
+      agents,
+      "## Temporary autonomous F4-F8 integration batch",
+    )
+    const roadmapBatch = readMarkdownSection(
+      roadmap,
+      "## Temporary autonomous F4-F8 integration batch",
+    )
+
+    for (const batch of [agentBatch, roadmapBatch]) {
+      expect(batch).toContain("`codex/autonomous-f4-f8-integration`")
+      expect(batch).toContain("`d5978ba830f0ee715c9162afba8963139c0fb707`")
+      expectTokensInOrder(batch, ["F4", "F5", "F6", "F7", "F8"])
+      expect(batch).toContain("At most two roadmap items may be active")
+      expect(batch).toContain("dependency/interface/admission audit")
+      expect(batch).toContain("independent review")
+      expect(batch).toContain("hosted CI")
+      expect(batch).toContain("feature and closeout PRs")
+      expect(batch).toContain("standing authorization")
+      expect(batch).toContain("delegated Gate A")
+      expect(batch).toContain("delegated Gate B")
+      expect(batch).toContain("does not pause for additional permission")
+      expect(batch).toContain("G1")
+      expect(batch).toContain("no paid vendor commitment")
+      expect(batch).toContain("read-only, no-commitment G1 evaluation")
+      expect(batch).toContain(
+        "no binding vendor account, terms, quote, spend, or credential",
+      )
+      expect(batch).toContain("record the blocker")
+      expect(batch).toContain("continue every independent admitted lane")
+      expect(batch).toContain("defer the exact decision to final human review")
+      expect(batch).toContain(
+        "when the autonomous window ends or remaining work is human-blocked",
+      )
+      expect(batch).toContain("final human review")
+      expect(batch).toContain("must not merge")
+    }
+
+    expect(agentBatch).toContain(
+      "The coordinator remains coordinator-only and does not implement feature production code.",
+    )
+    expect(roadmapBatch).toContain(
+      "Actual `main` remains frozen at the batch base",
+    )
+    expect(readme).toContain(
+      "F4-F8 autonomous integration batch is staged on `codex/autonomous-f4-f8-integration`",
+    )
+    expect(readme).toContain(
+      "The batch branch will not merge into `main` before final human review.",
+    )
+  })
+
   it("keeps human escalation packets and scope changes explicit", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const recovery = readMarkdownSection(
@@ -672,17 +772,13 @@ describe("concurrent roadmap delivery contract", () => {
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
-    const inactiveLaterRoadmapIds = [
-      "F6",
-      "F7",
-      "F8",
+    const outsideBatchRoadmapIds = [
       "F9",
       "F10",
       "F11",
       "F12",
       "F13",
       "F14",
-      "G1",
       "G2",
     ]
     const activeIds = [...statuses]
@@ -725,7 +821,7 @@ describe("concurrent roadmap delivery contract", () => {
     ]
 
     expect(r1Status).toBe("DONE")
-    expect(activeIds).toEqual(expectedAuthorizedPairActiveIds(statuses))
+    expect(activeIds).toEqual(expectedAutonomousBatchActiveIds(statuses))
     expect(
       expectedAuthorizedPairActiveIds(
         new Map([
@@ -751,7 +847,7 @@ describe("concurrent roadmap delivery contract", () => {
       ),
     ).toEqual([])
     expect(() =>
-      expectedAuthorizedPairActiveIds(
+      expectedAutonomousBatchActiveIds(
         new Map([
           ["F4", "IN PROGRESS (GREEN)"],
           ["F5", "DONE"],
@@ -759,15 +855,40 @@ describe("concurrent roadmap delivery contract", () => {
       ),
     ).toThrow("F5 cannot close before F4")
     expect(() =>
-      expectedAuthorizedPairActiveIds(
+      expectedAutonomousBatchActiveIds(
         new Map([
           ["F4", "TODO"],
           ["F5", "IN PROGRESS (DISCOVER/DESIGN/PLAN)"],
         ]),
       ),
-    ).toThrow("Unsupported active roadmap status: TODO")
-    for (const id of inactiveLaterRoadmapIds) {
+    ).toThrow("F5 cannot activate before F4")
+    expect(
+      expectedAutonomousBatchActiveIds(
+        new Map([
+          ["F4", "DONE"],
+          ["F5", "DONE"],
+          ["F6", "IN PROGRESS (RED)"],
+        ]),
+      ),
+    ).toEqual(["F6"])
+    expect(() =>
+      expectedAutonomousBatchActiveIds(
+        new Map([
+          ["F4", "DONE"],
+          ["F5", "DONE"],
+          ["F6", "DONE"],
+          ["G1", "TODO"],
+          ["F7", "IN PROGRESS (RED)"],
+        ]),
+      ),
+    ).toThrow("F7 cannot activate before G1 is DONE")
+    for (const id of outsideBatchRoadmapIds) {
       expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
+    }
+    if (f5Status !== "DONE") {
+      for (const id of ["F6", "G1", "F7", "F8"]) {
+        expect(statuses.get(id), id + " must wait for F5").toBe("TODO")
+      }
     }
     expect(readme).not.toContain("is implemented and verified")
     expect(implementationPlan).toContain(
@@ -779,18 +900,18 @@ describe("concurrent roadmap delivery contract", () => {
     if (f4Status === "DONE") {
       expect(readme).toMatch(/F4[^.\n]*complete/i)
     } else {
-      expect(readme).toContain(
-        "F4 and F5 are active in `DISCOVER/DESIGN/PLAN`",
-      )
+      expect(readme).toMatch(/F4[^.\n]*active/i)
     }
     if (f5Status === "DONE") {
       expect(readme).toMatch(/F5[^.\n]*complete/i)
     } else {
       expect(readme).toMatch(/F5[^.\n]*active/i)
     }
-    expect(readme).toContain(
-      "F6 and every later roadmap item remain TODO",
-    )
+    if (statuses.get("F6") === "TODO") {
+      expect(readme).toContain(
+        "F6, F7, and F8 remain TODO in the authorized batch queue",
+      )
+    }
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",
@@ -801,8 +922,8 @@ describe("concurrent roadmap delivery contract", () => {
       expect(
         readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
       ).toMatch(/^[0-9a-f]{40}$/i)
-      expect(item).toContain(
-        "Human Gate A remains required before RED or production work.",
+      expect(item).toMatch(
+        /Human Gate A remains required before RED or production work\.|delegated Gate A/i,
       )
     }
     expect(readCoordinationField(f4, "Branch")).toContain(
