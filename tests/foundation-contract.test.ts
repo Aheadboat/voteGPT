@@ -668,6 +668,32 @@ describe("concurrent roadmap delivery contract", () => {
       .map(([id]) => id)
     const f4 = readRoadmapItem(roadmap, "F4")
     const f5 = readRoadmapItem(roadmap, "F5")
+    const f4Ownership = readCoordinationField(f4, "Ownership")
+    const f5Ownership = readCoordinationField(f5, "Ownership")
+    const f4MergeOrder = readCoordinationField(f4, "Merge order")
+    const f5MergeOrder = readCoordinationField(f5, "Merge order")
+    const activationBase = "735d73b0b069fa67a1e16a968a7298fb973ef17a"
+    const sharedSurfaces = [
+      "src/db/schema.ts",
+      "src/db/index.ts",
+      "drizzle/**",
+      "drizzle.config.ts",
+      "src/db/index.test.ts",
+      "integration/postgres-auth.test.ts",
+      "e2e/seed-session.mjs",
+      "src/lib/residence.ts",
+      "src/app/dashboard/page.tsx",
+      "src/app/dashboard/page.test.tsx",
+      "src/app/globals.css",
+      "e2e/residence.spec.ts",
+      ".env.example",
+      "package.json",
+      "package-lock.json",
+      "next.config.ts",
+      "vitest.config.mts",
+      "vitest.postgres.config.mts",
+      "playwright.config.ts",
+    ]
 
     expect(r1Status).toBe("DONE")
     expect(activeIds).toEqual(["F4", "F5"])
@@ -691,6 +717,14 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",
       )
+      for (const field of ["Base commit", "Integrated-main commit"]) {
+        expect(readCoordinationField(item, field).replace(/`/g, "")).toBe(
+          activationBase,
+        )
+      }
+      expect(item).toContain(
+        "Human Gate A remains required before RED or production work.",
+      )
     }
     expect(readCoordinationField(f4, "Branch")).toContain(
       "codex/f4-consented-saved-residence",
@@ -698,16 +732,39 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(f5, "Branch")).toContain(
       "codex/f5-federal-officials",
     )
-    expect(readCoordinationField(f4, "Ownership")).toContain(
-      "src/db/schema.ts",
+    for (const surface of sharedSurfaces) {
+      expect(f4Ownership, "F4 must own " + surface).toContain(surface)
+      expect(f5Ownership, "F5 must defer " + surface).toContain(surface)
+    }
+    for (const coordinatorFile of [
+      "AGENTS.md",
+      "ROADMAP.md",
+      "README.md",
+      "tests/foundation-contract.test.ts",
+    ]) {
+      expect(f4Ownership).toContain(coordinatorFile)
+    }
+    expect(f4Ownership).toContain("shared PostgreSQL schema/migration history")
+    expect(f4Ownership).toContain("encryption-key configuration")
+    expect(f5Ownership).toContain(
+      "Congress.gov request/configuration external resource",
     )
-    expect(readCoordinationField(f4, "Ownership")).toContain("drizzle/**")
-    expect(readCoordinationField(f5, "Ownership")).toContain("defers")
-    expect(readCoordinationField(f4, "Merge order")).toContain(
+    expect(f4Ownership).toContain(
+      "shared CI configuration and generated artifacts remain frozen",
+    )
+    expect(f5Ownership).toContain(
+      "shared CI configuration and generated artifacts remain frozen",
+    )
+    expectTokensInOrder(f4MergeOrder + " " + f5MergeOrder, [
+      "F4 feature PR",
+      "post-merge verification",
       "F4 closeout",
-    )
-    expect(readCoordinationField(f5, "Merge order")).toContain(
       "integrates completed F4",
+      "shared-surface handoff",
+      "only then may approach Gate B",
+    ])
+    expect(f5MergeOrder).toContain(
+      "cannot reach Gate B until it integrates completed F4",
     )
   })
 })
