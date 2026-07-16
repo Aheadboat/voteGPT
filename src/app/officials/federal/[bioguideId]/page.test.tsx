@@ -101,7 +101,7 @@ describe("public federal official profile page", () => {
     expect(within(article).getByText("GA District 13")).toBeInTheDocument();
     expect(within(article).getByText("119th Congress")).toBeInTheDocument();
     expect(within(article).getByText(/2025.*2027/)).toBeInTheDocument();
-    expect(within(article).getByText("Fresh at last check.")).toBeInTheDocument();
+    expect(article).toHaveTextContent("Fresh at last check.");
 
     const sourceLink = within(article).getByRole("link", {
       name: "Congress.gov member source",
