@@ -171,6 +171,9 @@ describe("public identity shell", () => {
       ).toBeInTheDocument(),
     );
     expect(
+      screen.getByRole("heading", { name: "Account deleted" }),
+    ).toHaveFocus();
+    expect(
       screen.getByRole("link", { name: "Return to public information" }),
     ).toHaveAttribute("href", "/");
   });

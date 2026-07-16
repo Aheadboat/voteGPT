@@ -478,6 +478,67 @@ describe("residence preview", () => {
     },
   );
 
+  it.each(["success", "failure"] as const)(
+    "keeps focus on the saved-residence heading when retry %s replaces its control",
+    async (outcome) => {
+      const retryRequest = deferredResponse();
+      let getAttempt = 0;
+      installResidenceFetch({
+        savedGet: () => {
+          getAttempt += 1;
+          return getAttempt === 1
+            ? jsonResponse(
+                {
+                  status: "unavailable",
+                  message:
+                    "Saved residence is temporarily unavailable. Try again later.",
+                },
+                503,
+              )
+            : retryRequest.promise;
+        },
+      });
+      installGeolocation();
+
+      render(<ResidencePreview />);
+      const retry = await screen.findByRole("button", {
+        name: /Retry.*saved residence/i,
+      });
+      const heading = screen.getByRole("heading", { name: "Saved residence" });
+      retry.focus();
+      fireEvent.click(retry);
+
+      expect(screen.getByText(/Loading saved residence/i)).toBeVisible();
+      expect(heading).toHaveFocus();
+
+      await act(async () => {
+        retryRequest.resolve(
+          outcome === "success"
+            ? jsonResponse({ status: "empty" })
+            : jsonResponse(
+                {
+                  status: "unavailable",
+                  message:
+                    "Saved residence is temporarily unavailable. Try again later.",
+                },
+                503,
+              ),
+        );
+      });
+
+      if (outcome === "success") {
+        expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+      } else {
+        expect(
+          await screen.findByRole("button", {
+            name: /Retry.*saved residence/i,
+          }),
+        ).toBeEnabled();
+      }
+      expect(heading).toHaveFocus();
+    },
+  );
+
   it("posts the exact consented candidate, warns on replacement, and renders the returned home", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
@@ -849,7 +910,7 @@ describe("residence preview", () => {
     expect(input).toHaveFocus();
   });
 
-  it("returns focus to the stable delete control when confirmation is cancelled", async () => {
+  it("exposes the saved-residence deletion disclosure and restores focus on cancel", async () => {
     installResidenceFetch({
       savedGet: () =>
         jsonResponse({ status: "saved", residence: savedResidence }),
@@ -863,12 +924,32 @@ describe("residence preview", () => {
     const deleteButton = within(saved).getByRole("button", {
       name: "Delete saved residence",
     });
+    expect(deleteButton).toHaveAttribute("aria-expanded", "false");
+    expect(deleteButton).toHaveAttribute(
+      "aria-controls",
+      "saved-residence-delete-confirmation",
+    );
+    deleteButton.focus();
     fireEvent.click(deleteButton);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(deleteButton).toHaveAttribute("aria-expanded", "true");
+    const confirmation = screen.getByRole("group", {
+      name: /Delete this saved address and its political divisions/i,
+    });
+    expect(confirmation).toHaveAttribute(
+      "id",
+      "saved-residence-delete-confirmation",
+    );
+    const confirm = within(confirmation).getByRole("button", {
+      name: "Confirm deletion",
+    });
+    expect(confirm).toHaveFocus();
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
 
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
+    expect(deleteButton).toHaveAttribute("aria-expanded", "false");
     expect(deleteButton).toHaveFocus();
   });
 
@@ -1171,6 +1252,41 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
+    const signIn = screen.getByRole("link", { name: /Sign in/i });
+    expect(signIn).toHaveAttribute("href", "/sign-in");
+    expect(signIn).toHaveFocus();
+  });
+
+  it("invalidates rendered private state after a residence-resolution 401", async () => {
+    installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      resolve: () => jsonResponse(unauthenticatedResidenceResponse, 401),
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    expect(within(saved).getByText(savedAddress)).toBeVisible();
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Confirm deletion" }),
+    ).toBeVisible();
+
+    enterAddress();
+
+    expect(
+      await screen.findByText("Sign in again before checking a residence."),
+    ).toBeVisible();
+    expect(screen.queryByText(savedAddress)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Confirm deletion" }),
+    ).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
     const signIn = screen.getByRole("link", { name: /Sign in/i });
     expect(signIn).toHaveAttribute("href", "/sign-in");
     expect(signIn).toHaveFocus();
