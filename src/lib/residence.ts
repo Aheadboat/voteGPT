@@ -552,12 +552,11 @@ function publicResolutionFields(
 }
 
 function reflectsAddress(fields: PublicResolutionField[], address: string) {
-  const normalizedAddress = normalizeWords(address);
+  const normalizedAddress = normalizeWordTokens(address).join("");
   if (normalizedAddress.length === 0) {
     return true;
   }
 
-  const boundedAddress = ` ${normalizedAddress} `;
   for (const field of fields) {
     const layers = decodePublicText(field.text);
     if (layers === null) {
@@ -566,7 +565,10 @@ function reflectsAddress(fields: PublicResolutionField[], address: string) {
 
     if (
       layers.some((layer) =>
-        ` ${normalizeWords(layer)} `.includes(boundedAddress),
+        containsJoinedTokenSequence(
+          normalizeWordTokens(layer),
+          normalizedAddress,
+        ),
       )
     ) {
       return true;
@@ -592,7 +594,7 @@ function reflectsCoordinates(
     }
     if (
       layers.some((layer) =>
-        containsCoordinate(layer, fieldKind, latitude, longitude),
+        containsCoordinate(layer, latitude, longitude),
       )
     ) {
       return true;
@@ -672,17 +674,36 @@ function isLiteralPercentage(value: string, index: number) {
   );
 }
 
-function normalizeWords(value: string) {
-  return normalizeUnicodeNumbers(value)
-    .normalize("NFKC")
+function normalizeWordTokens(value: string) {
+  const normalized = normalizeUnicodeNumbers(value)
     .toLowerCase()
     .replace(/\p{Default_Ignorable_Code_Point}+/gu, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+  return normalized.length === 0 ? [] : normalized.split(/\s+/u);
+}
+
+function containsJoinedTokenSequence(tokens: string[], target: string) {
+  for (let start = 0; start < tokens.length; start += 1) {
+    let offset = 0;
+    for (let end = start; end < tokens.length; end += 1) {
+      const token = tokens[end];
+      if (!target.startsWith(token, offset)) {
+        break;
+      }
+      offset += token.length;
+      if (offset === target.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function normalizeUnicodeNumbers(value: string) {
-  return Array.from(value.normalize("NFKC"), (character) => {
+  const folded = value.normalize("NFKD").replace(/\p{M}+/gu, "");
+  return Array.from(folded, (character) => {
     const codePoint = character.codePointAt(0);
     const zero = decimalDigitZeroCodePoints.find(
       (candidate) =>
@@ -698,7 +719,6 @@ function normalizeUnicodeNumbers(value: string) {
 
 function containsCoordinate(
   value: string,
-  fieldKind: "identifier" | "prose",
   latitude: number,
   longitude: number,
 ) {
@@ -720,7 +740,7 @@ function containsCoordinate(
     if (
       wholeField ||
       labelled ||
-      (fieldKind === "prose" && /[+\-.e]/iu.test(token))
+      /[+\-.e]/iu.test(token)
     ) {
       return true;
     }
@@ -730,12 +750,11 @@ function containsCoordinate(
 }
 
 function normalizeNumericText(value: string) {
-  return normalizeUnicodeNumbers(value)
+  return normalizeUnicodeNumbers(value.replaceAll("\uff0f", "."))
     .toLowerCase()
     .replace(/\p{Default_Ignorable_Code_Point}+/gu, "")
     .replaceAll("\u2212", "-")
-    .replaceAll("\u066b", ".")
-    .replace(/(?<=\d)[,/](?=\d)/gu, ".");
+    .replaceAll("\u066b", ".");
 }
 
 function isBoundedPublicText(value: unknown): value is string {
