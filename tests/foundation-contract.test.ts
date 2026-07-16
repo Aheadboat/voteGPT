@@ -34,13 +34,14 @@ function readMarkdownSection(contents: string, heading: string): string {
     throw new Error("Markdown heading has no level: " + heading)
   }
 
-  const nextHeading = normalizedContents.indexOf(
-    "\n" + level + " ",
-    start + marker.length,
-  )
+  const nextHeadingOffset = normalizedContents
+    .slice(start + marker.length)
+    .search(new RegExp("^#{1," + level.length + "} ", "m"))
   return normalizedContents.slice(
     start,
-    nextHeading === -1 ? normalizedContents.length : nextHeading,
+    nextHeadingOffset === -1
+      ? normalizedContents.length
+      : start + marker.length + nextHeadingOffset,
   )
 }
 
@@ -48,7 +49,7 @@ function expectTokensInOrder(contents: string, tokens: string[]): void {
   let previousIndex = -1
 
   for (const token of tokens) {
-    const index = contents.indexOf(token)
+    const index = contents.indexOf(token, previousIndex + 1)
     expect(index, "missing or out-of-order token: " + token).toBeGreaterThan(
       previousIndex,
     )
@@ -400,6 +401,13 @@ describe("concurrent roadmap delivery contract", () => {
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
     expect(
+      readMarkdownSection(
+        "## Before\n### Target\ninside\n## Parent\noutside\n",
+        "### Target",
+      ),
+    ).not.toContain("outside")
+    expectTokensInOrder("alpha beta alpha", ["alpha", "beta", "alpha"])
+    expect(
       readRoadmapStatuses(
         "## R1 — Concurrent Roadmap Delivery Contract [DONE]\r\n",
       ).get("R1"),
@@ -418,8 +426,23 @@ describe("concurrent roadmap delivery contract", () => {
 
     if (r1Status !== "DONE") {
       expect(activeIds).toEqual(["R1"])
-      expect(statuses.get("F4")).toBe("TODO")
-      expect(statuses.get("F5")).toBe("TODO")
+      for (const id of [
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "G1",
+        "G2",
+      ]) {
+        expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
+      }
       expect(readme).toContain(
         "R1 — Concurrent Roadmap Delivery Contract is active",
       )
