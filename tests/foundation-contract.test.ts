@@ -417,32 +417,33 @@ describe("concurrent roadmap delivery contract", () => {
     const readme = readRepositoryFile("README.md")
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
+    const laterRoadmapIds = [
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8",
+      "F9",
+      "F10",
+      "F11",
+      "F12",
+      "F13",
+      "F14",
+      "G1",
+      "G2",
+    ]
     const activeIds = [...statuses]
       .filter(([, status]) => status !== "TODO" && status !== "DONE")
       .map(([id]) => id)
 
     expect(r1Status).toBeDefined()
     expect(activeIds.length).toBeLessThanOrEqual(2)
+    for (const id of laterRoadmapIds) {
+      expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
+    }
 
     if (r1Status !== "DONE") {
       expect(activeIds).toEqual(["R1"])
-      for (const id of [
-        "F4",
-        "F5",
-        "F6",
-        "F7",
-        "F8",
-        "F9",
-        "F10",
-        "F11",
-        "F12",
-        "F13",
-        "F14",
-        "G1",
-        "G2",
-      ]) {
-        expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
-      }
       expect(readme).toContain(
         "R1 — Concurrent Roadmap Delivery Contract is active",
       )
@@ -450,6 +451,7 @@ describe("concurrent roadmap delivery contract", () => {
         "F4 and every later roadmap item remain TODO",
       )
     } else {
+      expect(activeIds).toEqual([])
       expect(readme).toContain(
         "R1 — Concurrent Roadmap Delivery Contract is complete",
       )
