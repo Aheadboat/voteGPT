@@ -28,7 +28,7 @@ const originalGeolocation = Object.getOwnPropertyDescriptor(
 );
 
 function jsonResponse(
-  body: ResolutionResponse | ResolutionErrorResponse,
+  body: unknown,
   status = 200,
 ) {
   return new Response(JSON.stringify(body), {
@@ -112,9 +112,11 @@ describe("residence preview", () => {
     }
   });
 
-  it("keeps manual entry primary, explains privacy, and never checks on mount or a timer", () => {
+  it("keeps manual entry primary, loads saved home, and never resolves location on mount or a timer", () => {
     vi.useFakeTimers();
-    const fetchMock = vi.fn<typeof fetch>();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ status: "empty" }));
     const getCurrentPosition = installGeolocation();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -157,11 +159,71 @@ describe("residence preview", () => {
       ),
     ).toBeInTheDocument();
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/residence");
+    expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).includes("/api/v1/location/resolve"),
+      ),
+    ).toBe(false);
     expect(getCurrentPosition).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(60_000));
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(getCurrentPosition).not.toHaveBeenCalled();
+  });
+
+  it("offers unchecked exact consent only after a manual preview, never a device preview", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    let resolutionCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      if (String(input) === "/api/v1/residence") {
+        return jsonResponse({ status: "empty" });
+      }
+
+      resolutionCount += 1;
+      return jsonResponse(
+        resolutionCount === 1
+          ? matchedResidenceResponse
+          : partialResidenceResponse,
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation((success) => {
+      success(
+        geolocationPosition(
+          coordinateInput.latitude,
+          coordinateInput.longitude,
+        ),
+      );
+    });
+
+    render(<ResidencePreview />);
+    await act(async () => {});
+    enterAddress();
+
+    const consent = await screen.findByRole("checkbox", {
+      name: "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.",
+    });
+    expect(consent).not.toBeChecked();
+    const saveButton = screen.getByRole("button", { name: "Save residence" });
+    expect(saveButton).toBeDisabled();
+    fireEvent.click(consent);
+    expect(saveButton).toBeEnabled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use this device once" }),
+    );
+    await screen.findByRole("heading", {
+      name: "Partial political divisions",
+    });
+    expect(
+      screen.queryByRole("checkbox", { name: /Save this residence/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
   });
 
   it("posts an exact address once while pending, clears success, and starts a fresh explicit check", async () => {
