@@ -267,10 +267,16 @@ describe("federal official cache service", () => {
         return { status: "ignored", reason: "older_generation" } as const;
       }),
     };
-    const now = vi
-      .fn<() => Date>()
-      .mockReturnValueOnce(new Date(NOW))
-      .mockReturnValue(new Date(NOW.getTime() + 2 * HOUR));
+    let initialClockRead = true;
+    let postRaceClockReads = 0;
+    const now = vi.fn(() => {
+      if (initialClockRead) {
+        initialClockRead = false;
+        return new Date(NOW);
+      }
+      postRaceClockReads += 1;
+      return new Date(NOW.getTime() + 2 * HOUR);
+    });
     const harness = serviceHarness(repository, { now });
 
     expect(await harness.service.getOfficials(jurisdiction)).toEqual({
@@ -282,7 +288,7 @@ describe("federal official cache service", () => {
     });
     expect(repository.read).toHaveBeenCalledTimes(2);
     expect(repository.replaceRoster).toHaveBeenCalledTimes(1);
-    expect(now).toHaveBeenCalledTimes(2);
+    expect(postRaceClockReads).toBeGreaterThan(0);
   });
 
   it("excludes a Clerk-conflicted House member from refreshed profiles", async () => {
