@@ -501,10 +501,13 @@ function validRequest(value: unknown) {
 }
 
 function hasUnexpectedPagination(value: unknown) {
+  if (value === undefined || value === null) {
+    return false;
+  }
   return (
-    isRecord(value) &&
-    ((value.next !== undefined && value.next !== null) ||
-      (value.previous !== undefined && value.previous !== null))
+    !isRecord(value) ||
+    (value.next !== undefined && value.next !== null) ||
+    (value.previous !== undefined && value.previous !== null)
   );
 }
 
@@ -532,15 +535,23 @@ function canonicalItemUrl(value: unknown, expectedPath: string) {
 }
 
 function timestamp(value: unknown, retrievedAt: Date): string | null {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)
-  ) {
+  const match =
+    typeof value === "string"
+      ? /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/.exec(
+          value,
+        )
+      : null;
+  if (!match) {
     return null;
   }
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) && date.getTime() <= retrievedAt.getTime()
-    ? date.toISOString()
+  const date = new Date(match[0]);
+  if (!Number.isFinite(date.getTime())) {
+    return null;
+  }
+  const normalized = date.toISOString();
+  const expected = `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
+  return normalized === expected && date.getTime() <= retrievedAt.getTime()
+    ? normalized
     : null;
 }
 

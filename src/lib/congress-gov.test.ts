@@ -155,6 +155,39 @@ describe("Congress.gov current roster adapter", () => {
     }
   });
 
+  it("uses a newly discovered Congress in the House request and all selected details", async () => {
+    const fixtures = fixtureBundle();
+    setCurrentCongress(fixtures, 120);
+    const providerFetch = fixtureFetch(fixtures);
+
+    const available = expectAvailable(await lookup(providerFetch));
+
+    expect(available.currentCongress).toBe(120);
+    expect(requestUrls(providerFetch)[1]).toBe(
+      "https://api.congress.gov/v3/member/congress/120/CA/12?currentMember=true&format=json",
+    );
+    expect(
+      [...available.house, ...available.senate].map((seat) =>
+        "term" in seat ? seat.term.congress : null,
+      ),
+    ).toEqual([120, 120, 120]);
+  });
+
+  it("rejects a selected detail from the old Congress after discovering a new one", async () => {
+    const fixtures = fixtureBundle();
+    setCurrentCongress(fixtures, 120);
+    fixtures.houseDetail.member.terms[0].congress = 119;
+    const providerFetch = fixtureFetch(fixtures);
+
+    await expect(lookup(providerFetch)).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+    expect(requestUrls(providerFetch)[1]).toContain(
+      "/v3/member/congress/120/CA/12",
+    );
+  });
+
   it("preserves district zero in the at-large House request and normalized office", async () => {
     const fixtures = fixtureBundle();
     fixtures.house.members[0].district = 0;
@@ -280,6 +313,73 @@ describe("Congress.gov current roster adapter", () => {
   });
 
   it.each([
+    "2026-07-15T10:00:00Z",
+    "2026-07-15T10:00:00.1Z",
+    "2026-07-15T10:00:00.12Z",
+    "2026-07-15T10:00:00.123Z",
+  ])("accepts canonical timestamps with zero to three fractional digits: %s", async (value) => {
+    const fixtures = fixtureBundle();
+    fixtures.current.congress.updateDate = value;
+    fixtures.house.members[0].updateDate = value;
+    fixtures.houseDetail.member.updateDate = value;
+
+    const available = expectAvailable(await lookup(fixtureFetch(fixtures)));
+
+    expect(available.house[0]).toMatchObject({
+      sources: [{ recordUpdatedAt: new Date(value).toISOString() }],
+    });
+  });
+
+  it.each([
+    [
+      "current Congress string",
+      (f: FixtureBundle) => Object.assign(f.current, { pagination: "cursor" }),
+    ],
+    [
+      "current Congress array",
+      (f: FixtureBundle) => Object.assign(f.current, { pagination: [] }),
+    ],
+    [
+      "current Congress next cursor",
+      (f: FixtureBundle) =>
+        Object.assign(f.current, { pagination: { next: "cursor" } }),
+    ],
+    [
+      "member detail string",
+      (f: FixtureBundle) =>
+        Object.assign(f.houseDetail, { pagination: "cursor" }),
+    ],
+    [
+      "member detail array",
+      (f: FixtureBundle) => Object.assign(f.houseDetail, { pagination: [] }),
+    ],
+    [
+      "member detail previous cursor",
+      (f: FixtureBundle) =>
+        Object.assign(f.houseDetail, { pagination: { previous: "cursor" } }),
+    ],
+  ] as const)("fails closed on non-null %s pagination", async (_label, mutate) => {
+    const fixtures = fixtureBundle();
+    mutate(fixtures);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("allows absent-equivalent null pagination on item endpoints", async () => {
+    const fixtures = fixtureBundle();
+    Object.assign(fixtures.current, { pagination: null });
+    Object.assign(fixtures.houseDetail, { pagination: null });
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toMatchObject({
+      status: "available",
+      currentCongress: 119,
+    });
+  });
+
+  it.each([
     ["count/item mismatch", (f: FixtureBundle) => { f.house.pagination.count = 2; }],
     [
       "unexpected next page",
@@ -314,6 +414,24 @@ describe("Congress.gov current roster adapter", () => {
     [
       "future detail timestamp",
       (f: FixtureBundle) => { f.houseDetail.member.updateDate = "2026-07-17T00:00:00Z"; },
+    ],
+    [
+      "impossible current-Congress timestamp",
+      (f: FixtureBundle) => {
+        f.current.congress.updateDate = "2026-02-30T10:00:00Z";
+      },
+    ],
+    [
+      "impossible member-summary timestamp",
+      (f: FixtureBundle) => {
+        f.house.members[0].updateDate = "2026-02-30T10:00:00Z";
+      },
+    ],
+    [
+      "impossible member-detail timestamp",
+      (f: FixtureBundle) => {
+        f.houseDetail.member.updateDate = "2026-02-30T10:00:00Z";
+      },
     ],
     [
       "duplicate House seat",
@@ -389,6 +507,20 @@ function fixtureBundle(): FixtureBundle {
     senatorOneDetail: congressMemberSenatorOneFixture,
     senatorTwoDetail: congressMemberSenatorTwoFixture,
   });
+}
+
+function setCurrentCongress(fixtures: FixtureBundle, currentCongress: number) {
+  fixtures.current.congress.number = currentCongress;
+  fixtures.current.congress.name = `${currentCongress}th Congress`;
+  fixtures.current.congress.url =
+    `https://api.congress.gov/v3/congress/${currentCongress}?format=json`;
+  for (const detail of [
+    fixtures.houseDetail,
+    fixtures.senatorOneDetail,
+    fixtures.senatorTwoDetail,
+  ]) {
+    detail.member.terms[0].congress = currentCongress;
+  }
 }
 
 function fixtureFetch(fixtures = fixtureBundle()) {
