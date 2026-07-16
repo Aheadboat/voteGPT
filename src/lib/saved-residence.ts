@@ -3,6 +3,12 @@ import {
   createDecipheriv,
   randomBytes,
 } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { createDatabase } from "@/db";
+import {
+  savedResidence,
+  savedResidenceDivision,
+} from "@/db/schema";
 import type { ResolutionResponse } from "./residence";
 
 type ResolvedPreviewResponse = Extract<
@@ -119,6 +125,19 @@ const keyringError =
   "Saved residence encryption configuration is invalid.";
 const encryptedAddressError =
   "Saved residence encrypted address is invalid.";
+const savedResidenceRecordError = "Saved residence record is invalid.";
+const divisionTypes = new Set<SavedResidenceDivision["type"]>([
+  "country",
+  "state",
+  "county",
+  "congressional_district",
+  "state_upper",
+  "state_lower",
+  "place",
+  "other",
+]);
+
+type Database = Awaited<ReturnType<typeof createDatabase>>;
 
 export function parseSaveResidenceRequest(
   value: unknown,
@@ -290,28 +309,359 @@ export function decryptSavedResidenceAddress(
   }
 }
 
-export declare function getSavedResidenceDivisions(
+export async function getSavedResidenceDivisions(
   userId: string,
-): Promise<readonly SavedResidenceDivision[]>;
+): Promise<readonly SavedResidenceDivision[]> {
+  requireUserId(userId);
+  return (await productionRepository()).getDivisions(userId);
+}
 
-export declare function saveSavedResidence(
+export async function saveSavedResidence(
   userId: string,
   request: SaveResidenceRequest,
   verifiedResolution: SavedResidenceResolution,
   now: Date,
-): Promise<SavedResidenceMutationResult>;
+): Promise<SavedResidenceMutationResult> {
+  requireUserId(userId);
+  return (await productionRepository()).save(
+    userId,
+    request,
+    verifiedResolution,
+    now,
+    loadResidenceEncryptionKeyring(),
+  );
+}
 
-export declare function getSavedResidence(
+export async function getSavedResidence(
   userId: string,
-): Promise<SavedResidenceView | null>;
+): Promise<SavedResidenceView | null> {
+  requireUserId(userId);
+  return (await productionRepository()).get(
+    userId,
+    loadResidenceEncryptionKeyring(),
+  );
+}
 
-export declare function deleteSavedResidence(userId: string): Promise<boolean>;
+export async function deleteSavedResidence(userId: string): Promise<boolean> {
+  requireUserId(userId);
+  return (await productionRepository()).delete(userId);
+}
 
 export declare function rotateSavedResidenceKeys(): Promise<{
   rotated: number;
   skipped: number;
   remaining: number;
 }>;
+
+export function createSavedResidenceRepository(database: Database) {
+  return {
+    async save(
+      userId: string,
+      request: SaveResidenceRequest,
+      verifiedResolution: SavedResidenceResolution,
+      now: Date,
+      keyring: ResidenceEncryptionKeyring,
+    ): Promise<SavedResidenceMutationResult> {
+      requireUserId(userId);
+      const resolution = copySavedResidenceResolution(verifiedResolution);
+      const envelope = encryptSavedResidenceAddress(
+        request.address,
+        userId,
+        keyring,
+      );
+      const parent = {
+        ciphertext: envelope.ciphertext,
+        consentVersion: request.consent.version,
+        consentedAt: now,
+        coverageNotes: [...resolution.coverageNotes],
+        createdAt: now,
+        envelopeVersion: envelope.version,
+        iv: envelope.iv,
+        keyVersion: envelope.keyVersion,
+        resolutionStatus: resolution.status,
+        sourceBenchmark: resolution.source.benchmark ?? null,
+        sourceCheckedAt: new Date(resolution.source.checkedAt),
+        sourceEffectiveAt:
+          resolution.source.effectiveAt === null
+            ? null
+            : new Date(resolution.source.effectiveAt),
+        sourceName: resolution.source.name,
+        sourceUrl: resolution.source.url,
+        sourceVintage: resolution.source.vintage ?? null,
+        tag: envelope.tag,
+        updatedAt: now,
+        userId,
+      };
+
+      const stored = await database.transaction(async (transaction) => {
+        const [existing] = await transaction
+          .select({ userId: savedResidence.userId })
+          .from(savedResidence)
+          .where(eq(savedResidence.userId, userId))
+          .limit(1);
+        const [residence] = await transaction
+          .insert(savedResidence)
+          .values(parent)
+          .onConflictDoUpdate({
+            target: savedResidence.userId,
+            set: {
+              ciphertext: parent.ciphertext,
+              consentVersion: parent.consentVersion,
+              consentedAt: parent.consentedAt,
+              coverageNotes: parent.coverageNotes,
+              envelopeVersion: parent.envelopeVersion,
+              iv: parent.iv,
+              keyVersion: parent.keyVersion,
+              resolutionStatus: parent.resolutionStatus,
+              sourceBenchmark: parent.sourceBenchmark,
+              sourceCheckedAt: parent.sourceCheckedAt,
+              sourceEffectiveAt: parent.sourceEffectiveAt,
+              sourceName: parent.sourceName,
+              sourceUrl: parent.sourceUrl,
+              sourceVintage: parent.sourceVintage,
+              tag: parent.tag,
+              updatedAt: parent.updatedAt,
+            },
+          })
+          .returning();
+
+        await transaction
+          .delete(savedResidenceDivision)
+          .where(eq(savedResidenceDivision.userId, userId));
+        if (resolution.divisions.length > 0) {
+          await transaction.insert(savedResidenceDivision).values(
+            resolution.divisions.map((division, displayOrder) => ({
+              displayOrder,
+              divisionId: division.id,
+              idScheme: division.idScheme,
+              name: division.name,
+              type: division.type,
+              userId,
+            })),
+          );
+        }
+
+        if (!residence) {
+          throw new Error(savedResidenceRecordError);
+        }
+        return { ...residence, replaced: existing !== undefined };
+      });
+
+      return {
+        replaced: stored.replaced,
+        residence: {
+          address: request.address,
+          consent: {
+            acceptedAt: stored.consentedAt.toISOString(),
+            version: SAVED_RESIDENCE_CONSENT_VERSION,
+          },
+          createdAt: stored.createdAt.toISOString(),
+          resolution,
+          updatedAt: stored.updatedAt.toISOString(),
+        },
+      };
+    },
+
+    async get(
+      userId: string,
+      keyring: ResidenceEncryptionKeyring,
+    ): Promise<SavedResidenceView | null> {
+      requireUserId(userId);
+      const rows = await database
+        .select({
+          ciphertext: savedResidence.ciphertext,
+          consentVersion: savedResidence.consentVersion,
+          consentedAt: savedResidence.consentedAt,
+          coverageNotes: savedResidence.coverageNotes,
+          createdAt: savedResidence.createdAt,
+          divisionId: savedResidenceDivision.divisionId,
+          divisionIdScheme: savedResidenceDivision.idScheme,
+          divisionName: savedResidenceDivision.name,
+          divisionType: savedResidenceDivision.type,
+          envelopeVersion: savedResidence.envelopeVersion,
+          iv: savedResidence.iv,
+          keyVersion: savedResidence.keyVersion,
+          resolutionStatus: savedResidence.resolutionStatus,
+          sourceBenchmark: savedResidence.sourceBenchmark,
+          sourceCheckedAt: savedResidence.sourceCheckedAt,
+          sourceEffectiveAt: savedResidence.sourceEffectiveAt,
+          sourceName: savedResidence.sourceName,
+          sourceUrl: savedResidence.sourceUrl,
+          sourceVintage: savedResidence.sourceVintage,
+          tag: savedResidence.tag,
+          updatedAt: savedResidence.updatedAt,
+        })
+        .from(savedResidence)
+        .leftJoin(
+          savedResidenceDivision,
+          eq(savedResidenceDivision.userId, savedResidence.userId),
+        )
+        .where(eq(savedResidence.userId, userId))
+        .orderBy(savedResidenceDivision.displayOrder);
+      const row = rows[0];
+      if (!row) {
+        return null;
+      }
+      if (
+        (row.resolutionStatus !== "matched" &&
+          row.resolutionStatus !== "partial") ||
+        row.consentVersion !== SAVED_RESIDENCE_CONSENT_VERSION ||
+        !Array.isArray(row.coverageNotes) ||
+        !row.coverageNotes.every((note) => typeof note === "string")
+      ) {
+        throw new Error(savedResidenceRecordError);
+      }
+
+      const source: SavedResidenceResolution["source"] = {
+        checkedAt: row.sourceCheckedAt.toISOString(),
+        effectiveAt: row.sourceEffectiveAt?.toISOString() ?? null,
+        name: row.sourceName,
+        url: row.sourceUrl,
+      };
+      if (row.sourceBenchmark !== null) {
+        source.benchmark = row.sourceBenchmark;
+      }
+      if (row.sourceVintage !== null) {
+        source.vintage = row.sourceVintage;
+      }
+      const divisions = rows.flatMap((candidate) => {
+        if (
+          candidate.divisionType === null ||
+          candidate.divisionName === null ||
+          candidate.divisionId === null ||
+          candidate.divisionIdScheme === null
+        ) {
+          return [];
+        }
+        return [
+          savedDivision({
+            id: candidate.divisionId,
+            idScheme: candidate.divisionIdScheme,
+            name: candidate.divisionName,
+            type: candidate.divisionType,
+          }),
+        ];
+      });
+
+      return {
+        address: decryptSavedResidenceAddress(
+          {
+            ciphertext: row.ciphertext,
+            iv: row.iv,
+            keyVersion: row.keyVersion,
+            tag: row.tag,
+            version: row.envelopeVersion,
+          },
+          userId,
+          keyring,
+        ),
+        consent: {
+          acceptedAt: row.consentedAt.toISOString(),
+          version: SAVED_RESIDENCE_CONSENT_VERSION,
+        },
+        createdAt: row.createdAt.toISOString(),
+        resolution: {
+          coverageNotes: [...row.coverageNotes],
+          divisions,
+          source,
+          status: row.resolutionStatus,
+        },
+        updatedAt: row.updatedAt.toISOString(),
+      };
+    },
+
+    async delete(userId: string) {
+      requireUserId(userId);
+      return database.transaction(async (transaction) => {
+        const [existing] = await transaction
+          .select({ userId: savedResidence.userId })
+          .from(savedResidence)
+          .where(eq(savedResidence.userId, userId))
+          .limit(1);
+        if (!existing) {
+          return false;
+        }
+        await transaction
+          .delete(savedResidence)
+          .where(eq(savedResidence.userId, userId));
+        return true;
+      });
+    },
+
+    async getDivisions(
+      userId: string,
+    ): Promise<readonly SavedResidenceDivision[]> {
+      requireUserId(userId);
+      const divisions = await database
+        .select({
+          id: savedResidenceDivision.divisionId,
+          idScheme: savedResidenceDivision.idScheme,
+          name: savedResidenceDivision.name,
+          type: savedResidenceDivision.type,
+        })
+        .from(savedResidenceDivision)
+        .where(eq(savedResidenceDivision.userId, userId))
+        .orderBy(savedResidenceDivision.displayOrder);
+      return divisions.map(savedDivision);
+    },
+  };
+}
+
+async function productionRepository() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is required");
+  }
+  return createSavedResidenceRepository(
+    await createDatabase(connectionString),
+  );
+}
+
+function copySavedResidenceResolution(
+  resolution: SavedResidenceResolution,
+): SavedResidenceResolution {
+  const source: SavedResidenceResolution["source"] = {
+    checkedAt: resolution.source.checkedAt,
+    effectiveAt: resolution.source.effectiveAt,
+    name: resolution.source.name,
+    url: resolution.source.url,
+  };
+  if (resolution.source.benchmark !== undefined) {
+    source.benchmark = resolution.source.benchmark;
+  }
+  if (resolution.source.vintage !== undefined) {
+    source.vintage = resolution.source.vintage;
+  }
+  return {
+    coverageNotes: [...resolution.coverageNotes],
+    divisions: resolution.divisions.map(savedDivision),
+    source,
+    status: resolution.status,
+  };
+}
+
+function savedDivision(value: {
+  id: string;
+  idScheme: string;
+  name: string;
+  type: string;
+}): SavedResidenceDivision {
+  if (!divisionTypes.has(value.type as SavedResidenceDivision["type"])) {
+    throw new Error(savedResidenceRecordError);
+  }
+  return {
+    id: value.id,
+    idScheme: value.idScheme,
+    name: value.name,
+    type: value.type as SavedResidenceDivision["type"],
+  };
+}
+
+function requireUserId(userId: string) {
+  if (!isNonemptyUserId(userId)) {
+    throw new Error(savedResidenceRecordError);
+  }
+}
 
 function authenticatedData(
   version: string,

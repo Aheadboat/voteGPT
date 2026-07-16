@@ -15,6 +15,13 @@
       "when": 1784065918351,
       "tag": "0001_cleanup_auth_verifications",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784197414459,
+      "tag": "0002_saved_residence",
+      "breakpoints": true
     }
   ]
 }

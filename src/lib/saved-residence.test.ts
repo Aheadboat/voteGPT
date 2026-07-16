@@ -1,13 +1,26 @@
 // @vitest-environment node
 
 import { createCipheriv, createDecipheriv } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { createDatabase } from "@/db";
+import {
+  savedResidence,
+  savedResidenceDivision,
+  user,
+} from "@/db/schema";
 import type { ResolutionResponse } from "./residence";
 import {
   SAVED_RESIDENCE_CONSENT_VERSION,
   SAVED_RESIDENCE_ERROR_MESSAGES,
+  createSavedResidenceRepository,
   decryptSavedResidenceAddress,
+  deleteSavedResidence,
   encryptSavedResidenceAddress,
+  getSavedResidenceDivisions,
   loadResidenceEncryptionKeyring,
   parseSaveResidenceRequest,
   type DeleteSavedResidenceResponse,
@@ -487,6 +500,346 @@ describe("saved residence authenticated encryption", () => {
     }
   });
 });
+
+describe("saved residence persistence", () => {
+  it("migrates only encrypted residence and normalized division columns with required constraints", async () => {
+    const db = await createDatabase("pglite://memory");
+
+    try {
+      const client = db.$client as unknown as {
+        query: (query: string) => Promise<{
+          rows: Array<{ column_name: string; table_name: string }>;
+        }>;
+      };
+      const { rows } = await client.query(
+        `select table_name, column_name
+         from information_schema.columns
+         where table_name in ('saved_residence', 'saved_residence_division')
+         order by table_name, column_name`,
+      );
+      const columns = Object.groupBy(
+        rows,
+        ({ table_name: tableName }) => tableName,
+      );
+
+      expect(columns.saved_residence?.map(({ column_name }) => column_name)).toEqual(
+        [
+          "ciphertext",
+          "consent_version",
+          "consented_at",
+          "coverage_notes",
+          "created_at",
+          "envelope_version",
+          "iv",
+          "key_version",
+          "resolution_status",
+          "source_benchmark",
+          "source_checked_at",
+          "source_effective_at",
+          "source_name",
+          "source_url",
+          "source_vintage",
+          "tag",
+          "updated_at",
+          "user_id",
+        ],
+      );
+      expect(
+        columns.saved_residence_division?.map(
+          ({ column_name }) => column_name,
+        ),
+      ).toEqual([
+        "display_order",
+        "division_id",
+        "id_scheme",
+        "name",
+        "type",
+        "user_id",
+      ]);
+      expect(JSON.stringify(rows)).not.toMatch(
+        /address|token|hash|latitude|longitude/i,
+      );
+
+      const migration = await readFile(
+        resolve(process.cwd(), "drizzle/0002_saved_residence.sql"),
+        "utf8",
+      );
+      expect(migration).toContain(
+        'CONSTRAINT "saved_residence_envelope_version_check" CHECK ("saved_residence"."envelope_version" = \'v1\')',
+      );
+      expect(migration).toContain(
+        'CONSTRAINT "saved_residence_resolution_status_check" CHECK ("saved_residence"."resolution_status" in (\'matched\', \'partial\'))',
+      );
+      expect(migration).toContain(
+        'CONSTRAINT "saved_residence_consent_version_check" CHECK ("saved_residence"."consent_version" = \'saved-residence-v1\')',
+      );
+      expect(migration).toContain("ON DELETE cascade");
+      expect(migration).toContain(
+        'CREATE INDEX "saved_residence_division_lookup_idx" ON "saved_residence_division" USING btree ("id_scheme","type","division_id","user_id")',
+      );
+      expect(migration).not.toMatch(/address|token|hash|latitude|longitude/i);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("atomically creates and replaces one encrypted home without history", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+    const firstNow = new Date("2026-07-16T18:00:00.000Z");
+    const secondNow = new Date("2026-07-16T19:00:00.000Z");
+
+    try {
+      const created = await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "v1.private.first"),
+        resolution,
+        firstNow,
+        keyring,
+      );
+      expect(created).toEqual({
+        replaced: false,
+        residence: residenceView,
+      });
+
+      const replaced = await repository.save(
+        "user_one",
+        saveRequest("456 Oak Avenue", "v1.private.second"),
+        replacementResolution,
+        secondNow,
+        keyring,
+      );
+      expect(replaced).toEqual({
+        replaced: true,
+        residence: {
+          address: "456 Oak Avenue",
+          consent: {
+            acceptedAt: secondNow.toISOString(),
+            version: SAVED_RESIDENCE_CONSENT_VERSION,
+          },
+          createdAt: firstNow.toISOString(),
+          resolution: replacementResolution,
+          updatedAt: secondNow.toISOString(),
+        },
+      });
+      expect(await repository.get("user_one", keyring)).toEqual(
+        replaced.residence,
+      );
+      expect(await db.select().from(savedResidence)).toHaveLength(1);
+      expect(
+        await db
+          .select({
+            displayOrder: savedResidenceDivision.displayOrder,
+            id: savedResidenceDivision.divisionId,
+          })
+          .from(savedResidenceDivision)
+          .where(eq(savedResidenceDivision.userId, "user_one"))
+          .orderBy(savedResidenceDivision.displayOrder),
+      ).toEqual([
+        { displayOrder: 0, id: replacementResolution.divisions[0].id },
+        { displayOrder: 1, id: replacementResolution.divisions[1].id },
+      ]);
+
+      const rawState = JSON.stringify({
+        divisions: await db.select().from(savedResidenceDivision),
+        residences: await db.select().from(savedResidence),
+      });
+      expect(rawState).not.toContain("123 Main Street");
+      expect(rawState).not.toContain("456 Oak Avenue");
+      expect(rawState).not.toContain("v1.private.first");
+      expect(rawState).not.toContain("v1.private.second");
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("rolls back parent and child replacement when new divisions fail", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+    const firstNow = new Date("2026-07-16T18:00:00.000Z");
+
+    try {
+      await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "v1.private.first"),
+        resolution,
+        firstNow,
+        keyring,
+      );
+
+      await expect(
+        repository.save(
+          "user_one",
+          saveRequest("456 Oak Avenue", "v1.private.second"),
+          {
+            ...replacementResolution,
+            divisions: [
+              replacementResolution.divisions[0],
+              replacementResolution.divisions[0],
+            ],
+          },
+          new Date("2026-07-16T19:00:00.000Z"),
+          keyring,
+        ),
+      ).rejects.toThrow();
+
+      expect(await repository.get("user_one", keyring)).toEqual(
+        residenceView,
+      );
+      expect(await db.select().from(savedResidenceDivision)).toHaveLength(1);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("hands off ordered divisions for two users and deletes without keys or decryption", async () => {
+    const root = await mkdtemp(join(tmpdir(), "votegpt-residence-db-"));
+    const connectionString = pgliteConnection(join(root, "database"));
+    const previousEnvironment = residenceEnvironment();
+    process.env.DATABASE_URL = connectionString;
+    delete process.env.RESIDENCE_ENCRYPTION_ACTIVE_KEY;
+    delete process.env.RESIDENCE_ENCRYPTION_KEYS;
+    const db = await createDatabase(connectionString);
+    const repository = createSavedResidenceRepository(db);
+    const keyring = loadResidenceEncryptionKeyring(validEnvironment());
+
+    try {
+      await db.insert(user).values([
+        testUser("one"),
+        testUser("two"),
+      ]);
+      await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "v1.private.one"),
+        replacementResolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+      );
+      await repository.save(
+        "user_two",
+        saveRequest("789 Pine Road", "v1.private.two"),
+        {
+          ...replacementResolution,
+          divisions: [...replacementResolution.divisions].reverse(),
+        },
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+      );
+      await db
+        .update(savedResidence)
+        .set({ keyVersion: "retired-key" })
+        .where(eq(savedResidence.userId, "user_one"));
+
+      expect(await getSavedResidenceDivisions("user_one")).toEqual(
+        replacementResolution.divisions,
+      );
+      expect(await getSavedResidenceDivisions("user_two")).toEqual(
+        [...replacementResolution.divisions].reverse(),
+      );
+      expect(await deleteSavedResidence("user_one")).toBe(true);
+      expect(
+        await db
+          .select()
+          .from(savedResidenceDivision)
+          .where(eq(savedResidenceDivision.userId, "user_one")),
+      ).toEqual([]);
+
+      await db.delete(user).where(eq(user.id, "user_two"));
+      expect(await db.select().from(savedResidence)).toEqual([]);
+      expect(await db.select().from(savedResidenceDivision)).toEqual([]);
+    } finally {
+      restoreResidenceEnvironment(previousEnvironment);
+      await closeDatabase(db);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+const replacementResolution = {
+  status: "partial",
+  divisions: [
+    {
+      type: "state",
+      name: "Example State",
+      id: "ocd-division/country:us/state:ex",
+      idScheme: "ocd",
+    },
+    {
+      type: "county",
+      name: "Example County",
+      id: "0500000US99999",
+      idScheme: "geoid",
+    },
+  ],
+  source: {
+    name: "U.S. Census Geocoder",
+    url: "https://geocoding.geo.census.gov/geocoder/",
+    checkedAt: "2026-07-16T19:00:00.000Z",
+    effectiveAt: "2020-01-01T00:00:00.000Z",
+    benchmark: "Public_AR_Current",
+    vintage: "Current_Current",
+  },
+  coverageNotes: ["Congressional district coverage is unavailable."],
+} satisfies SavedResidenceResolution;
+
+async function persistenceFixture() {
+  const db = await createDatabase("pglite://memory");
+  await db.insert(user).values([testUser("one"), testUser("two")]);
+  return {
+    db,
+    keyring: loadResidenceEncryptionKeyring(validEnvironment()),
+    repository: createSavedResidenceRepository(db),
+  };
+}
+
+function saveRequest(address: string, resolutionToken: string) {
+  return {
+    address,
+    consent: {
+      accepted: true,
+      version: SAVED_RESIDENCE_CONSENT_VERSION,
+    },
+    resolutionToken,
+  } satisfies SaveResidenceRequest;
+}
+
+function testUser(suffix: string) {
+  return {
+    email: `${suffix}@example.com`,
+    id: `user_${suffix}`,
+    name: "Test Voter",
+  };
+}
+
+function pgliteConnection(path: string) {
+  return `pglite://${path.replaceAll("\\", "/")}`;
+}
+
+function residenceEnvironment() {
+  return {
+    DATABASE_URL: process.env.DATABASE_URL,
+    RESIDENCE_ENCRYPTION_ACTIVE_KEY:
+      process.env.RESIDENCE_ENCRYPTION_ACTIVE_KEY,
+    RESIDENCE_ENCRYPTION_KEYS: process.env.RESIDENCE_ENCRYPTION_KEYS,
+  };
+}
+
+function restoreResidenceEnvironment(environment: ReturnType<typeof residenceEnvironment>) {
+  for (const [name, value] of Object.entries(environment)) {
+    if (value === undefined) {
+      delete process.env[name];
+    } else {
+      process.env[name] = value;
+    }
+  }
+}
+
+async function closeDatabase(
+  database: Awaited<ReturnType<typeof createDatabase>>,
+) {
+  const client = database.$client as unknown as {
+    close?: () => Promise<void>;
+  };
+  await client.close?.();
+}
 
 function encodedKey(fill: number) {
   return Buffer.alloc(32, fill).toString("base64url");
