@@ -406,21 +406,61 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [TODO]
+## F4 — Consented Saved Residence [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
+- **Authorization:** User explicitly approved paired F4/F5 activation under the recorded `CONDITIONAL` admission on 2026-07-16. This activation authorizes `DISCOVER/DESIGN/PLAN` only; Human Gate A remains required before RED or production work.
+- **Concurrency audit:** F3 is `DONE` on `main`, and its signed normalized residence result plus congressional-division handoff are settled. F4 and F5 have useful isolated domain/provider lanes, but the current single Drizzle schema and migration stream, authenticated dashboard shell, global styles, environment example, and final integrated verification are shared. F4 therefore owns those surfaces first; F5 defers them until F4's closeout merge and then integrates current `main`.
+- **Activation setup evidence:** The coordinator created inert `codex/f4-consented-saved-residence` and `codex/f5-federal-officials` worktrees from dependency-complete `main@735d73b0b069fa67a1e16a968a7298fb973ef17a`. Dependency installation reported zero vulnerabilities; each feature checkout passed the unchanged 13-file/90-test baseline. No feature agent was dispatched before the activation record.
+- **Activation guard RED/GREEN evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` first failed 1 of 14 tests because the unchanged roadmap had zero active items instead of the authorized F4/F5 pair. After only the activation records, README status, and state-specific assertion were updated, the same command passed 14/14.
 - **Tests first:** Consent required, authorized decrypt only, separately queryable divisions, cascading deletion, and encryption-key rotation.
 - **Done:** Versioned AES-256-GCM encryption, one-home constraint, consent version/time, and account controls pass; exact location never reaches logs, URLs, analytics, search, or LLM inputs; GPS is never stored.
 - **Non-goals:** Multiple homes, household sharing, or location history.
 
-## F5 — Federal Officials [TODO]
+### Coordination record
+
+- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Branch:** `codex/f4-consented-saved-residence`
+- **Base commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
+- **Integrated-main commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
+- **Admission result:** `CONDITIONAL` — both dependencies are complete and feature-local work is useful, but shared persistence, dashboard, configuration, and integrated-test surfaces require exclusive ownership and serialization.
+- **Assigned feature lead:** `f4_feature_lead` — dispatch begins only after the activation PR merges and that merge is integrated into this branch.
+- **Ownership:** F4 exclusively owns `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `src/lib/residence.ts`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. F4 also exclusively owns its new residence-consent, encryption, persistence, account-control, and focused-test files plus its encryption-key configuration. `AGENTS.md`, `ROADMAP.md`, `README.md`, and `tests/foundation-contract.test.ts` remain coordinator-owned; shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
+- **Merge order:** F4 feature PR → post-merge verification → F4 closeout PR/CI/merge. Only after the F4 closeout may F5 integrate current `main`, take the serialized shared-surface handoff, and approach Gate B.
+- **Feature PR/CI:** Not opened; feature dispatch awaits the activation merge and Human Gate A controls implementation.
+- **Blockers:** None. Product/privacy/design decisions discovered by the lead will be presented at Human Gate A.
+- **Feature merge:** Not started.
+- **Post-merge evidence:** Not applicable before the feature merge.
+- **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F4 `DONE` on `main`.
+- **Next Human Gate:** Human Gate A after the lead returns the overall design, tests-first task graph, dependencies, interfaces, parallel lanes, risks, and non-goals.
+
+## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
+- **Authorization:** User explicitly approved paired F4/F5 activation under the recorded `CONDITIONAL` admission on 2026-07-16. This activation authorizes `DISCOVER/DESIGN/PLAN` only; Human Gate A remains required before RED or production work.
+- **Concurrency audit:** F5 may independently discover, design, and later implement approved federal-domain, Congress.gov adapter, fixture, source/freshness, and public-profile work in new feature-owned files. It cannot mutate the shared database, migration, dashboard, environment, package/configuration, or integrated-test surfaces while F4 owns them.
 - **Tests first:** Golden district fixture, senators, at-large seat, vacancy, stale/incomplete provider data, and mandatory source/retrieval time.
 - **Done:** Minimal `Person`, `Office`, `Term`, `SourceRef`, and `Freshness` records; Congress.gov adapter; public profiles; federal `In office` dashboard; graceful cached/error state when provider fails.
 - **Non-goals:** State/local officials, elections, candidate comparison, or AI.
+
+### Coordination record
+
+- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Branch:** `codex/f5-federal-officials`
+- **Base commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
+- **Integrated-main commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
+- **Admission result:** `CONDITIONAL` — the Congress.gov/domain lane is independently useful, while cache persistence, dashboard integration, shared configuration, and final integrated verification remain serialized behind F4.
+- **Assigned feature lead:** `f5_feature_lead` — dispatch begins only after the activation PR merges and that merge is integrated into this branch.
+- **Ownership:** F5 exclusively owns new federal-only domain, fixture, Congress.gov adapter, source/freshness, public-profile route/component/module-style, and focused-test files plus the Congress.gov request/configuration external resource. F5 defers every F4-owned shared surface: database cache/schema/migrations, `src/lib/residence.ts`, `.env.example` runtime wiring, authenticated dashboard page/test, global CSS, package/shared test configuration, and integrated dashboard E2E. Before the serialized handoff it may consume existing F3 contracts read-only and must use feature-local styles/config-free fixtures.
+- **Merge order:** F5 remains active in isolated lanes but cannot reach Gate B until it integrates completed F4 from `main` after the F4 closeout, accepts the coordinator-recorded shared-surface handoff, completes deferred cache/dashboard/runtime integration, and reruns focused, database, full, E2E, review, and hosted-CI gates. Its feature PR, post-merge verification, and closeout follow F4's completed sequence.
+- **Feature PR/CI:** Not opened; feature dispatch awaits the activation merge and Human Gate A controls implementation.
+- **Blockers:** Shared persistence/dashboard integration is intentionally deferred, not blocked. Any Congress.gov product, credential, quota, legal-use, or material design decision will be escalated with evidence.
+- **Feature merge:** Not started.
+- **Post-merge evidence:** Not applicable before the feature merge.
+- **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
+- **Next Human Gate:** Human Gate A after the lead returns the overall design, tests-first task graph, dependencies, interfaces, isolated/deferred lanes, risks, and non-goals.
 
 ## F6 — State Officials and Government-Level Navigation [TODO]
 

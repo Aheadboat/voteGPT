@@ -590,7 +590,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps the R1 amendment isolated until its closeout merge", () => {
+  it("keeps R1 closed and validates the authorized F4/F5 activation", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -650,9 +650,7 @@ describe("concurrent roadmap delivery contract", () => {
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
-    const laterRoadmapIds = [
-      "F4",
-      "F5",
+    const inactiveLaterRoadmapIds = [
       "F6",
       "F7",
       "F8",
@@ -668,30 +666,48 @@ describe("concurrent roadmap delivery contract", () => {
     const activeIds = [...statuses]
       .filter(([, status]) => status !== "TODO" && status !== "DONE")
       .map(([id]) => id)
+    const f4 = readRoadmapItem(roadmap, "F4")
+    const f5 = readRoadmapItem(roadmap, "F5")
 
-    expect(r1Status).toBeDefined()
-    expect(activeIds.length).toBeLessThanOrEqual(2)
-    for (const id of laterRoadmapIds) {
+    expect(r1Status).toBe("DONE")
+    expect(activeIds).toEqual(["F4", "F5"])
+    for (const id of inactiveLaterRoadmapIds) {
       expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
     }
     expect(readme).not.toContain("is implemented and verified")
     expect(implementationPlan).toContain(
       "contents.indexOf(token, previousIndex + 1)",
     )
-
-    if (r1Status !== "DONE") {
-      expect(activeIds).toEqual(["R1"])
-      expect(readme).toContain(
-        "R1 — Concurrent Roadmap Delivery Contract is active",
-      )
-      expect(readme).toContain(
-        "F4 and every later roadmap item remain TODO",
-      )
-    } else {
-      expect(activeIds).toEqual([])
-      expect(readme).toContain(
-        "R1 — Concurrent Roadmap Delivery Contract is complete",
+    expect(readme).toContain(
+      "R1 — Concurrent Roadmap Delivery Contract is complete",
+    )
+    expect(readme).toContain(
+      "F4 and F5 are active in `DISCOVER/DESIGN/PLAN`",
+    )
+    expect(readme).toContain(
+      "F6 and every later roadmap item remain TODO",
+    )
+    for (const item of [f4, f5]) {
+      expect(readCoordinationField(item, "Admission result")).toContain(
+        "CONDITIONAL",
       )
     }
+    expect(readCoordinationField(f4, "Branch")).toContain(
+      "codex/f4-consented-saved-residence",
+    )
+    expect(readCoordinationField(f5, "Branch")).toContain(
+      "codex/f5-federal-officials",
+    )
+    expect(readCoordinationField(f4, "Ownership")).toContain(
+      "src/db/schema.ts",
+    )
+    expect(readCoordinationField(f4, "Ownership")).toContain("drizzle/**")
+    expect(readCoordinationField(f5, "Ownership")).toContain("defers")
+    expect(readCoordinationField(f4, "Merge order")).toContain(
+      "F4 closeout",
+    )
+    expect(readCoordinationField(f5, "Merge order")).toContain(
+      "integrates completed F4",
+    )
   })
 })
