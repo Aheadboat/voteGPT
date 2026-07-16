@@ -1094,10 +1094,9 @@ async function assertSavedResponsiveAndAccessible(
   page: Page,
   testInfo: TestInfo,
 ) {
-  const deleteSaved = page.getByRole("region", { name: "Saved residence" }).getByRole(
-    "button",
-    { name: "Delete saved residence" },
-  );
+  const deleteSaved = page
+    .getByRole("region", { exact: true, name: "Saved residence" })
+    .getByRole("button", { name: "Delete saved residence" });
   await deleteSaved.focus();
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");
@@ -1119,7 +1118,10 @@ async function assertSavedResponsiveAndAccessible(
     { height: 720, name: "saved-desktop-1280x720", width: 1280 },
   ]) {
     await page.setViewportSize({ height: viewport.height, width: viewport.width });
-    const saved = page.getByRole("region", { name: "Saved residence" });
+    const saved = page.getByRole("region", {
+      exact: true,
+      name: "Saved residence",
+    });
     await saved.scrollIntoViewIfNeeded();
     const layout = await page.evaluate(() => {
       const visibleBoxes = (selector: string) =>
