@@ -447,11 +447,11 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F4 `DONE` on `main`.
 - **Next Human Gate:** Human Gate A after the lead returns the overall design, tests-first task graph, dependencies, interfaces, parallel lanes, risks, and non-goals.
 
-## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F5 — Federal Officials [IN PROGRESS (RED)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
-- **Authorization:** User explicitly approved paired F4/F5 activation under the recorded `CONDITIONAL` admission on 2026-07-16. This activation authorizes `DISCOVER/DESIGN/PLAN` only; Human Gate A remains required before RED or production work.
+- **Authorization:** User explicitly approved paired F4/F5 activation and then gave standing authorization for F4-F8 implementation and merges on the temporary integration branch on 2026-07-16. The batch contract delegates artifact-specific Gate A and Gate B decisions to the coordinator without claiming user review of unseen artifacts.
 - **Concurrency audit:** F5 may independently discover, design, and later implement approved federal-domain, Congress.gov adapter, fixture, source/freshness, and public-profile work in new feature-owned files. It cannot mutate the shared database, migration, dashboard, environment, package/configuration, or integrated-test surfaces while F4 owns them.
 - **Activation merge evidence:** [Activation PR #3](https://github.com/Aheadboat/voteGPT/pull/3) merged reviewed head `602282284bef3cdabf9b92a699a66e68d478d574` to `main` as `f9e6420edcc4665d3f8f965f055148465ca9ec6a`; push CI 29482103398 and pull-request CI 29482118123 passed on the exact head. This branch integrated that merge before feature-lead dispatch.
 - **Post-activation branch baseline:** On `codex/f5-federal-officials`, the activation merge is an ancestor of `HEAD`; the focused foundation contract passed 14/14, the unchanged full suite passed 90/90, and `git diff --check` passed before feature-lead dispatch.
@@ -460,27 +460,28 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Done:** Minimal `Person`, `Office`, `Term`, `SourceRef`, and `Freshness` records; Congress.gov adapter; public profiles; federal `In office` dashboard; graceful cached/error state when provider fails.
 - **Non-goals:** State/local officials, elections, candidate comparison, or AI.
 - **Gate A design:** [F5 implementation plan](F5-IMPLEMENTATION-PLAN.md) freezes strict normalized-jurisdiction parsing, dynamic current-Congress/member/detail requests, Clerk current-vacancy reconciliation, public cache/freshness boundaries, verified-current profiles, SSR UI, and the F4 handoff.
+- **Delegated Gate A evidence:** `F5-IMPLEMENTATION-PLAN.md` at `332c4753c4812c3b8d8bbc50b36e6c8fd330aeee` passed final independent plan review with no Critical, Important, or Minor finding after 14/14 focused contract checks and 90/90 full tests. The coordinator confirmed the plan remains consistent with the autonomous batch contract merged at `d1e1b3ace4b8aebf833e30ac4fb387d5acfaed57`; the standing authorization therefore permits F5-T1 RED while preserving the T4-T8 deferral behind F4 closeout.
 - **Applicable UI/UX DNA:** UX-01 through UX-09. Official cards remain equal and deterministic; provenance/freshness is adjacent; location stays normalized; every empty, unsupported, partial, conflict, stale, expired, and unavailable state is explicit; core facts require neither AI nor JavaScript.
 - **Proposed task graph:** F5-T1 domain/jurisdiction/Congress adapter → parallel F5-T2 Clerk reconciliation and F5-T3 accessible views. F5-T4 cache/service, T5 public route, T6 dashboard, T7 E2E, and T8 verification remain deferred behind F4 closeout, current-main integration, and coordinator handoff.
 - **Proposed parallel lanes:** Only T2 and T3 may run concurrently after T1 freezes interfaces; they use disjoint F5-only files. No shared persistence/dashboard/configuration or integration surface is touched before handoff.
-- **Gate A decisions pending:** Dynamic current-Congress request sequence and strict trust-boundary validation; Clerk current-vacancies list as sole vacancy-status supplement; no inferred vacancy; 24-hour fresh/72-hour hard-expiry cache; verified-roster-only profiles; the frozen division-only F4 handoff; explicit 50-state launch scope with DC/territories unsupported; and T1-T3-only execution while F4 is active.
+- **Delegated Gate A decisions:** Dynamic current-Congress request sequence and strict trust-boundary validation; Clerk current-vacancies list as sole vacancy-status supplement; no inferred vacancy; 24-hour fresh/72-hour hard-expiry cache; verified-roster-only profiles; the frozen division-only F4 handoff; explicit 50-state launch scope with DC/territories unsupported; and T1-T3-only execution while F4 is active.
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `RED`
 - **Branch:** `codex/f5-federal-officials`
 - **Base commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
-- **Integrated-main commit:** `d5978ba830f0ee715c9162afba8963139c0fb707`
+- **Integrated-main commit:** `d1e1b3ace4b8aebf833e30ac4fb387d5acfaed57`
 - **Admission result:** `CONDITIONAL` — the Congress.gov/domain lane is independently useful, while cache persistence, dashboard integration, shared configuration, and final integrated verification remain serialized behind F4.
 - **Assigned feature lead:** `f5_feature_lead` — dispatched only after the activation merge was integrated; returned the corrected reviewed Gate A design and remains the implementation lead after approval.
 - **Ownership:** F5 exclusively owns new federal-only domain, fixture, Congress.gov adapter, source/freshness, public-profile route/component/module-style, and focused-test files. F5 exclusively owns the Congress.gov request/configuration external resource. F5 defers these F4-owned shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. Before the serialized handoff it may consume existing F3 contracts read-only and must use feature-local styles and config-free fixtures. The shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F5 remains active in isolated lanes but cannot reach Gate B until it integrates completed F4 from `main` after the F4 closeout. It then accepts the coordinator-recorded shared-surface handoff, completes deferred cache/dashboard/runtime integration, and reruns focused, database, full, E2E, review, and hosted-CI gates; only then may approach Gate B. Its feature PR, post-merge verification, and closeout follow F4's completed sequence.
-- **Feature PR/CI:** Not opened; Human Gate A controls RED, and T4-T8 remain prohibited before F4 closeout and handoff.
-- **Blockers:** Human Gate A decisions listed above. Shared persistence/dashboard integration is intentionally deferred, not blocked; the authoritative ownership correction merged in PR #4 and is integrated into this branch.
+- **Feature PR/CI:** Not opened; the reviewed plan and delegated Gate A are complete, and F5-T1 RED is next. T4-T8 remain prohibited before F4 closeout and handoff; hosted CI will qualify the gate-transition head.
+- **Blockers:** None for T1-T3. Shared persistence/dashboard integration is intentionally deferred, not blocked; the authoritative ownership correction and autonomous batch contract are integrated into this branch.
 - **Feature merge:** Not started.
 - **Post-merge evidence:** Not applicable before the feature merge.
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
-- **Next Human Gate:** Human Gate A on the complete linked design, tests-first task graph, source/vendor choices, interfaces, isolated/deferred lanes, coverage/freshness policy, risks, and non-goals. Approval authorizes F5-T1 through T3, beginning with T1; T2/T3 may start only after T1 freezes interfaces, and T4-T8 remain deferred.
+- **Next Human Gate:** Delegated Gate B after F4 closeout, shared-surface handoff, implementation, fresh focused/full verification, independent whole-feature review, hosted CI, and GitHub mergeability.
 
 ## F6 — State Officials and Government-Level Navigation [TODO]
 

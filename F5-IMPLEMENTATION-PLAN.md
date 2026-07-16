@@ -1,6 +1,6 @@
 # F5 Federal Officials Implementation Plan
 
-> **For agentic workers:** execute task-by-task with `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Every implementation task uses `superpowers:test-driven-development`; every completion claim uses `superpowers:verification-before-completion`. The coordinator owns roadmap state, shared-surface handoff, reviews, PRs, merges, and Human Gates.
+> **For agentic workers:** execute task-by-task with `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Every implementation task uses `superpowers:test-driven-development`; every completion claim uses `superpowers:verification-before-completion`. The coordinator owns roadmap state, shared-surface handoff, reviews, PRs, merges, and delegated gates.
 
 **Goal:** Show the current U.S. House member and two U.S. senators for a supported saved residence, plus public current-official profiles, with explicit provenance, freshness, vacancy, conflict, partial, stale, unsupported, and unavailable states.
 
@@ -10,7 +10,7 @@
 
 ## Gate, concurrency, and scope constraints
 
-- Human Gate A must approve the complete design before any F5 RED.
+- The user's 2026-07-16 standing authorization and clean independent plan review satisfy delegated Gate A; F5-T1 may enter RED after this branch records the transition.
 - While F4 remains active, only F5-T1 through F5-T3 may execute, and only in F5-exclusive new files.
 - F5-T4 through F5-T8 remain prohibited until F4 is `DONE` on `main`, this branch integrates current `main`, and the coordinator records the shared schema/dashboard/config/test handoff.
 - T1 freezes F5-local domain and provider interfaces. T2 and T3 may then run concurrently in disjoint F5-owned files.
@@ -21,7 +21,7 @@
 - No state/local officials, elections, candidates, comparison, recommendations, AI, party presentation, historical completeness, photos/contact data, background refresh, or F6 navigation.
 - If an isolated task needs any deferred/shared file, stop and return to the coordinator.
 
-## Gate A decisions
+## Delegated Gate A decisions
 
 Approval accepts all of these together:
 
@@ -32,7 +32,7 @@ Approval accepts all of these together:
 5. Public profiles are derived only from a verified current roster cache and never trigger arbitrary live or historical lookup.
 6. F4's frozen `getSavedResidenceDivisions(userId)` output is consumed without address decryption or F4 changes.
 7. The launch scope is the 50 states; DC, AS, GU, MP, PR, and VI render explicit unsupported coverage.
-8. Gate A authorizes only T1-T3 while F4 is active; T4-T8 remain deferred behind the recorded handoff.
+8. Delegated Gate A authorizes only T1-T3 while F4 is active; T4-T8 remain deferred behind the recorded handoff.
 
 ## Domain and consumer interfaces
 
@@ -278,7 +278,7 @@ Cards use the same hierarchy, space, controls, source/freshness placement, and m
 
 | Task | Lane | Expected RED/check | Mutable files | Depends on | Done criteria |
 | --- | --- | --- | --- | --- | --- |
-| F5-T1 | Isolated domain, strict jurisdiction, Congress adapter | `npm.cmd test -- src/lib/federal-officials.test.ts src/lib/congress-gov.test.ts` cannot resolve absent modules | New `src/lib/federal-officials.ts`, `src/lib/congress-gov.ts`, their tests, and small `tests/fixtures/congress-*.json` files | Gate A | dynamic current Congress, exact requests/header/timeout, House + two Senate, details, at-large, OCD/Census, unsupported, URL/time/pagination/duplicate fail-closed |
+| F5-T1 | Isolated domain, strict jurisdiction, Congress adapter | `npm.cmd test -- src/lib/federal-officials.test.ts src/lib/congress-gov.test.ts` cannot resolve absent modules | New `src/lib/federal-officials.ts`, `src/lib/congress-gov.ts`, their tests, and small `tests/fixtures/congress-*.json` files | Delegated Gate A | dynamic current Congress, exact requests/header/timeout, House + two Senate, details, at-large, OCD/Census, unsupported, URL/time/pagination/duplicate fail-closed |
 | F5-T2 | Isolated Clerk vacancy and reconciliation | `npm.cmd test -- src/lib/house-clerk-vacancy.test.ts src/lib/federal-officials.test.ts` fails because adapter/evidence are absent | New `src/lib/house-clerk-vacancy.ts`, its test, `tests/fixtures/clerk-current-vacancies.html`; modify F5 domain/test only | T1 | GA-13 active, CA-01/GA-14 filled, outage/malformed/conflict matrix, no inferred vacancy |
 | F5-T3 | Isolated accessible views | `npm.cmd test -- src/components/federal-officials.test.tsx src/components/federal-profile.test.tsx` cannot resolve absent views | New federal roster/profile components and tests plus `src/components/federal-officials.module.css` | T1; parallel with T2 | equal neutral cards, at-large/vacancy/conflict/stale/partial/expired/unsupported states, adjacent source/freshness, SSR/responsive semantics |
 | F5-T4 | Deferred cache and service | `npm.cmd test -- src/lib/federal-officials-service.test.ts` and `npm.cmd run test:postgres -- integration/federal-official-cache.test.ts` fail on absent table/service | New service/tests/integration; shared `src/db/schema.ts`, `src/db/index.ts`, `.env.example`; one migration/meta set after F4 journal | F4 DONE + current main + handoff + T1-T2 | exact 24h/72h policy, validated read/write, atomic displaced-profile deletion/current-profile replacement, privacy keys, server-only credential |
@@ -310,7 +310,7 @@ npm.cmd audit --audit-level=low
 git diff --check
 ```
 
-Manual evidence covers 375px/1280px layouts, keyboard/focus, screen-reader output, reduced motion, stale/recovery/unsupported states, and JavaScript-disabled public rendering. The coordinator independently inspects the diff, reruns checks, requests review, and qualifies hosted CI/mergeability. F5 cannot approach Gate B until F4 is closed and all deferred tasks are verified; it is not `DONE` until its own feature and closeout merges.
+Manual evidence covers 375px/1280px layouts, keyboard/focus, screen-reader output, reduced motion, stale/recovery/unsupported states, and JavaScript-disabled public rendering. The coordinator independently inspects the diff, reruns checks, requests review, and qualifies hosted CI/mergeability. F5 cannot approach delegated Gate B until F4 is closed and all deferred tasks are verified; it is not `DONE` until its own feature and closeout merges.
 
 ## UI/UX DNA evidence plan
 
@@ -326,7 +326,7 @@ Manual evidence covers 375px/1280px layouts, keyboard/focus, screen-reader outpu
 
 ## Risks and rejected alternatives
 
-Risks retained for Gate A:
+Risks accepted at delegated Gate A:
 
 - Congress.gov may lag chamber activity; visible timestamps, Clerk reconciliation, and partial/conflict states limit overclaiming.
 - Clerk HTML may change; the narrow fixture-backed parser fails closed.
