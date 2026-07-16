@@ -1,6 +1,8 @@
 // @vitest-environment node
 
+import { createCipheriv, createDecipheriv } from "node:crypto";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type { ResolutionResponse } from "./residence";
 import {
   SAVED_RESIDENCE_CONSENT_VERSION,
   SAVED_RESIDENCE_ERROR_MESSAGES,
@@ -13,10 +15,71 @@ import {
   type SaveResidenceRequest,
   type SaveResidenceResponse,
   type SavedResidenceErrorResponse,
+  type SavedResidenceDivision,
   type SavedResidenceMutationResult,
   type SavedResidenceResolution,
   type SavedResidenceView,
 } from "./saved-residence";
+
+type ExpectedSavedResidenceResolution = Readonly<
+  Pick<
+    Extract<ResolutionResponse, { status: "matched" | "partial" }>,
+    "status" | "divisions" | "source" | "coverageNotes"
+  >
+>;
+
+type ExpectedSavedResidenceDivision = Readonly<
+  ExpectedSavedResidenceResolution["divisions"][number]
+>;
+
+type ExpectedSaveResidenceRequest = {
+  address: string;
+  resolutionToken: string;
+  consent: {
+    accepted: true;
+    version: "saved-residence-v1";
+  };
+};
+
+type ExpectedSavedResidenceView = {
+  address: string;
+  resolution: ExpectedSavedResidenceResolution;
+  consent: {
+    version: "saved-residence-v1";
+    acceptedAt: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ExpectedGetSavedResidenceResponse =
+  | { status: "empty" }
+  | { status: "saved"; residence: ExpectedSavedResidenceView };
+
+type ExpectedSaveResidenceResponse = {
+  status: "saved";
+  residence: ExpectedSavedResidenceView;
+  replaced: boolean;
+};
+
+type ExpectedSavedResidenceMutationResult = {
+  residence: ExpectedSavedResidenceView;
+  replaced: boolean;
+};
+
+type ExpectedDeleteSavedResidenceResponse =
+  | { status: "deleted" }
+  | { status: "empty" };
+
+type ExpectedSavedResidenceErrorResponse = {
+  status:
+    | "invalid_request"
+    | "unauthenticated"
+    | "forbidden"
+    | "invalid_token"
+    | "unavailable";
+  message: string;
+};
 
 const resolution = {
   status: "matched",
@@ -59,34 +122,24 @@ describe("saved residence contract", () => {
       unavailable: "Saved residence is temporarily unavailable. Try again later.",
     });
 
-    const saveResponse = {
-      status: "saved",
-      residence: residenceView,
-      replaced: false,
-    } satisfies SaveResidenceResponse;
-    const mutationResult = {
-      residence: residenceView,
-      replaced: true,
-    } satisfies SavedResidenceMutationResult;
-    const emptyGet = { status: "empty" } satisfies GetSavedResidenceResponse;
-    const savedGet = {
-      status: "saved",
-      residence: residenceView,
-    } satisfies GetSavedResidenceResponse;
-    const deleted = { status: "deleted" } satisfies DeleteSavedResidenceResponse;
-    const emptyDelete = { status: "empty" } satisfies DeleteSavedResidenceResponse;
-    const errorResponse = {
-      status: "invalid_request",
-      message: SAVED_RESIDENCE_ERROR_MESSAGES.invalid_request,
-    } satisfies SavedResidenceErrorResponse;
+    expectTypeOf<SavedResidenceResolution>().toEqualTypeOf<ExpectedSavedResidenceResolution>();
+    expectTypeOf<SavedResidenceDivision>().toEqualTypeOf<ExpectedSavedResidenceDivision>();
+    expectTypeOf<SaveResidenceRequest>().toEqualTypeOf<ExpectedSaveResidenceRequest>();
+    expectTypeOf<SavedResidenceView>().toEqualTypeOf<ExpectedSavedResidenceView>();
+    expectTypeOf<GetSavedResidenceResponse>().toEqualTypeOf<ExpectedGetSavedResidenceResponse>();
+    expectTypeOf<SaveResidenceResponse>().toEqualTypeOf<ExpectedSaveResidenceResponse>();
+    expectTypeOf<SavedResidenceMutationResult>().toEqualTypeOf<ExpectedSavedResidenceMutationResult>();
+    expectTypeOf<DeleteSavedResidenceResponse>().toEqualTypeOf<ExpectedDeleteSavedResidenceResponse>();
+    expectTypeOf<SavedResidenceErrorResponse>().toEqualTypeOf<ExpectedSavedResidenceErrorResponse>();
 
-    expectTypeOf(saveResponse).toMatchTypeOf<SaveResidenceResponse>();
-    expectTypeOf(mutationResult).toMatchTypeOf<SavedResidenceMutationResult>();
-    expectTypeOf(emptyGet).toMatchTypeOf<GetSavedResidenceResponse>();
-    expectTypeOf(savedGet).toMatchTypeOf<GetSavedResidenceResponse>();
-    expectTypeOf(deleted).toMatchTypeOf<DeleteSavedResidenceResponse>();
-    expectTypeOf(emptyDelete).toMatchTypeOf<DeleteSavedResidenceResponse>();
-    expectTypeOf(errorResponse).toMatchTypeOf<SavedResidenceErrorResponse>();
+    expectTypeOf<SavedResidenceView["resolution"]>().not.toHaveProperty(
+      "resolutionToken",
+    );
+    expectTypeOf<SavedResidenceView["resolution"]>().not.toHaveProperty(
+      "expiresAt",
+    );
+    expect(residenceView.resolution).not.toHaveProperty("resolutionToken");
+    expect(residenceView.resolution).not.toHaveProperty("expiresAt");
   });
 
   it("accepts only exact request and consent shapes while trimming the address (UX-04, UX-07)", () => {
@@ -230,6 +283,12 @@ describe("saved residence encryption keyring", () => {
       ]),
     ],
     [
+      "long decoded key",
+      environmentWithEntries([
+        { version: "2026-07", key: Buffer.alloc(33, 1).toString("base64url") },
+      ]),
+    ],
+    [
       "padded key",
       environmentWithEntries([
         { version: "2026-07", key: `${encodedKey(1)}=` },
@@ -240,6 +299,18 @@ describe("saved residence encryption keyring", () => {
       environmentWithEntries([{ version: "2026-07", key: "not+a/key" }]),
     ],
   ])("fails closed for %s", (_case, environment) => {
+    expect(() => loadResidenceEncryptionKeyring(environment)).toThrow(
+      "Saved residence encryption configuration is invalid.",
+    );
+  });
+
+  it("does not substitute BETTER_AUTH_SECRET when residence keys are missing", () => {
+    const environment = {
+      BETTER_AUTH_SECRET: encodedKey(1),
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: undefined,
+      RESIDENCE_ENCRYPTION_KEYS: undefined,
+    };
+
     expect(() => loadResidenceEncryptionKeyring(environment)).toThrow(
       "Saved residence encryption configuration is invalid.",
     );
@@ -269,6 +340,79 @@ describe("saved residence authenticated encryption", () => {
     expectCanonicalBase64url(first.tag, 16);
     expect(
       decryptSavedResidenceAddress(first, "user_fixture", keyring),
+    ).toBe(address);
+  });
+
+  it("lets independent Node crypto decrypt production output only with fixed-purpose, version, key-version, user AAD in canonical order (UX-04)", () => {
+    const keyring = loadResidenceEncryptionKeyring(validEnvironment());
+    const address = "123 Main Street";
+    const envelope = encryptSavedResidenceAddress(
+      address,
+      "user_fixture",
+      keyring,
+    );
+    const aad = Buffer.from(
+      JSON.stringify([
+        "voteGPT/saved-residence/address",
+        "v1",
+        "2026-07",
+        "user_fixture",
+      ]),
+      "utf8",
+    );
+    const decipher = createDecipheriv(
+      "aes-256-gcm",
+      Buffer.from(encodedKey(2), "base64url"),
+      Buffer.from(envelope.iv, "base64url"),
+      { authTagLength: 16 },
+    );
+    decipher.setAAD(aad);
+    decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
+      decipher.final(),
+    ]);
+    expect(plaintext.toString("utf8")).toBe(address);
+  });
+
+  it("decrypts an independent Node crypto envelope only with fixed-purpose, version, key-version, user AAD in canonical order (UX-04)", () => {
+    const keyring = loadResidenceEncryptionKeyring(validEnvironment());
+    const address = "123 Main Street";
+    const iv = Buffer.alloc(12, 3);
+    const aad = Buffer.from(
+      JSON.stringify([
+        "voteGPT/saved-residence/address",
+        "v1",
+        "2026-07",
+        "user_fixture",
+      ]),
+      "utf8",
+    );
+    const cipher = createCipheriv(
+      "aes-256-gcm",
+      Buffer.from(encodedKey(2), "base64url"),
+      iv,
+      { authTagLength: 16 },
+    );
+    cipher.setAAD(aad);
+    const ciphertext = Buffer.concat([
+      cipher.update(address, "utf8"),
+      cipher.final(),
+    ]);
+
+    expect(
+      decryptSavedResidenceAddress(
+        {
+          version: "v1",
+          keyVersion: "2026-07",
+          iv: iv.toString("base64url"),
+          ciphertext: ciphertext.toString("base64url"),
+          tag: cipher.getAuthTag().toString("base64url"),
+        },
+        "user_fixture",
+        keyring,
+      ),
     ).toBe(address);
   });
 
