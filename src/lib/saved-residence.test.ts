@@ -1195,7 +1195,7 @@ describe("saved residence persistence", () => {
         label: "coverage note",
         resolution: {
           ...replacementResolution,
-          coverageNotes: [`Resolved for ${address}.`],
+          coverageNotes: ["Resolved for 456   OAK avenue."],
         },
       },
       {
@@ -1298,6 +1298,22 @@ describe("saved residence persistence", () => {
     }>;
 
     try {
+      await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "private.original"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+      );
+      const originalParent = await db
+        .select()
+        .from(savedResidence)
+        .where(eq(savedResidence.userId, "user_one"));
+      const originalDivisions = await db
+        .select()
+        .from(savedResidenceDivision)
+        .where(eq(savedResidenceDivision.userId, "user_one"));
+
       for (const reflected of reflectedResolutions) {
         await expect(
           repository.save(
@@ -1323,6 +1339,31 @@ describe("saved residence persistence", () => {
             .where(eq(savedResidenceDivision.userId, "user_two")),
           reflected.label,
         ).toEqual([]);
+
+        await expect(
+          repository.save(
+            "user_one",
+            saveRequest(reflected.address, `private.${reflected.label}`),
+            reflected.resolution,
+            new Date("2026-07-16T20:00:00.000Z"),
+            keyring,
+          ),
+          reflected.label,
+        ).rejects.toThrow("Saved residence record is invalid.");
+        expect(
+          await db
+            .select()
+            .from(savedResidence)
+            .where(eq(savedResidence.userId, "user_one")),
+          reflected.label,
+        ).toEqual(originalParent);
+        expect(
+          await db
+            .select()
+            .from(savedResidenceDivision)
+            .where(eq(savedResidenceDivision.userId, "user_one")),
+          reflected.label,
+        ).toEqual(originalDivisions);
       }
     } finally {
       await closeDatabase(db);
@@ -1391,6 +1432,28 @@ describe("saved residence persistence", () => {
       const originalDivisions = await db.select().from(savedResidenceDivision);
 
       for (const invalid of invalidResolutions) {
+        await expect(
+          repository.save(
+            "user_two",
+            saveRequest("456 Oak Avenue", "private.new"),
+            invalid,
+            new Date("2026-07-16T20:00:00.000Z"),
+            keyring,
+          ),
+        ).rejects.toThrow("Saved residence record is invalid.");
+        expect(
+          await db
+            .select()
+            .from(savedResidence)
+            .where(eq(savedResidence.userId, "user_two")),
+        ).toEqual([]);
+        expect(
+          await db
+            .select()
+            .from(savedResidenceDivision)
+            .where(eq(savedResidenceDivision.userId, "user_two")),
+        ).toEqual([]);
+
         await expect(
           repository.save(
             "user_one",
@@ -1692,17 +1755,11 @@ function concurrentTransactionDatabase(
 ) {
   let transactionCount = 0;
   let readCount = 0;
-  let releaseReads = () => undefined;
-  let releaseFirst = () => undefined;
-  const readsReady = new Promise<void>((resolveReads) => {
-    releaseReads = resolveReads;
-  });
-  const firstFinished = new Promise<void>((resolveFirst) => {
-    releaseFirst = resolveFirst;
-  });
+  const readsReady = Promise.withResolvers<void>();
+  const firstFinished = Promise.withResolvers<void>();
 
   return new Proxy(database, {
-    get(target, property, receiver) {
+    get(target, property) {
       if (property === "transaction") {
         return async (
           callback: (transaction: typeof database) => Promise<unknown>,
@@ -1723,11 +1780,11 @@ function concurrentTransactionDatabase(
                       const rows = await result;
                       readCount += 1;
                       if (readCount === 2) {
-                        releaseReads();
+                        readsReady.resolve();
                       }
-                      await readsReady;
+                      await readsReady.promise;
                       if (transactionIndex === 1) {
-                        await firstFinished;
+                        await firstFinished.promise;
                       }
                       return rows;
                     },
@@ -1744,7 +1801,7 @@ function concurrentTransactionDatabase(
                     "returning",
                     async (result) => {
                       if (transactionIndex === 1) {
-                        await firstFinished;
+                        await firstFinished.promise;
                       }
                       return result;
                     },
@@ -1764,12 +1821,12 @@ function concurrentTransactionDatabase(
             return await callback(transaction);
           } finally {
             if (transactionIndex === 0) {
-              releaseFirst();
+              firstFinished.resolve();
             }
           }
         };
       }
-      const value = Reflect.get(target, property, receiver) as unknown;
+      const value = Reflect.get(target, property) as unknown;
       return typeof value === "function" ? value.bind(target) : value;
     },
   });

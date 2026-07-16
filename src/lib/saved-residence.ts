@@ -127,6 +127,8 @@ const encryptedAddressError =
   "Saved residence encrypted address is invalid.";
 const savedResidenceRecordError = "Saved residence record is invalid.";
 const savedResidenceRotationError = "Saved residence key rotation failed.";
+const maximumPersistedCollectionSize = 64;
+const maximumPersistedStringLength = 2_048;
 const divisionTypes = new Set<SavedResidenceDivision["type"]>([
   "country",
   "state",
@@ -479,7 +481,10 @@ export function createSavedResidenceRepository(database: Database) {
       keyring: ResidenceEncryptionKeyring,
     ): Promise<SavedResidenceMutationResult> {
       requireUserId(userId);
-      const resolution = copySavedResidenceResolution(verifiedResolution);
+      const resolution = copySavedResidenceResolution(
+        verifiedResolution,
+        request.address,
+      );
       const envelope = encryptSavedResidenceAddress(
         request.address,
         userId,
@@ -510,17 +515,16 @@ export function createSavedResidenceRepository(database: Database) {
       };
 
       const stored = await database.transaction(async (transaction) => {
-        const [existing] = await transaction
-          .select({ userId: savedResidence.userId })
-          .from(savedResidence)
-          .where(eq(savedResidence.userId, userId))
-          .limit(1);
-        const [residence] = await transaction
+        let [residence] = await transaction
           .insert(savedResidence)
           .values(parent)
-          .onConflictDoUpdate({
-            target: savedResidence.userId,
-            set: {
+          .onConflictDoNothing({ target: savedResidence.userId })
+          .returning();
+        const replaced = residence === undefined;
+        if (replaced) {
+          [residence] = await transaction
+            .update(savedResidence)
+            .set({
               ciphertext: parent.ciphertext,
               consentVersion: parent.consentVersion,
               consentedAt: parent.consentedAt,
@@ -537,9 +541,14 @@ export function createSavedResidenceRepository(database: Database) {
               sourceVintage: parent.sourceVintage,
               tag: parent.tag,
               updatedAt: parent.updatedAt,
-            },
-          })
-          .returning();
+            })
+            .where(eq(savedResidence.userId, userId))
+            .returning();
+        }
+
+        if (!residence) {
+          throw new Error(savedResidenceRecordError);
+        }
 
         await transaction
           .delete(savedResidenceDivision)
@@ -557,10 +566,7 @@ export function createSavedResidenceRepository(database: Database) {
           );
         }
 
-        if (!residence) {
-          throw new Error(savedResidenceRecordError);
-        }
-        return { ...residence, replaced: existing !== undefined };
+        return { ...residence, replaced };
       });
 
       return {
@@ -735,25 +741,102 @@ async function productionRepository() {
 
 function copySavedResidenceResolution(
   resolution: SavedResidenceResolution,
+  address: string,
 ): SavedResidenceResolution {
-  const source: SavedResidenceResolution["source"] = {
-    checkedAt: resolution.source.checkedAt,
-    effectiveAt: resolution.source.effectiveAt,
-    name: resolution.source.name,
-    url: resolution.source.url,
-  };
-  if (resolution.source.benchmark !== undefined) {
-    source.benchmark = resolution.source.benchmark;
+  try {
+    if (
+      !Array.isArray(resolution.divisions) ||
+      resolution.divisions.length > maximumPersistedCollectionSize ||
+      !Array.isArray(resolution.coverageNotes) ||
+      resolution.coverageNotes.length > maximumPersistedCollectionSize
+    ) {
+      throw new Error(savedResidenceRecordError);
+    }
+
+    const requiredPublicText: unknown[] = [
+      ...resolution.coverageNotes,
+      ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
+        id,
+        idScheme,
+        name,
+      ]),
+      resolution.source.name,
+      resolution.source.url,
+      resolution.source.checkedAt,
+    ];
+    const optionalPublicText: unknown[] = [
+      resolution.source.effectiveAt,
+      resolution.source.benchmark,
+      resolution.source.vintage,
+    ];
+    if (
+      requiredPublicText.some(
+        (text) =>
+          !isBoundedPublicText(text) || reflectsFullAddress(text, address),
+      ) ||
+      optionalPublicText.some(
+        (text) =>
+          text !== null &&
+          text !== undefined &&
+          (!isBoundedPublicText(text) || reflectsFullAddress(text, address)),
+      )
+    ) {
+      throw new Error(savedResidenceRecordError);
+    }
+
+    const source: SavedResidenceResolution["source"] = {
+      checkedAt: resolution.source.checkedAt,
+      effectiveAt: resolution.source.effectiveAt,
+      name: resolution.source.name,
+      url: resolution.source.url,
+    };
+    if (resolution.source.benchmark !== undefined) {
+      source.benchmark = resolution.source.benchmark;
+    }
+    if (resolution.source.vintage !== undefined) {
+      source.vintage = resolution.source.vintage;
+    }
+    return {
+      coverageNotes: [...resolution.coverageNotes],
+      divisions: resolution.divisions.map(savedDivision),
+      source,
+      status: resolution.status,
+    };
+  } catch {
+    throw new Error(savedResidenceRecordError);
   }
-  if (resolution.source.vintage !== undefined) {
-    source.vintage = resolution.source.vintage;
+}
+
+function isBoundedPublicText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumPersistedStringLength
+  );
+}
+
+function reflectsFullAddress(value: string, address: string) {
+  const canonicalValue = canonicalizeReflectionText(value);
+  const canonicalAddress = canonicalizeReflectionText(address);
+  if (canonicalAddress.length === 0) {
+    return false;
   }
-  return {
-    coverageNotes: [...resolution.coverageNotes],
-    divisions: resolution.divisions.map(savedDivision),
-    source,
-    status: resolution.status,
-  };
+  const escapedAddress = canonicalAddress.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&",
+  );
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])${escapedAddress}(?:$|[^\\p{L}\\p{N}])`,
+    "u",
+  ).test(canonicalValue);
+}
+
+function canonicalizeReflectionText(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/gu, " ");
 }
 
 function savedDivision(value: {
