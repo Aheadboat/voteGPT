@@ -38,7 +38,7 @@ export function FederalOfficials({ result }: { result: FederalOfficialsResult })
     );
   }
 
-  const seats = [view.house, ...view.senate];
+  const senators = view.senate.slice(0, 2);
   const coverageNotes = coverageNotesFor(view);
   return (
     <section
@@ -46,7 +46,7 @@ export function FederalOfficials({ result }: { result: FederalOfficialsResult })
       className={styles.shell}
     >
       <header className={styles.header}>
-        <p className={styles.eyebrow}>Verified federal roster</p>
+        <p className={styles.eyebrow}>Federal roster</p>
         <h2>Federal officials</h2>
         <p className={styles.intro}>
           House and Senate offices use the same factual presentation.
@@ -69,13 +69,41 @@ export function FederalOfficials({ result }: { result: FederalOfficialsResult })
       ) : null}
 
       <ol aria-label="Federal offices" className={styles.grid}>
-        {seats.map((seat) => (
+        {[view.house, ...senators].map((seat) => (
           <li className={styles.gridItem} key={seat.office.id}>
             <SeatCard freshness={view.freshness} seat={seat} />
           </li>
         ))}
+        {Array.from({ length: 2 - senators.length }, (_, index) => (
+          <li className={styles.gridItem} key={`unknown-senator-${index}`}>
+            <UnknownSenateCard freshness={view.freshness} />
+          </li>
+        ))}
       </ol>
     </section>
+  );
+}
+
+function UnknownSenateCard({ freshness }: { freshness: Freshness }) {
+  return (
+    <article
+      aria-label="U.S. Senator: officeholder unknown"
+      className={styles.card}
+    >
+      <h3>U.S. Senator</h3>
+      <p className={styles.fact}>
+        Current Senate officeholder is unknown. No qualifying source is available
+        for this position.
+      </p>
+      <p className={styles.freshness}>
+        Checked {" "}
+        <time dateTime={freshness.checkedAt}>{freshness.checkedAt}</time>. {" "}
+        {freshness.state === "fresh"
+          ? "Fresh at last check."
+          : "Stale but not expired; verify before use."}
+      </p>
+      <SourceEvidence heading="U.S. Senator" sources={[]} />
+    </article>
   );
 }
 
@@ -224,7 +252,16 @@ function officeHeading(seat: FederalSeat) {
 
 function cardLabel(seat: FederalSeat) {
   const heading = officeHeading(seat);
-  return "person" in seat ? `${heading}: ${seat.person.name}` : heading;
+  if (seat.status === "serving") {
+    return `${heading}: ${seat.person.name}`;
+  }
+  if (seat.status === "vacant") {
+    return `${heading}: vacant`;
+  }
+  if (seat.status === "unknown") {
+    return `${heading}: officeholder unknown`;
+  }
+  return `${heading}: conflicting evidence`;
 }
 
 function coverageNotesFor(view: FederalOfficialsView) {

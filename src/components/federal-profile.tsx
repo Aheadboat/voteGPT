@@ -135,10 +135,17 @@ function ProfileRecovery({
 
 function isCurrentProfile(profile: CurrentProfile) {
   return (
+    profile.person.id === `bioguide:${profile.person.bioguideId}` &&
     profile.term.status === "serving" &&
     profile.term.personId === profile.person.id &&
     profile.term.officeId === profile.office.id &&
-    profile.sources.length > 0
+    profile.sources.some(
+      (source) =>
+        source.publisher === "Congress.gov" &&
+        source.sourceType === "member" &&
+        source.url ===
+          `https://api.congress.gov/v3/member/${profile.person.bioguideId}?format=json`,
+    )
   );
 }
 
