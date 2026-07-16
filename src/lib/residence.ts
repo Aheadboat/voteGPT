@@ -726,17 +726,20 @@ function containsCoordinate(
   const labelled = /\b(?:coordinates?|gps|lat(?:itude)?|l(?:on|ng|ongitude))\b/iu.test(
     normalized,
   );
+  const numericText = labelled
+    ? normalized.replace(/(?<=\d)[,/](?=\d)/gu, ".")
+    : normalized;
   const numericPattern =
     /(?<![\p{L}\p{N}])[+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?(?![\p{L}\p{N}])/giu;
 
-  for (const match of normalized.matchAll(numericPattern)) {
+  for (const match of numericText.matchAll(numericPattern)) {
     const token = match[0];
     const number = Number(token);
     if (number !== latitude && number !== longitude) {
       continue;
     }
 
-    const wholeField = normalized.trim() === token;
+    const wholeField = numericText.trim() === token;
     if (
       wholeField ||
       labelled ||
