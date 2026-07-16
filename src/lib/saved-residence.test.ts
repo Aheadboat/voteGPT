@@ -1185,6 +1185,275 @@ describe("saved residence persistence", () => {
     }
   });
 
+  it("rejects full-address reflection across every persisted public surface before writing", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+    const address = "456 Oak Avenue";
+    const timestampAddress = "2026-07-16T20:00:00.000Z";
+    const reflectedResolutions = [
+      {
+        address,
+        label: "coverage note",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: [`Resolved for ${address}.`],
+        },
+      },
+      {
+        address,
+        label: "division name",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            { ...replacementResolution.divisions[0], name: address },
+          ],
+        },
+      },
+      {
+        address,
+        label: "division id",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            {
+              ...replacementResolution.divisions[0],
+              id: `private:${address}`,
+            },
+          ],
+        },
+      },
+      {
+        address,
+        label: "division id scheme",
+        resolution: {
+          ...replacementResolution,
+          divisions: [
+            {
+              ...replacementResolution.divisions[0],
+              idScheme: `scheme ${address}`,
+            },
+          ],
+        },
+      },
+      {
+        address,
+        label: "source name",
+        resolution: {
+          ...replacementResolution,
+          source: { ...replacementResolution.source, name: address },
+        },
+      },
+      {
+        address,
+        label: "source URL",
+        resolution: {
+          ...replacementResolution,
+          source: {
+            ...replacementResolution.source,
+            url: `https://example.invalid/${address}`,
+          },
+        },
+      },
+      {
+        address: timestampAddress,
+        label: "source checked time",
+        resolution: {
+          ...replacementResolution,
+          source: {
+            ...replacementResolution.source,
+            checkedAt: timestampAddress,
+          },
+        },
+      },
+      {
+        address: timestampAddress,
+        label: "source effective time",
+        resolution: {
+          ...replacementResolution,
+          source: {
+            ...replacementResolution.source,
+            effectiveAt: timestampAddress,
+          },
+        },
+      },
+      {
+        address,
+        label: "source benchmark",
+        resolution: {
+          ...replacementResolution,
+          source: { ...replacementResolution.source, benchmark: address },
+        },
+      },
+      {
+        address,
+        label: "source vintage",
+        resolution: {
+          ...replacementResolution,
+          source: { ...replacementResolution.source, vintage: address },
+        },
+      },
+    ] satisfies Array<{
+      address: string;
+      label: string;
+      resolution: SavedResidenceResolution;
+    }>;
+
+    try {
+      for (const reflected of reflectedResolutions) {
+        await expect(
+          repository.save(
+            "user_two",
+            saveRequest(reflected.address, `private.${reflected.label}`),
+            reflected.resolution,
+            new Date("2026-07-16T20:00:00.000Z"),
+            keyring,
+          ),
+          reflected.label,
+        ).rejects.toThrow("Saved residence record is invalid.");
+        expect(
+          await db
+            .select()
+            .from(savedResidence)
+            .where(eq(savedResidence.userId, "user_two")),
+          reflected.label,
+        ).toEqual([]);
+        expect(
+          await db
+            .select()
+            .from(savedResidenceDivision)
+            .where(eq(savedResidenceDivision.userId, "user_two")),
+          reflected.label,
+        ).toEqual([]);
+      }
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("rejects unbounded public data without replacing an existing encrypted residence", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+    const tooLong = "x".repeat(2_049);
+    const tooManyDivisions = Array.from({ length: 65 }, (_, index) => ({
+      ...replacementResolution.divisions[0],
+      id: `ocd-division/country:us/state:ex/cd:${index}`,
+    }));
+    const tooManyNotes = Array.from(
+      { length: 65 },
+      (_, index) => `Coverage note ${index}`,
+    );
+    const invalidResolutions = [
+      {
+        ...replacementResolution,
+        coverageNotes: tooManyNotes,
+      },
+      {
+        ...replacementResolution,
+        divisions: tooManyDivisions,
+      },
+      {
+        ...replacementResolution,
+        coverageNotes: [tooLong],
+      },
+      {
+        ...replacementResolution,
+        divisions: [
+          { ...replacementResolution.divisions[0], name: tooLong },
+        ],
+      },
+      {
+        ...replacementResolution,
+        divisions: [{ ...replacementResolution.divisions[0], id: tooLong }],
+      },
+      {
+        ...replacementResolution,
+        divisions: [
+          { ...replacementResolution.divisions[0], idScheme: tooLong },
+        ],
+      },
+      {
+        ...replacementResolution,
+        source: { ...replacementResolution.source, benchmark: tooLong },
+      },
+      {
+        ...replacementResolution,
+        source: { ...replacementResolution.source, vintage: tooLong },
+      },
+    ] satisfies SavedResidenceResolution[];
+
+    try {
+      await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "private.original"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+      );
+      const originalParent = await db.select().from(savedResidence);
+      const originalDivisions = await db.select().from(savedResidenceDivision);
+
+      for (const invalid of invalidResolutions) {
+        await expect(
+          repository.save(
+            "user_one",
+            saveRequest("456 Oak Avenue", "private.replacement"),
+            invalid,
+            new Date("2026-07-16T20:00:00.000Z"),
+            keyring,
+          ),
+        ).rejects.toThrow("Saved residence record is invalid.");
+        expect(await db.select().from(savedResidence)).toEqual(originalParent);
+        expect(await db.select().from(savedResidenceDivision)).toEqual(
+          originalDivisions,
+        );
+      }
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("classifies concurrent first saves atomically and keeps one internally consistent result", async () => {
+    const root = await mkdtemp(join(tmpdir(), "votegpt-residence-race-"));
+    const connectionString = pgliteConnection(join(root, "database"));
+    const db = await createDatabase(connectionString);
+    const concurrentDatabase = concurrentTransactionDatabase(db);
+    const firstRepository = createSavedResidenceRepository(concurrentDatabase);
+    const secondRepository = createSavedResidenceRepository(concurrentDatabase);
+    const keyring = loadResidenceEncryptionKeyring(validEnvironment());
+    const firstNow = new Date("2026-07-16T20:00:00.000Z");
+    const secondNow = new Date("2026-07-16T20:00:01.000Z");
+
+    try {
+      await db.insert(user).values(testUser("race"));
+      const [first, second] = await Promise.all([
+        firstRepository.save(
+          "user_race",
+          saveRequest("101 Alpha Avenue", "private.alpha"),
+          resolution,
+          firstNow,
+          keyring,
+        ),
+        secondRepository.save(
+          "user_race",
+          saveRequest("202 Bravo Boulevard", "private.bravo"),
+          replacementResolution,
+          secondNow,
+          keyring,
+        ),
+      ]);
+
+      expect([first.replaced, second.replaced].sort()).toEqual([false, true]);
+      const stored = await firstRepository.get("user_race", keyring);
+      expect(stored).not.toBeNull();
+      expect([first.residence, second.residence]).toContainEqual(stored);
+      expect(
+        await firstRepository.getDivisions("user_race"),
+      ).toEqual(stored?.resolution.divisions);
+      expect(await db.select().from(savedResidence)).toHaveLength(1);
+    } finally {
+      await closeDatabase(db);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("rolls back parent and child replacement when new divisions fail", async () => {
     const { db, keyring, repository } = await persistenceFixture();
     const firstNow = new Date("2026-07-16T18:00:00.000Z");
@@ -1416,6 +1685,118 @@ async function closeDatabase(
     close?: () => Promise<void>;
   };
   await client.close?.();
+}
+
+function concurrentTransactionDatabase(
+  database: Awaited<ReturnType<typeof createDatabase>>,
+) {
+  let transactionCount = 0;
+  let readCount = 0;
+  let releaseReads = () => undefined;
+  let releaseFirst = () => undefined;
+  const readsReady = new Promise<void>((resolveReads) => {
+    releaseReads = resolveReads;
+  });
+  const firstFinished = new Promise<void>((resolveFirst) => {
+    releaseFirst = resolveFirst;
+  });
+
+  return new Proxy(database, {
+    get(target, property, receiver) {
+      if (property === "transaction") {
+        return async (
+          callback: (transaction: typeof database) => Promise<unknown>,
+        ) => {
+          const transactionIndex = transactionCount++;
+          const transaction = new Proxy(database, {
+            get(transactionTarget, transactionProperty, transactionReceiver) {
+              if (transactionProperty === "select") {
+                return (...arguments_: unknown[]) =>
+                  wrapQueryBuilder(
+                    Reflect.apply(
+                      transactionTarget.select,
+                      transactionTarget,
+                      arguments_,
+                    ),
+                    "limit",
+                    async (result) => {
+                      const rows = await result;
+                      readCount += 1;
+                      if (readCount === 2) {
+                        releaseReads();
+                      }
+                      await readsReady;
+                      if (transactionIndex === 1) {
+                        await firstFinished;
+                      }
+                      return rows;
+                    },
+                  );
+              }
+              if (transactionProperty === "insert") {
+                return (...arguments_: unknown[]) =>
+                  wrapQueryBuilder(
+                    Reflect.apply(
+                      transactionTarget.insert,
+                      transactionTarget,
+                      arguments_,
+                    ),
+                    "returning",
+                    async (result) => {
+                      if (transactionIndex === 1) {
+                        await firstFinished;
+                      }
+                      return result;
+                    },
+                  );
+              }
+              const value = Reflect.get(
+                transactionTarget,
+                transactionProperty,
+                transactionReceiver,
+              ) as unknown;
+              return typeof value === "function"
+                ? value.bind(transactionTarget)
+                : value;
+            },
+          });
+          try {
+            return await callback(transaction);
+          } finally {
+            if (transactionIndex === 0) {
+              releaseFirst();
+            }
+          }
+        };
+      }
+      const value = Reflect.get(target, property, receiver) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function wrapQueryBuilder(
+  builder: object,
+  terminalMethod: string,
+  terminal: (result: PromiseLike<unknown>) => Promise<unknown>,
+): object {
+  return new Proxy(builder, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== "function") {
+        return value;
+      }
+      return (...arguments_: unknown[]) => {
+        const result = Reflect.apply(value, target, arguments_) as unknown;
+        if (property === terminalMethod) {
+          return terminal(result as PromiseLike<unknown>);
+        }
+        return typeof result === "object" && result !== null
+          ? wrapQueryBuilder(result, terminalMethod, terminal)
+          : result;
+      };
+    },
+  });
 }
 
 function rawDatabaseClient(
