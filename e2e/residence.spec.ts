@@ -378,7 +378,10 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
   try {
     await page.goto("/dashboard");
     const savedSection = page.locator("section.saved-residence");
-    const saved = page.getByRole("region", { name: "Saved residence" });
+    const saved = page.getByRole("region", {
+      exact: true,
+      name: "Saved residence",
+    });
     const address = page.getByLabel("Voting residence address");
 
     await expect(page.getByText("Signed in as voter@example.invalid")).toBeVisible();
@@ -638,7 +641,10 @@ test("deleting a second account cascades its private residence and revokes its s
       page.getByText("Signed in as secondary-voter@example.invalid"),
     ).toBeVisible();
     const savedSection = page.locator("section.saved-residence");
-    const saved = page.getByRole("region", { name: "Saved residence" });
+    const saved = page.getByRole("region", {
+      exact: true,
+      name: "Saved residence",
+    });
     await expect(
       savedSection.getByRole("heading", { name: "Saved residence" }),
     ).toBeVisible();
