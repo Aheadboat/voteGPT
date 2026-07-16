@@ -761,7 +761,43 @@ describe("saved residence key rotation", () => {
     },
   );
 
-  it("includes user ID in CAS, keeps earlier commits after later tampering, and resumes without rerotating", async () => {
+  it("uses user ID in CAS when a concurrent replacement moves the old envelope", async () => {
+    const { db, legacyKeyring, repository, rotationKeyring } =
+      await rotationFixture(["one", "alpha"]);
+
+    try {
+      await repository.save(
+        "user_one",
+        saveRequest("101 Alpha Avenue", "unused-by-persistence"),
+        { ...resolution, divisions: [] },
+        new Date("2026-07-16T18:00:00.000Z"),
+        legacyKeyring,
+      );
+      const before = (await encryptedRows(db))[0];
+      if (!before) {
+        throw new Error("Rotation fixture did not create a residence.");
+      }
+
+      const result = await repository.rotateKeys(rotationKeyring, {
+        batchSize: 1,
+        beforeUpdate: async () => {
+          await db
+            .update(savedResidence)
+            .set({ userId: "user_alpha" })
+            .where(eq(savedResidence.userId, "user_one"));
+        },
+      });
+
+      expect(result).toEqual({ rotated: 0, skipped: 1, remaining: 1 });
+      expect(await encryptedRows(db)).toEqual([
+        { ...before, userId: "user_alpha" },
+      ]);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("keeps earlier commits after later cross-user AAD tampering and resumes without rerotating", async () => {
     const { db, legacyKeyring, repository, rotationKeyring } =
       await rotationFixture(["alpha", "bravo"]);
 
