@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is active in discovery, design, and planning on `codex/r1-roadmap-coordinator-contract`; F4 and every later product item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is active in discovery, design, and planning on `codex/r1-roadmap-coordinator-contract`; F4 and every later roadmap item remain TODO pending separate authorization.
 
 ## Local identity setup
 
