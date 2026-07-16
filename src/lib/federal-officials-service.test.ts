@@ -291,6 +291,55 @@ describe("federal official cache service", () => {
     expect(postRaceClockReads).toBeGreaterThan(0);
   });
 
+  it("reads the winning generation before capturing its validation clock", async () => {
+    const expiredAt = new Date(NOW.getTime() - 72 * HOUR);
+    const newerAt = new Date(NOW.getTime() + 2 * HOUR);
+    const newerRoster = verifiedRoster(jurisdiction, "N000001", newerAt);
+    const newerRecord = cacheRecord(
+      "roster:v1:GA:13",
+      newerRoster,
+      newerAt,
+    );
+    const expiredRecord = cacheRecord(
+      "roster:v1:GA:13",
+      verifiedRoster(jurisdiction, "O000001", expiredAt),
+      expiredAt,
+    );
+    let reads = 0;
+    let rereadComplete = false;
+    const repository: FederalOfficialCacheRepository = {
+      read: vi.fn(async () => {
+        reads += 1;
+        if (reads === 1) {
+          return expiredRecord;
+        }
+        rereadComplete = true;
+        return newerRecord;
+      }),
+      replaceRoster: vi.fn(async () => ({
+        status: "ignored",
+        reason: "older_generation",
+      }) as const),
+    };
+    const now = vi.fn(() =>
+      rereadComplete
+        ? new Date(NOW.getTime() + 3 * HOUR)
+        : new Date(NOW),
+    );
+    const harness = serviceHarness(repository, { now });
+
+    expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+      status: "available",
+      view: {
+        ...newerRoster,
+        freshness: freshnessFor(newerRecord, "fresh"),
+      },
+    });
+    expect(repository.read).toHaveBeenCalledTimes(2);
+    expect(repository.replaceRoster).toHaveBeenCalledTimes(1);
+    expect(rereadComplete).toBe(true);
+  });
+
   it("excludes a Clerk-conflicted House member from refreshed profiles", async () => {
     const retrievedAt = new Date(NOW.getTime() - 24 * HOUR);
     const oldRoster = verifiedRoster(jurisdiction, "O000001", retrievedAt);
@@ -778,6 +827,9 @@ function houseEvidenceCases(
   const clerkListOnly = vacant.house.sources.filter(
     ({ url }) => url === "https://clerk.house.gov/Members/ViewVacancies",
   );
+  const districtClerkOnly = vacant.house.sources.filter(
+    ({ url }) => url === "https://clerk.house.gov/members/GA13/vacancy",
+  );
 
   return [
     [
@@ -799,6 +851,35 @@ function houseEvidenceCases(
     [
       "verified serving lacks the Clerk current-list source",
       { ...serving, house: { ...serving.house, sources: memberOnly } },
+    ],
+    [
+      "a partial serving seat includes the Clerk current-list source",
+      {
+        ...serving,
+        coverage: { ...serving.coverage, house: "partial" },
+      },
+    ],
+    [
+      "a verified serving seat includes district vacancy evidence",
+      {
+        ...serving,
+        house: {
+          ...serving.house,
+          sources: [...serving.house.sources, ...districtClerkOnly],
+        },
+      },
+    ],
+    [
+      "an unknown seat includes district vacancy evidence",
+      {
+        ...vacant,
+        house: {
+          status: "unknown",
+          office: vacant.house.office,
+          sources: districtClerkOnly,
+        },
+        coverage: { ...vacant.coverage, house: "unknown" },
+      },
     ],
   ];
 }
