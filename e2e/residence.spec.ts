@@ -126,6 +126,14 @@ test("resolves a manual residence with equal provenance and coverage", async ({
       status: 200,
     },
   ]);
+  const formEncodedPrivateUrl = new URL("/dashboard", baseURL);
+  formEncodedPrivateUrl.search = new URLSearchParams({
+    residence: manualAddress,
+  }).toString();
+  expect(formEncodedPrivateUrl.search).toContain("+");
+  expect(decodedUrlPrivacySurface(formEncodedPrivateUrl.toString())).toContain(
+    manualAddress,
+  );
 
   await page.goto("/dashboard");
 
@@ -190,63 +198,15 @@ test("resolves a manual residence with equal provenance and coverage", async ({
     contentType: "text/yaml",
   });
 
-  const contrast = await page.evaluate(() => {
-    function channels(color: string) {
-      const values = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
-      if (!values || values.length !== 3) {
-        throw new Error(`Unsupported computed color: ${color}`);
-      }
-      return values.map((value) => value / 255);
-    }
-
-    function luminance(color: string) {
-      return channels(color)
-        .map((value) =>
-          value <= 0.04045
-            ? value / 12.92
-            : Math.pow((value + 0.055) / 1.055, 2.4),
-        )
-        .reduce(
-          (total, value, index) => total + value * [0.2126, 0.7152, 0.0722][index],
-          0,
-        );
-    }
-
-    function background(element: Element) {
-      let current: Element | null = element;
-      while (current) {
-        const color = getComputedStyle(current).backgroundColor;
-        if (color !== "rgba(0, 0, 0, 0)") {
-          return color;
-        }
-        current = current.parentElement;
-      }
-      return "rgb(255, 255, 255)";
-    }
-
-    return [
+  const contrast = await measureContrast(page, {
+    selectors: [
       ".residence-intro",
       ".residence-privacy",
       ".residence-status",
       ".residence-result h3",
       ".residence-form button",
       ".secondary-button",
-    ].map((selector) => {
-      const element = document.querySelector(selector);
-      if (!element) {
-        throw new Error(`Missing contrast target: ${selector}`);
-      }
-      const foreground = getComputedStyle(element).color;
-      const backdrop = background(element);
-      const lighter = Math.max(luminance(foreground), luminance(backdrop));
-      const darker = Math.min(luminance(foreground), luminance(backdrop));
-      return {
-        background: backdrop,
-        foreground,
-        ratio: (lighter + 0.05) / (darker + 0.05),
-        selector,
-      };
-    });
+    ],
   });
   for (const sample of contrast) {
     expect(sample.ratio, sample.selector).toBeGreaterThanOrEqual(4.5);
@@ -1077,10 +1037,12 @@ function assertPrivateRequestBoundaries(
   authorizedRequests: readonly AuthorizedPrivateRequest[],
 ) {
   for (const request of audit.requests) {
+    const decodedUrl = decodedUrlPrivacySurface(request.url);
     for (const secret of secrets) {
       for (const representation of [secret, encodeURIComponent(secret)]) {
         expect(request.url).not.toContain(representation);
       }
+      expect(decodedUrl).not.toContain(secret);
     }
     if (
       request.postData === null ||
@@ -1105,6 +1067,21 @@ function assertPrivateRequestBoundaries(
       `${request.method} ${path} carried unapproved private data`,
     ).toBe(true);
   }
+}
+
+function decodedUrlPrivacySurface(value: string) {
+  const url = new URL(value);
+  const decodeComponent = (component: string) =>
+    decodeURIComponent(component.replaceAll("+", " "));
+
+  return [
+    decodeComponent(url.pathname),
+    ...Array.from(url.searchParams.entries()).flatMap(([name, entry]) => [
+      name,
+      entry,
+    ]),
+    decodeComponent(url.hash.slice(1)),
+  ].join("\n");
 }
 
 async function assertSavedResponsiveAndAccessible(
@@ -1177,7 +1154,23 @@ async function assertSavedResponsiveAndAccessible(
 }
 
 async function assertSavedContrast(page: Page, testInfo: TestInfo) {
-  const contrast = await page.evaluate(() => {
+  const contrast = await measureContrast(page, {
+    textRoot: ".saved-residence",
+  });
+  for (const sample of contrast) {
+    expect(sample.ratio, sample.selector).toBeGreaterThanOrEqual(4.5);
+  }
+  await testInfo.attach("saved-residence-computed-contrast", {
+    body: JSON.stringify(contrast, null, 2),
+    contentType: "application/json",
+  });
+}
+
+async function measureContrast(
+  page: Page,
+  scope: { selectors?: readonly string[]; textRoot?: string },
+) {
+  return await page.evaluate((requestedScope) => {
     function channels(color: string) {
       const values = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
       if (!values || values.length !== 3) {
@@ -1212,40 +1205,61 @@ async function assertSavedContrast(page: Page, testInfo: TestInfo) {
       return "rgb(255, 255, 255)";
     }
 
-    return [
-      ".saved-residence-details > p",
-      ".saved-residence .residence-result h3",
-      ".saved-residence .residence-provenance a",
-      ".saved-residence-details > button",
-    ].flatMap((selector) => {
-      const elements = Array.from(document.querySelectorAll(selector)).filter(
-        (element) => {
-          const box = element.getBoundingClientRect();
-          return box.width > 0 && box.height > 0;
-        },
+    function visible(element: Element) {
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        style.visibility !== "hidden" &&
+        style.display !== "none"
       );
-      if (elements.length === 0) {
-        throw new Error(`Missing saved contrast target: ${selector}`);
+    }
+
+    let elements: Element[];
+    if (requestedScope.textRoot) {
+      const root = document.querySelector(requestedScope.textRoot);
+      if (!root) {
+        throw new Error(`Missing contrast root: ${requestedScope.textRoot}`);
       }
-      return elements.map((element, index) => {
-        const foreground = getComputedStyle(element).color;
-        const backdrop = background(element);
-        const lighter = Math.max(luminance(foreground), luminance(backdrop));
-        const darker = Math.min(luminance(foreground), luminance(backdrop));
-        return {
-          ratio: (lighter + 0.05) / (darker + 0.05),
-          selector: `${selector}[${index}]`,
-        };
+      elements = [root, ...Array.from(root.querySelectorAll("*"))].filter(
+        (element) =>
+          visible(element) &&
+          (element.matches("a, button, label") ||
+            Array.from(element.childNodes).some(
+              (node) =>
+                node.nodeType === Node.TEXT_NODE &&
+                Boolean(node.textContent?.trim()),
+            )),
+      );
+    } else {
+      elements = (requestedScope.selectors ?? []).flatMap((selector) => {
+        const matches = Array.from(document.querySelectorAll(selector)).filter(
+          visible,
+        );
+        if (matches.length === 0) {
+          throw new Error(`Missing contrast target: ${selector}`);
+        }
+        return matches;
       });
+    }
+
+    if (elements.length === 0) {
+      throw new Error("Contrast scope contains no visible text targets.");
+    }
+    return elements.map((element, index) => {
+      const foreground = getComputedStyle(element).color;
+      const backdrop = background(element);
+      const lighter = Math.max(luminance(foreground), luminance(backdrop));
+      const darker = Math.min(luminance(foreground), luminance(backdrop));
+      return {
+        background: backdrop,
+        foreground,
+        ratio: (lighter + 0.05) / (darker + 0.05),
+        selector: `${requestedScope.textRoot ?? "explicit"}:${element.tagName.toLowerCase()}[${index}]`,
+      };
     });
-  });
-  for (const sample of contrast) {
-    expect(sample.ratio, sample.selector).toBeGreaterThanOrEqual(4.5);
-  }
-  await testInfo.attach("saved-residence-computed-contrast", {
-    body: JSON.stringify(contrast, null, 2),
-    contentType: "application/json",
-  });
+  }, scope);
 }
 
 async function openPostgresInspection(): Promise<PostgresInspection | null> {
