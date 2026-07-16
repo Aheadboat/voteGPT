@@ -26,7 +26,7 @@ describe("signed-in dashboard", () => {
     } as never);
   });
 
-  it("wires the manual-first residence preview into the real authenticated page", async () => {
+  it("keeps saved-home account state before one manual-first residence preview", async () => {
     const page = await DashboardPage();
     render(page);
 
@@ -35,11 +35,16 @@ describe("signed-in dashboard", () => {
     expect(
       within(main).getByRole("heading", { name: "Your dashboard" }),
     ).toBeInTheDocument();
+    const savedHomeHeading = within(main).getByRole("heading", {
+      name: "Saved home",
+    });
+    const previewHeading = within(main).getByRole("heading", {
+      name: "Preview your voting residence",
+    });
     expect(
-      within(main).getByRole("heading", {
-        name: "Preview your voting residence",
-      }),
-    ).toBeInTheDocument();
+      savedHomeHeading.compareDocumentPosition(previewHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       within(main).getByRole("textbox", {
         name: "Voting residence address",
