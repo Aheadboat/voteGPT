@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   afterEach,
   describe,
@@ -111,8 +112,8 @@ describe("House Clerk current-vacancy adapter", () => {
     [
       "duplicate matching heading",
       fixture.replace(
-        "<table>",
-        "<h3>Vacancies of the 119th Congress</h3><table>",
+        "<h2>First Session</h2>",
+        "<h3>Vacancies of the 119th Congress</h3><h2>First Session</h2>",
       ),
       119,
     ],
@@ -124,8 +125,8 @@ describe("House Clerk current-vacancy adapter", () => {
     [
       "malformed heading markup",
       fixture.replace(
-        "<h2>Vacancies of the 119th Congress</h2>",
-        "<h2>Vacancies of the 119th Congress",
+        "<h1>Vacancies of the 119th Congress</h1>",
+        "<h1>Vacancies of the 119th Congress",
       ),
       119,
     ],
@@ -173,6 +174,107 @@ describe("House Clerk current-vacancy adapter", () => {
   });
 
   it.each([
+    [
+      "data-href instead of href",
+      fixture.replace(
+        'href="/members/GA13/vacancy"',
+        'data-href="/members/GA13/vacancy"',
+      ),
+    ],
+    [
+      "fake href inside another quoted attribute",
+      fixture.replace(
+        'href="/members/GA13/vacancy"',
+        'title=\'href="/members/GA13/vacancy"\'',
+      ),
+    ],
+    [
+      "duplicate actual href attributes",
+      fixture.replace(
+        'href="/members/GA13/vacancy"',
+        'href="/members/GA13/vacancy" href="/members/CA01/vacancy"',
+      ),
+    ],
+    [
+      "unterminated quoted attribute",
+      fixture.replace(
+        'href="/members/GA13/vacancy"',
+        'href="/members/GA13/vacancy" title="unterminated',
+      ),
+    ],
+  ] as const)("does not promote %s to verified evidence", async (_label, html) => {
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(html))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("uses only the real href when fake href text shares the opening tag", async () => {
+    const mixedAttributes = fixture.replace(
+      'href="/members/GA13/vacancy"',
+      'data-note=\'href="/members/CA01/vacancy"\' href="/members/GA13/vacancy"',
+    );
+
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(mixedAttributes))),
+    );
+
+    expect(available.vacancies).toEqual([
+      {
+        stateCode: "GA",
+        district: 13,
+        source: vacancySource(
+          "https://clerk.house.gov/members/GA13/vacancy",
+        ),
+      },
+    ]);
+  });
+
+  it("does not qualify a canonical-looking link in a later sibling section", async () => {
+    const laterSibling = fixture.replace(
+      "</body>",
+      '<section><a href="/members/CA01/vacancy">Unowned vacancy</a></section></body>',
+    );
+
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(laterSibling))),
+    );
+
+    expect(available.vacancies.map(({ stateCode, district }) => ({
+      stateCode,
+      district,
+    }))).toEqual([{ stateCode: "GA", district: 13 }]);
+  });
+
+  it.each([
+    [
+      "missing owner",
+      fixture.replace('class="container members-profile"', 'class="container"'),
+    ],
+    [
+      "duplicate owner",
+      fixture.replace(
+        "</body>",
+        '<div class="container members-profile"></div></body>',
+      ),
+    ],
+    [
+      "missing owner close",
+      fixture.replace("</div><!-- current-owner-end -->", ""),
+    ],
+    [
+      "duplicate owner class attribute",
+      fixture.replace(
+        'class="container members-profile"',
+        'class="container members-profile" class="duplicate"',
+      ),
+    ],
+  ] as const)("fails closed on %s boundary", async (_label, html) => {
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(html))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it.each([
     [302, "provider_error"],
     [401, "auth"],
     [404, "not_found"],
@@ -208,6 +310,33 @@ describe("House Clerk current-vacancy adapter", () => {
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 
+  it("returns oversize failure when stream cancellation never settles", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024 * 1024 + 1));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+
+    const result = await settlesWithin(
+      lookup(
+        vi.fn(async () =>
+          new Response(stream, {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          }),
+        ),
+      ),
+    );
+
+    expect(result).toEqual({ status: "unavailable", reason: "malformed" });
+    expect(cancelled).toBe(true);
+  });
+
   it("applies the five-second timeout through the whole response body", async () => {
     vi.useFakeTimers();
     let cancelled = false;
@@ -237,6 +366,37 @@ describe("House Clerk current-vacancy adapter", () => {
     });
     expect(cancelled).toBe(true);
   });
+
+  it("returns timeout when stream cancellation never settles", async () => {
+    vi.useFakeTimers();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(fixture.slice(0, 40)));
+      },
+      cancel() {
+        cancelled = true;
+        return new Promise<void>(() => undefined);
+      },
+    });
+    const pending = lookup(
+      vi.fn(async () =>
+        new Response(stream, {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      ),
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    vi.useRealTimers();
+
+    await expect(settlesWithin(pending)).resolves.toEqual({
+      status: "unavailable",
+      reason: "timeout",
+    });
+    expect(cancelled).toBe(true);
+  });
 });
 
 function lookup(providerFetch: typeof globalThis.fetch) {
@@ -251,6 +411,13 @@ function htmlResponse(body: string, status = 200) {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
+}
+
+function settlesWithin(pending: Promise<HouseVacancyOutcome>) {
+  return Promise.race([
+    pending,
+    delay(50).then(() => ({ status: "did_not_settle" as const })),
+  ]);
 }
 
 function vacancySource(url: string) {

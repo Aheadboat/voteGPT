@@ -17,11 +17,23 @@ const jurisdictionCodes = new Set([
   "DC", "AS", "GU", "MP", "PR", "VI",
 ]);
 
-type RelevantTag = {
-  name: "a" | `h${1 | 2 | 3 | 4 | 5 | 6}`;
+type RelevantName = "a" | "div" | "li" | `h${1 | 2 | 3 | 4 | 5 | 6}`;
+
+type TagToken = {
+  name: RelevantName;
   start: number;
   end: number;
-  opening: string;
+  closing: boolean;
+  attributes: ReadonlyMap<string, string | null>;
+};
+
+type RelevantElement = {
+  name: RelevantName;
+  start: number;
+  openEnd: number;
+  closeStart: number;
+  end: number;
+  attributes: ReadonlyMap<string, string | null>;
   content: string;
 };
 
@@ -113,20 +125,32 @@ async function readBody(
       }
       byteCount += chunk.value.byteLength;
       if (byteCount > maximumBodyBytes) {
-        await reader.cancel();
+        cancelBestEffort(reader);
         return { status: "failure", reason: "malformed" };
       }
       html += decoder.decode(chunk.value, { stream: true });
     }
   } catch (error) {
-    await reader.cancel().catch(() => undefined);
+    cancelBestEffort(reader);
     return {
       status: "failure",
       reason:
         signal.aborted || isAbortError(error) ? "timeout" : "provider_error",
     };
   } finally {
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {
+      // Cancellation is best-effort cleanup and never controls classification.
+    }
+  }
+}
+
+function cancelBestEffort(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  try {
+    void reader.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is best-effort cleanup and never controls classification.
   }
 }
 
@@ -147,14 +171,27 @@ function readChunk(
 }
 
 function parseVacancies(html: string, currentCongress: number) {
-  const tags = relevantTags(html);
-  if (tags === null) {
+  const elements = relevantElements(html);
+  if (elements === null) {
     return null;
   }
 
-  const headings: Array<RelevantTag & { congress: number }> = [];
-  for (const tag of tags.filter(({ name }) => name !== "a")) {
-    const text = plainText(tag.content);
+  const owners = elements.filter(
+    (element) =>
+      element.name === "div" &&
+      hasClasses(element.attributes.get("class"), "container", "members-profile"),
+  );
+  if (owners.length !== 1) {
+    return null;
+  }
+  const owner = owners[0];
+
+  const headings: Array<RelevantElement & { congress: number }> = [];
+  for (const element of elements.filter(
+    (candidate) =>
+      candidate.name.startsWith("h") && containedBy(candidate, owner),
+  )) {
+    const text = plainText(element.content);
     if (!text.startsWith("Vacancies of the ")) {
       continue;
     }
@@ -166,7 +203,7 @@ function parseVacancies(html: string, currentCongress: number) {
     ) {
       return null;
     }
-    headings.push({ ...tag, congress: Number(match[1]) });
+    headings.push({ ...element, congress: Number(match[1]) });
   }
 
   const currentHeadings = headings.filter(
@@ -176,27 +213,31 @@ function parseVacancies(html: string, currentCongress: number) {
     return null;
   }
   const currentHeading = currentHeadings[0];
-  const nextHeading = headings.find(({ start }) => start > currentHeading.start);
-  const contentEnd = nextHeading?.start ?? html.length;
-  const activeLinks = tags.filter(
-    ({ name, start }) =>
-      name === "a" && start >= currentHeading.end && start < contentEnd,
+  const entries = elements.filter(
+    (element) =>
+      element.name === "li" &&
+      element.start >= currentHeading.end &&
+      containedBy(element, owner) &&
+      hasClasses(element.attributes.get("class"), "vacancy_release"),
   );
 
   const vacancies: Array<{ stateCode: string; district: number; url: string }> = [];
   const seenSeats = new Set<string>();
-  for (const link of activeLinks) {
-    const hrefs = quotedAttributes(link.opening, "href");
-    const possibleVacancy =
-      link.opening.toLowerCase().includes("vacancy") ||
-      plainText(link.content).toLowerCase().includes("vacancy");
-    if (!possibleVacancy) {
+  for (const entry of entries) {
+    const links = elements.filter(
+      (element) => element.name === "a" && containedBy(element, entry),
+    );
+    if (links.length === 0) {
       continue;
     }
-    if (hrefs.length !== 1) {
+    if (links.length !== 1) {
       return null;
     }
-    const parsed = canonicalVacancyLink(hrefs[0]);
+    const href = links[0].attributes.get("href");
+    if (href === undefined || href === null) {
+      return null;
+    }
+    const parsed = canonicalVacancyLink(href);
     if (parsed === null || seenSeats.has(`${parsed.stateCode}:${parsed.district}`)) {
       return null;
     }
@@ -206,45 +247,221 @@ function parseVacancies(html: string, currentCongress: number) {
   return vacancies;
 }
 
-function relevantTags(html: string): RelevantTag[] | null {
-  const tokenPattern = /<!--[\s\S]*?-->|<\/?(?:a|h[1-6])\b[^>]*>/gi;
-  const rawTagPattern = /<\/?(?:a|h[1-6])(?=[\s>])/gi;
-  const tokens = [...html.matchAll(tokenPattern)].filter(
-    ([token]) => !token.startsWith("<!--"),
-  );
-  if ([...html.matchAll(rawTagPattern)].length !== tokens.length) {
+function relevantElements(html: string): RelevantElement[] | null {
+  const tokens = relevantTokens(html);
+  if (tokens === null) {
     return null;
   }
 
-  const completed: RelevantTag[] = [];
-  let open:
-    | { name: RelevantTag["name"]; start: number; end: number; opening: string }
-    | null = null;
+  const completed: RelevantElement[] = [];
+  const open: TagToken[] = [];
   for (const token of tokens) {
-    const raw = token[0];
-    const nameMatch = /^<\/?(a|h[1-6])\b/i.exec(raw);
-    const start = token.index;
-    if (!nameMatch || start === undefined) {
-      return null;
-    }
-    const name = nameMatch[1].toLowerCase() as RelevantTag["name"];
-    if (/^<\//.test(raw)) {
-      if (open === null || open.name !== name) {
+    if (token.closing) {
+      const opening = open.pop();
+      if (opening === undefined || opening.name !== token.name) {
         return null;
       }
       completed.push({
-        ...open,
-        content: html.slice(open.end, start),
+        name: opening.name,
+        start: opening.start,
+        openEnd: opening.end,
+        closeStart: token.start,
+        end: token.end,
+        attributes: opening.attributes,
+        content: html.slice(opening.end, token.start),
       });
-      open = null;
     } else {
-      if (open !== null || /\/\s*>$/.test(raw)) {
-        return null;
-      }
-      open = { name, start, end: start + raw.length, opening: raw };
+      open.push(token);
     }
   }
-  return open === null ? completed : null;
+  return open.length === 0
+    ? completed.sort((left, right) => left.start - right.start)
+    : null;
+}
+
+function relevantTokens(html: string): TagToken[] | null {
+  const tokens: TagToken[] = [];
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = html.indexOf("<", cursor);
+    if (start === -1) {
+      break;
+    }
+    if (html.startsWith("<!--", start)) {
+      const commentEnd = html.indexOf("-->", start + 4);
+      if (commentEnd === -1) {
+        return null;
+      }
+      cursor = commentEnd + 3;
+      continue;
+    }
+
+    let nameStart = start + 1;
+    const closing = html[nameStart] === "/";
+    if (closing) {
+      nameStart += 1;
+    }
+    const nameMatch = /^[A-Za-z][A-Za-z0-9]*/.exec(html.slice(nameStart));
+    if (!nameMatch) {
+      const declarationEnd = findTagEnd(html, start + 1);
+      if (html[nameStart] === "!" || html[nameStart] === "?") {
+        if (declarationEnd === null) {
+          return null;
+        }
+        cursor = declarationEnd + 1;
+      } else {
+        cursor = start + 1;
+      }
+      continue;
+    }
+
+    const end = findTagEnd(html, nameStart + nameMatch[0].length);
+    if (end === null) {
+      return null;
+    }
+    const rawName = nameMatch[0].toLowerCase();
+    const relevantName = relevantNameFrom(rawName);
+    if (relevantName !== null) {
+      const remainder = html.slice(nameStart + nameMatch[0].length, end);
+      if (closing) {
+        if (remainder.trim() !== "") {
+          return null;
+        }
+        tokens.push({
+          name: relevantName,
+          start,
+          end: end + 1,
+          closing: true,
+          attributes: new Map(),
+        });
+      } else {
+        if (/\/\s*$/.test(remainder)) {
+          return null;
+        }
+        const attributes = parseAttributes(remainder);
+        if (attributes === null) {
+          return null;
+        }
+        tokens.push({
+          name: relevantName,
+          start,
+          end: end + 1,
+          closing: false,
+          attributes,
+        });
+      }
+    }
+    cursor = end + 1;
+  }
+  return tokens;
+}
+
+function findTagEnd(html: string, start: number): number | null {
+  let quote: "\"" | "'" | null = null;
+  for (let index = start; index < html.length; index += 1) {
+    const character = html[index];
+    if (quote !== null) {
+      if (character === quote) {
+        quote = null;
+      }
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
+  }
+  return null;
+}
+
+function parseAttributes(source: string): Map<string, string | null> | null {
+  const attributes = new Map<string, string | null>();
+  let cursor = 0;
+  while (cursor < source.length) {
+    while (/\s/.test(source[cursor] ?? "")) {
+      cursor += 1;
+    }
+    if (cursor === source.length) {
+      break;
+    }
+
+    const nameStart = cursor;
+    while (
+      cursor < source.length &&
+      !/[\s"'<>\/=]/.test(source[cursor])
+    ) {
+      cursor += 1;
+    }
+    if (cursor === nameStart) {
+      return null;
+    }
+    const name = source.slice(nameStart, cursor).toLowerCase();
+    if (attributes.has(name)) {
+      return null;
+    }
+    while (/\s/.test(source[cursor] ?? "")) {
+      cursor += 1;
+    }
+
+    let value: string | null = null;
+    if (source[cursor] === "=") {
+      cursor += 1;
+      while (/\s/.test(source[cursor] ?? "")) {
+        cursor += 1;
+      }
+      if (cursor === source.length) {
+        return null;
+      }
+      const quote = source[cursor];
+      if (quote === "\"" || quote === "'") {
+        cursor += 1;
+        const valueStart = cursor;
+        const valueEnd = source.indexOf(quote, cursor);
+        if (valueEnd === -1) {
+          return null;
+        }
+        value = source.slice(valueStart, valueEnd);
+        cursor = valueEnd + 1;
+        if (cursor < source.length && !/\s/.test(source[cursor])) {
+          return null;
+        }
+      } else {
+        const valueStart = cursor;
+        while (
+          cursor < source.length &&
+          !/\s/.test(source[cursor])
+        ) {
+          if (/["'<=`>]/.test(source[cursor])) {
+            return null;
+          }
+          cursor += 1;
+        }
+        if (cursor === valueStart) {
+          return null;
+        }
+        value = source.slice(valueStart, cursor);
+      }
+    }
+    attributes.set(name, value);
+  }
+  return attributes;
+}
+
+function relevantNameFrom(name: string): RelevantName | null {
+  return name === "a" || name === "div" || name === "li" || /^h[1-6]$/.test(name)
+    ? (name as RelevantName)
+    : null;
+}
+
+function containedBy(element: RelevantElement, owner: RelevantElement) {
+  return element.start >= owner.openEnd && element.end <= owner.closeStart;
+}
+
+function hasClasses(value: string | null | undefined, ...required: string[]) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+  const classes = new Set(value.split(/\s+/).filter(Boolean));
+  return required.every((name) => classes.has(name));
 }
 
 function canonicalVacancyLink(href: string) {
@@ -275,15 +492,6 @@ function canonicalVacancyLink(href: string) {
     district: match[2] === "00" ? 0 : Number(match[2]),
     url: url.toString(),
   };
-}
-
-function quotedAttributes(openingTag: string, name: string) {
-  const matches = [
-    ...openingTag.matchAll(
-      new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "gi"),
-    ),
-  ];
-  return matches.map((match) => match[1] ?? match[2]);
 }
 
 function plainText(html: string) {
