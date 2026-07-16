@@ -6,6 +6,14 @@ import type { Freshness, Office, Person, SourceRef, Term } from "@/lib/federal-o
 
 import { FederalProfile } from "./federal-profile";
 
+type ProfileFixture = {
+  person: Person;
+  office: Office;
+  term: Term;
+  sources: SourceRef[];
+  freshness: Freshness;
+};
+
 const checkedAt = "2026-07-16T12:00:00.000Z";
 const person: Person = {
   id: "bioguide:H000001",
@@ -30,7 +38,7 @@ const term: Term = {
 const source: SourceRef = {
   publisher: "Congress.gov",
   sourceType: "member",
-  url: "https://api.congress.gov/v3/member/H000001",
+  url: "https://api.congress.gov/v3/member/H000001?format=json",
   retrievedAt: checkedAt,
   recordUpdatedAt: "2026-07-15T00:00:00.000Z",
   effectiveAt: "2025-01-03T00:00:00.000Z",
@@ -41,7 +49,57 @@ const freshness: Freshness = {
   staleAfter: "2026-07-18T12:00:00.000Z",
   state: "fresh",
 };
-const profile = { person, office, term, sources: [source], freshness };
+const profile: ProfileFixture = { person, office, term, sources: [source], freshness };
+
+const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
+  [
+    "a person ID and bioguide mismatch",
+    {
+      ...profile,
+      person: { ...person, id: "bioguide:OTHER" },
+      term: { ...term, personId: "bioguide:OTHER" },
+    },
+  ],
+  [
+    "a non-serving term",
+    { ...profile, term: { ...term, status: "vacant" } },
+  ],
+  [
+    "a wrong term person ID",
+    { ...profile, term: { ...term, personId: "bioguide:OTHER" } },
+  ],
+  [
+    "a wrong term office ID",
+    { ...profile, term: { ...term, officeId: "federal:house:GA:12" } },
+  ],
+  ["empty sources", { ...profile, sources: [] }],
+  [
+    "an unrelated Congress.gov member source",
+    {
+      ...profile,
+      sources: [
+        {
+          ...source,
+          url: "https://api.congress.gov/v3/member/OTHER?format=json",
+        },
+      ],
+    },
+  ],
+  [
+    "a vacancy source",
+    {
+      ...profile,
+      sources: [
+        {
+          ...source,
+          publisher: "Office of the Clerk, U.S. House of Representatives",
+          sourceType: "vacancy",
+          url: "https://clerk.house.gov/Members/ViewVacancies",
+        },
+      ],
+    },
+  ],
+];
 
 describe("FederalProfile", () => {
   it("server-renders only a verified current profile with adjacent source times", () => {
@@ -127,15 +185,12 @@ describe("FederalProfile", () => {
     expect(screen.queryByRole("link", { name: "Congress.gov member source" })).toBeNull();
   });
 
-  it("fails closed when normalized current-term relationships do not match", () => {
+  it.each(invalidCurrentProfiles)("fails closed for %s", (_label, invalidProfile) => {
     render(
       <FederalProfile
         result={{
           status: "available",
-          profile: {
-            ...profile,
-            term: { ...term, personId: "bioguide:OTHER" },
-          },
+          profile: invalidProfile,
         }}
       />,
     );

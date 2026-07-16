@@ -46,6 +46,44 @@ const view: FederalOfficialsView = {
   freshness: fresh,
 };
 
+const vacantView: FederalOfficialsView = {
+  ...view,
+  house: {
+    status: "vacant",
+    office: house.office,
+    term: {
+      ...house.term,
+      personId: null,
+      status: "vacant",
+    },
+    sources: [clerkSource],
+  },
+  coverage: { ...view.coverage, house: "vacant" },
+};
+
+const unknownView: FederalOfficialsView = {
+  ...view,
+  house: {
+    status: "unknown",
+    office: house.office,
+    sources: [],
+  },
+  coverage: { ...view.coverage, house: "unknown" },
+};
+
+const conflictView: FederalOfficialsView = {
+  ...view,
+  house: {
+    ...house,
+    status: "conflict",
+    sources: [...house.sources, clerkSource],
+  },
+  coverage: { ...view.coverage, house: "partial" },
+};
+
+const missingSenatorCopy =
+  "Current Senate officeholder is unknown. No qualifying source is available for this position.";
+
 describe("FederalOfficials", () => {
   it("renders equal House-then-Senate cards with adjacent source and freshness evidence", () => {
     const { container } = render(
@@ -92,6 +130,9 @@ describe("FederalOfficials", () => {
       "/officials/federal/S000001",
       "/officials/federal/S000002",
     ]);
+    expect(cards[0]).toHaveAccessibleName(
+      "U.S. Representative \u2014 District 13: Alex House",
+    );
 
     for (const card of cards) {
       const links = within(card).getAllByRole("link");
@@ -145,41 +186,38 @@ describe("FederalOfficials", () => {
     expect(screen.queryByText(/District 0/i)).toBeNull();
   });
 
+  it.each([
+    [
+      "serving",
+      view,
+      "U.S. Representative \u2014 District 13: Alex House",
+    ],
+    [
+      "vacant",
+      vacantView,
+      "U.S. Representative \u2014 District 13: vacant",
+    ],
+    [
+      "unknown",
+      unknownView,
+      "U.S. Representative \u2014 District 13: officeholder unknown",
+    ],
+    [
+      "conflicting",
+      conflictView,
+      "U.S. Representative \u2014 District 13: conflicting evidence",
+    ],
+  ])("uses a status-specific article label for %s evidence", (status, stateView, label) => {
+    render(<FederalOfficials result={{ status: "available", view: stateView }} />);
+
+    expect(screen.getByRole("article", { name: label })).toBeInTheDocument();
+    if (status !== "serving") {
+      expect(screen.queryByRole("article", { name: /Alex House/ })).toBeNull();
+    }
+  });
+
   it("states vacant, unknown, and conflicting House evidence without inferred officeholders", () => {
-    const states: FederalOfficialsView[] = [
-      {
-        ...view,
-        house: {
-          status: "vacant",
-          office: house.office,
-          term: {
-            ...house.term,
-            personId: null,
-            status: "vacant",
-          },
-          sources: [clerkSource],
-        },
-        coverage: { ...view.coverage, house: "vacant" },
-      },
-      {
-        ...view,
-        house: {
-          status: "unknown",
-          office: house.office,
-          sources: [],
-        },
-        coverage: { ...view.coverage, house: "unknown" },
-      },
-      {
-        ...view,
-        house: {
-          ...house,
-          status: "conflict",
-          sources: [...house.sources, clerkSource],
-        },
-        coverage: { ...view.coverage, house: "partial" },
-      },
-    ];
+    const states = [vacantView, unknownView, conflictView];
 
     const { rerender } = render(
       <FederalOfficials result={{ status: "available", view: states[0] }} />,
@@ -203,9 +241,7 @@ describe("FederalOfficials", () => {
     ).toBeInTheDocument();
     expect(
       within(
-        screen.getByRole("article", {
-          name: "U.S. Representative — District 13: Alex House",
-        }),
+        screen.getByText(/Sources conflict on current House seat status/).closest("article")!,
       ).queryByText("Verified current officeholder"),
     ).toBeNull();
     expect(screen.queryByRole("link", { name: "Alex House" })).toBeNull();
@@ -238,6 +274,60 @@ describe("FederalOfficials", () => {
     expect(screen.getByText("Alex House")).toBeInTheDocument();
     expect(screen.getByText("Bailey Senate")).toBeInTheDocument();
     expect(screen.queryByText("Casey Senate")).toBeNull();
+
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(3);
+    expect(cards.map(({ className }) => className)).toEqual([
+      cards[0].className,
+      cards[0].className,
+      cards[0].className,
+    ]);
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual([
+      "U.S. Representative \u2014 District 13: Alex House",
+      "U.S. Senator: Bailey Senate",
+      "U.S. Senator: officeholder unknown",
+    ]);
+    expect(screen.getAllByText(missingSenatorCopy)).toHaveLength(1);
+    expect(within(cards[2]).queryByRole("link")).toBeNull();
+  });
+
+  it("renders two deterministic neutral Senate placeholders when both seats are unknown", () => {
+    render(
+      <FederalOfficials
+        result={{
+          status: "available",
+          view: {
+            ...view,
+            senate: [],
+            coverage: { ...view.coverage, senate: "unknown" },
+          },
+        }}
+      />,
+    );
+
+    const cards = screen.getAllByRole("article");
+    expect(cards).toHaveLength(3);
+    expect(cards.map(({ className }) => className)).toEqual([
+      cards[0].className,
+      cards[0].className,
+      cards[0].className,
+    ]);
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual([
+      "U.S. Representative \u2014 District 13: Alex House",
+      "U.S. Senator: officeholder unknown",
+      "U.S. Senator: officeholder unknown",
+    ]);
+    expect(screen.getAllByText(missingSenatorCopy)).toHaveLength(2);
+    for (const card of cards.slice(1)) {
+      expect(within(card).queryByRole("link")).toBeNull();
+    }
+  });
+
+  it("uses neutral roster copy when every seat is verified", () => {
+    render(<FederalOfficials result={{ status: "available", view }} />);
+
+    expect(screen.getByText("Federal roster")).toBeInTheDocument();
+    expect(screen.queryByText("Verified federal roster")).toBeNull();
   });
 
   it("hides expired facts and gives a safe recovery action", () => {
