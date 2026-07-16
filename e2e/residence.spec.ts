@@ -14,8 +14,8 @@ import { Pool } from "pg";
 import {
   createResolutionToken,
   type ResolutionErrorResponse,
+  type ResolutionOutcome,
   type ResolutionResponse,
-  type ResolvedResidence,
 } from "../src/lib/residence";
 import {
   ambiguousResidenceResponse,
@@ -24,6 +24,11 @@ import {
   partialResidenceResponse,
   unavailableResidenceResponse,
 } from "../tests/fixtures/residence-responses";
+
+type ResolvedResidence = Extract<
+  ResolutionOutcome,
+  { status: "matched" | "partial" }
+>;
 
 const baseURL = "http://127.0.0.1:3000";
 const authSecret = "e2e-secret-at-least-thirty-two-characters";
