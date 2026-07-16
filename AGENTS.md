@@ -18,13 +18,15 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 - At most two roadmap items may be active after each candidate pair receives a recorded concurrency admission.
 - Do not begin an unauthorized or dependent item, create speculative scaffolding, or widen scope without roadmap approval.
 - Concurrent cross-item work requires the isolation, ownership, and merge-order rules below; otherwise parallelize only inside one active item.
-- Coordinator-only activation setup is the sole pre-active exception: after explicit authorization it may create inert branches/worktrees and the authoritative activation record, but no feature exploration or edits begin before that record is merged to `main` and integrated into every feature branch.
+- Coordinator-only pre-activation audit and activation setup are the sole pre-active exceptions: after explicit authorization the coordinator may inspect dependency and interface state, then create inert branches/worktrees and the authoritative activation record only when the audit permits activation; no feature exploration or edits begin before that record is merged to `main` and integrated into every feature branch.
 
 ## Roadmap item protocol
 
-Roadmap items move through `TODO → explicit authorization → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
+Roadmap items move through `TODO → explicit authorization → read-only dependency/interface/admission audit → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
 - Only explicit user authorization starts an item.
+- After explicit user authorization and before creating inert item branches/worktrees or an activation PR, the coordinator-only pre-activation step is a read-only dependency/interface/admission audit; the audit may inspect repository and roadmap state but cannot modify files or external state; no feature agent or `DISCOVER/DESIGN/PLAN` dispatch occurs during the audit; `PASS` or `CONDITIONAL` may proceed to paired activation; unsettled or coupled interfaces yield `FAIL`; `FAIL` does not create paired activation; the coordinator reports `FAIL` and requires explicit user activation order for sequential work.
+- When the user selects a sequential order after `FAIL`, the next single-item activation record preserves the failed pair audit and chosen order. A separately authorized single item may activate with admission `N/A` after the audit confirms its dependencies.
 - After explicit user authorization, coordinator-only inert activation setup may create item branches/worktrees from dependency-complete `main`; this is setup, not feature work.
 - One coordinator-owned activation PR/CI/merge on `main` records every activated item, its branch/base, assigned lead, ownership, admission, and merge order as the single authoritative active/admission record.
 - The coordinator integrates the activation merge into every feature branch before any agent dispatch or `DISCOVER/DESIGN/PLAN`.
@@ -73,7 +75,7 @@ Before concurrent dispatch, record one result for the candidate pair:
 - `FAIL` applies when dependencies, interfaces, mutable state, ownership, migrations, tests, or integration order remain coupled; run those items sequentially.
 
 Completion or blockage never fills an open slot automatically. A blocked item does not stop another item whose recorded admission remains valid.
-The activation merge on `main` is the sole authoritative admission and merge-order record; item branches never carry competing coordination state.
+The activation merge on `main` is the sole authoritative admission and merge-order record; item branches carry only coordinator-authored per-item state, never competing cross-item coordination state.
 
 ### Review, merge, and closeout
 
@@ -91,7 +93,7 @@ Gate B authorizes merge; it does not mark the item `DONE`. Continue only after e
 
 ### Durable coordination record
 
-For each active item, `ROADMAP.md` records phase, branch, base commit, integrated-main commit, admission result, assigned feature lead, exclusive/shared file or external-state ownership, merge order, feature PR/CI, blockers, feature merge, post-merge evidence, closeout PR/CI/merge, and next Human Gate. Conversation state and agent reports alone never advance status.
+For each active item, `ROADMAP.md` records phase, branch, base commit, integrated-main commit, admission result, assigned feature lead, exclusive/shared file or external-state ownership, merge order, feature PR/CI, blockers, feature merge, post-merge evidence, closeout PR/CI/merge, and next Human Gate. `main` owns authorization, active slots, pair admission, cross-item ownership/merge order, feature merges, closeout, and `DONE`. Coordinator-authored commits on each item branch own only that item's phase/evidence, blockers, integrated-main, and PR/CI state until the feature merge promotes them to `main`. No direct-main status writes are allowed; `main` authority changes only through reviewed coordinator-owned PR merges. Feature agents, agent reports, and conversation cannot write or advance either authority. Item-branch state cannot activate another item or mark `DONE`. Conversation state and agent reports alone never advance status.
 
 ### Conflict recovery and escalation
 
