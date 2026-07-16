@@ -331,7 +331,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Done:** `POST /api/v1/location/resolve` and the signed-in dashboard preview satisfy the request, provider, token, privacy, recovery, and UX contracts; all focused/full checks and required manual evidence pass; raw input is discarded and never persisted.
 - **Non-goals:** Saved home, shared location cache, distributed rate limiter, local boundary engine, officials, elections, map, reverse-geocoded background tracking, or generalized provider framework.
 
-## R1 — Concurrent Roadmap Delivery Contract [VERIFIED]
+## R1 — Concurrent Roadmap Delivery Contract [DONE]
 
 - **Outcome:** The repository can safely coordinate, review, merge, and close up to two dependency-independent roadmap items without weakening explicit authorization, Human Gates, TDD, branch isolation, or main-branch verification.
 - **Dependencies:** F3 is approved, committed, and merged to `main` at `e524494`; hosted PostgreSQL-backed [CI run 29467547931](https://github.com/Aheadboat/voteGPT/actions/runs/29467547931) passed before this branch was created.
@@ -345,27 +345,31 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Second whole-branch review correction GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 tests passing after binding the coordinator-only read-only pre-activation audit, complete `PASS`/`CONDITIONAL`/`FAIL` outcomes, explicit sequential-order escalation, and two-level authority with no direct-main status writes.
 - **Final integrated verification evidence (2026-07-15):** At branch head `e83ba02`, fetched `origin/main` at `e524494` is an ancestor. The focused foundation contract passed 14/14; `npm.cmd run db:check` passed; `npm.cmd run check` passed 13 Vitest files and 90/90 tests plus route type generation, strict TypeScript, zero-warning lint, and the optimized build; Chromium E2E passed 11/11; `npm.cmd audit --json` reported zero vulnerabilities; diff, obsolete-policy, machine-path, required-skill, exact six-file scope, and clean-worktree checks passed.
 - **Final independent review evidence (2026-07-15):** A read-only whole-branch review confirmed every prior finding resolved and reported 0 Critical, 0 Important, and 0 Minor findings with `Ready to merge: Yes`. No tracked file changed during review.
-- **Feature PR evidence (2026-07-15):** [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) is open and ready for review. GitHub reports head `e053c89` mergeable with clean merge state; [push CI 29474190348](https://github.com/Aheadboat/voteGPT/actions/runs/29474190348) and [pull-request CI 29474198340](https://github.com/Aheadboat/voteGPT/actions/runs/29474198340) both passed. The final evidence-only head must pass replacement hosted CI before Human Gate B.
+- **Initial feature PR evidence (2026-07-15):** At interim head `e053c89`, [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) was open, ready, clean, and mergeable; [push CI 29474190348](https://github.com/Aheadboat/voteGPT/actions/runs/29474190348) and [pull-request CI 29474198340](https://github.com/Aheadboat/voteGPT/actions/runs/29474198340) both passed before the final evidence-only head below.
+- **Final feature PR evidence (2026-07-15):** [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) remained clean and mergeable at final head `b949b2f`; [push CI 29474400062](https://github.com/Aheadboat/voteGPT/actions/runs/29474400062) and [pull-request CI 29474402432](https://github.com/Aheadboat/voteGPT/actions/runs/29474402432) both passed on that exact head.
+- **Human Gate B evidence (2026-07-15):** User explicitly approved R1 after reviewing the delivered coordinator contract, final design and review corrections, local and hosted verification, zero-finding independent review, remaining risks and non-goals, and the requirement that the closeout merge—not Gate B alone—places `DONE` on `main`.
+- **Feature merge evidence (2026-07-15):** [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) merged final feature head `b949b2f` to `main` as merge commit `b9eb43a2bf22b6a3bb1f62ca62532f826dae7e53`; Git ancestry confirms the reviewed feature head is reachable from that merge.
+- **Post-merge verification evidence (2026-07-15):** On `main@b9eb43a`, the focused contract passed 14/14; `npm.cmd run db:check` passed; `npm.cmd run check` passed 13 Vitest files and 90/90 tests plus route type generation, strict TypeScript, zero-warning lint, and the optimized build; Chromium E2E passed 11/11; `npm.cmd audit --json` reported zero vulnerabilities; and the worktree remained clean.
 - **Implementation plan:** [R1 Concurrent Roadmap Delivery Contract Implementation Plan](./R1-IMPLEMENTATION-PLAN.md). It is separate because the exact RED assertions, binding replacement text, verification commands, PR sequence, and closeout sequence would make this roadmap item unreadable inline.
 - **Applicable UX DNA IDs:** None. R1 changes contributor and agent workflow, not an end-user interface.
-- **Working branch:** `codex/r1-roadmap-coordinator-contract`, created from dependency-complete `main`. R1 remains the sole active item under the existing single-item contract until this amendment is merged and closed. Its root checkout is the explicit transition exception because the isolated-worktree rule does not become binding until R1 is closed; every later roadmap item uses the new worktree contract.
+- **Branch provenance:** Feature work used `codex/r1-roadmap-coordinator-contract`, created from dependency-complete `main`; its root checkout was the explicit transition exception because the isolated-worktree rule becomes binding after R1 closes. This status-only closeout uses `codex/r1-closeout` from verified `main@b9eb43a`; every later roadmap item uses the new worktree contract.
 
 ### Coordination record
 
-- **Phase:** `VERIFIED`
+- **Phase:** `DONE`
 - **Branch:** `codex/r1-roadmap-coordinator-contract`
 - **Base commit:** `e524494665e882882d36faf0e0cf7d97f773a506`
-- **Integrated-main commit:** `e524494665e882882d36faf0e0cf7d97f773a506`
+- **Integrated-main commit:** `b9eb43a2bf22b6a3bb1f62ca62532f826dae7e53`
 - **Admission result:** `N/A` — R1 is the sequential transition amendment.
 - **Assigned feature lead:** `N/A` — coordinator-owned workflow contract; no feature production code.
 - **Ownership:** Coordinator owns authoritative policy/status/evidence; bounded test agents own only assigned contract-test patches.
 - **Merge order:** R1 feature PR, post-merge verification, then R1 closeout PR.
-- **Feature PR/CI:** [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) is open, ready, mergeable, and clean. Head `e053c89` passed push CI 29474190348 and pull-request CI 29474198340; replacement CI for the final evidence-only head is required before Human Gate B.
+- **Feature PR/CI:** [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) merged final head `b949b2f`; push CI 29474400062 and pull-request CI 29474402432 passed on that exact head while GitHub reported clean mergeability.
 - **Blockers:** None.
-- **Feature merge:** Pending Human Gate B.
-- **Post-merge evidence:** Pending feature merge.
-- **Closeout PR/CI/merge:** Pending post-merge verification.
-- **Next Human Gate:** Human Gate B after VERIFIED, feature PR CI, mergeability, and clean independent review.
+- **Feature merge:** Merge commit `b9eb43a2bf22b6a3bb1f62ca62532f826dae7e53` is on `main`; feature head `b949b2f` is reachable.
+- **Post-merge evidence:** Focused 14/14, database artifacts, full 90/90 plus type/lint/build, Chromium 11/11, audit zero, and clean-worktree checks passed on `main@b9eb43a`.
+- **Closeout PR/CI/merge:** This status-only `codex/r1-closeout` branch is pending closeout PR, hosted CI, and merge; its `DONE` state has authority only after that merge reaches `main`.
+- **Next Human Gate:** None — Human Gate B is approved; closeout PR/CI/merge is the remaining coordinator-owned transition and activates no later item.
 
 - **Lifecycle design:** Roadmap items move through `TODO → explicit authorization → read-only dependency/interface/admission audit → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`. Gate B authorizes feature merge; it does not by itself mark the item complete.
 - **Concurrent activation:** After R1 is DONE, the user may explicitly authorize at most two roadmap items at once. Before mutation or feature-agent dispatch, the coordinator performs the read-only audit; `PASS` or `CONDITIONAL` permits coordinator-only inert setup and paired activation, while `FAIL` produces no paired activation and requires the user to choose the sequential activation order. The resulting single-item activation record preserves the failed pair audit and chosen order; a separately authorized single item uses admission `N/A` after its dependency audit passes. One coordinator-owned activation PR/CI/merge on `main` becomes the single authoritative active/admission record, and every feature branch integrates that activation merge before any agent dispatch. Coordinator-authored commits on each item branch then carry only that item's phase/evidence, blockers, integrated-main, and PR/CI state until feature merge. Zero or one active item remains valid. Completion or blockage never activates a dependent or replacement item automatically.
