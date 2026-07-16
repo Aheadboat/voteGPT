@@ -32,8 +32,9 @@ export default async function DashboardPage() {
           Signed in as <strong>{currentSession.user.email}</strong>
         </p>
         <p>
-          Check a residence below without saving it to your account. Public
-          information remains accessible from the home page.
+          Preview a residence below. You can optionally give explicit consent
+          to save it to your account. Public information remains accessible
+          from the home page.
         </p>
         <ResidencePreview />
         <AccountControls />

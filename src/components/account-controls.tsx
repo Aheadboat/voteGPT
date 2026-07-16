@@ -78,8 +78,8 @@ export function AccountControls() {
       <div className="danger-zone">
         <h3>Delete account</h3>
         <p>
-          Deleting your account permanently removes its sessions and linked
-          sign-in methods.
+          Deleting your account permanently removes your saved home. It also
+          removes your sessions and linked sign-in methods.
         </p>
         <label htmlFor="delete-confirmation">{'Type "DELETE" to confirm'}</label>
         <input
