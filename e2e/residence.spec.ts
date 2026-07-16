@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
 import { resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import {
   expect,
   test,
@@ -157,7 +158,7 @@ test("resolves a manual residence with equal provenance and coverage", async ({
   await address.fill(manualAddress);
   await page.getByRole("button", { name: "Check residence" }).click();
 
-  await expect(page.locator(".residence-status")).toHaveText(
+  await expect(residenceStatus(page)).toHaveText(
     "Residence matched. Review the divisions and source below.",
   );
   await expect(address).toHaveValue("");
@@ -262,7 +263,7 @@ test("resolves a manual residence with equal provenance and coverage", async ({
     await page.setViewportSize({ height: viewport.height, width: viewport.width });
     await page.getByRole("heading", { name: "Matched political divisions" }).scrollIntoViewIfNeeded();
     const path = testInfo.outputPath(`${viewport.name}.png`);
-    await page.screenshot({ path });
+    await page.screenshot({ fullPage: true, path });
     await testInfo.attach(viewport.name, { contentType: "image/png", path });
   }
 });
@@ -292,7 +293,7 @@ test("uses device location once and labels Census coverage as partial", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Use this device once" }).click();
 
-  await expect(page.locator(".residence-status")).toHaveText(
+  await expect(residenceStatus(page)).toHaveText(
     "Partial residence match. Review the coverage notes below.",
   );
   await expect(
@@ -324,10 +325,34 @@ test("uses device location once and labels Census coverage as partial", async ({
     body: aria,
     contentType: "text/yaml",
   });
-  await assertNoBrowserPersistence(context, page, privacy, [
-    String(deviceCoordinates.latitude),
-    String(deviceCoordinates.longitude),
-  ], [], true);
+  expect(savedResidenceRequests(privacy, "POST")).toHaveLength(0);
+  expect(savedResidenceRequests(privacy, "DELETE")).toHaveLength(0);
+  const postgres = await openPostgresInspection();
+  try {
+    if (postgres) {
+      const raw = await readRawResidence(postgres, primaryUserId);
+      expect(raw.parents).toHaveLength(0);
+      expect(raw.divisions).toHaveLength(0);
+    }
+  } finally {
+    await postgres?.pool.end();
+  }
+  await assertNoBrowserPersistence(
+    context,
+    page,
+    privacy,
+    [String(deviceCoordinates.latitude), String(deviceCoordinates.longitude)],
+    {
+      allowSavedResidenceUnavailable: true,
+      authorizedRequests: [
+        {
+          body: { kind: "coordinates", ...deviceCoordinates },
+          method: "POST",
+          path: "/api/v1/location/resolve",
+        },
+      ],
+    },
+  );
 });
 
 test("preserves and refocuses manual input across every recoverable failure", async ({
@@ -350,7 +375,7 @@ test("preserves and refocuses manual input across every recoverable failure", as
     "Residence matching is temporarily unavailable. Try again later.",
   ]) {
     await submit.click();
-    await expect(page.locator(".residence-status")).toHaveText(message);
+    await expect(residenceStatus(page)).toHaveText(message);
     await expect(address).toHaveValue(manualAddress);
     await expect(address).toBeEnabled();
     await expect(address).toBeFocused();
@@ -370,8 +395,19 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
   context,
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   const responseA = signedResidenceResponse(residenceA, primaryUserId);
   const responseB = signedResidenceResponse(residenceB, primaryUserId);
+  const saveRequestA = {
+    address: addressA,
+    consent: { accepted: true, version: "saved-residence-v1" },
+    resolutionToken: responseA.resolutionToken,
+  };
+  const saveRequestB = {
+    address: addressB,
+    consent: { accepted: true, version: "saved-residence-v1" },
+    resolutionToken: responseB.resolutionToken,
+  };
   const resolutionRequests = await queueResidenceResponses(page, [
     { body: responseA, status: 200 },
     { body: responseB, status: 200 },
@@ -381,17 +417,22 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
 
   try {
     await page.goto("/dashboard");
+    const savedSection = page.locator("section.saved-residence");
     const saved = page.getByRole("region", { name: "Saved residence" });
     const address = page.getByLabel("Voting residence address");
 
     await expect(page.getByText("Signed in as voter@example.invalid")).toBeVisible();
-    await expect(saved.getByText("No residence is saved.")).toBeVisible();
+    await expect(
+      savedSection.getByRole("heading", { name: "Saved residence" }),
+    ).toBeVisible();
+    await expect(savedSection.getByText("No residence is saved.")).toBeVisible();
+    await expect(saved).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Save this residence" })).toHaveCount(0);
     expect(resolutionRequests).toHaveLength(0);
 
     await address.fill(addressA);
     await page.getByRole("button", { name: "Check residence" }).click();
-    await expect(page.locator(".residence-status")).toHaveText(
+    await expect(residenceStatus(page)).toHaveText(
       "Residence matched. Review the divisions and source below.",
     );
 
@@ -409,9 +450,10 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
     await expect(save).toBeEnabled();
     await save.dblclick();
 
-    await expect(page.locator(".residence-status")).toHaveText(
+    await expect(residenceStatus(page)).toHaveText(
       "Saved residence was saved.",
     );
+    await expect(saved).toBeVisible();
     await expect(saved.getByText(addressA)).toBeVisible();
     await expect(saved.getByText("Example State")).toBeVisible();
     await expect(
@@ -427,12 +469,9 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
     ).toBeVisible();
     expect(resolutionRequests).toHaveLength(1);
     expect(savedResidenceRequests(privacy, "POST")).toHaveLength(1);
-    expect(JSON.parse(savedResidenceRequests(privacy, "POST")[0].postData ?? ""))
-      .toEqual({
-        address: addressA,
-        consent: { accepted: true, version: "saved-residence-v1" },
-        resolutionToken: responseA.resolutionToken,
-      });
+    expect(
+      JSON.parse(savedResidenceRequests(privacy, "POST")[0].postData ?? ""),
+    ).toEqual(saveRequestA);
 
     const savedAria = await saved.ariaSnapshot();
     const previewAria = await page
@@ -456,9 +495,8 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
     await assertSavedResponsiveAndAccessible(page, testInfo);
     await assertSavedContrast(page, testInfo);
 
-    let rawA: RawResidence | null = null;
     if (postgres) {
-      rawA = await readRawResidence(postgres, primaryUserId);
+      const rawA = await readRawResidence(postgres, primaryUserId);
       expect(rawA.parents).toHaveLength(1);
       expect(rawA.parents[0]).toMatchObject({
         envelope_version: "v1",
@@ -468,10 +506,54 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
       expect(rawA.parents[0].ciphertext).toBeTruthy();
       expect(rawA.parents[0].iv).toBeTruthy();
       expect(rawA.parents[0].tag).toBeTruthy();
-      expect(rawA.divisions).toEqual(expectedRawDivisions(residenceA));
+      expect(rawA.divisions).toEqual(
+        expectedRawDivisions(residenceA, primaryUserId),
+      );
       assertRawPrivacy(rawA, [
         addressA,
         responseA.resolutionToken,
+        String(deviceCoordinates.latitude),
+        String(deviceCoordinates.longitude),
+      ]);
+
+    }
+
+    await address.fill(addressB);
+    await page.getByRole("button", { name: "Check residence" }).click();
+    await expect(residenceStatus(page)).toHaveText(
+      "Partial residence match. Review the coverage notes below.",
+    );
+    await expect(
+      page.getByText(
+        "Saving this residence replaces your existing saved residence. No prior residence history will be retained.",
+      ),
+    ).toBeVisible();
+    await consent.check();
+    await save.dblclick();
+    await expect(residenceStatus(page)).toHaveText(
+      "Saved residence was replaced.",
+    );
+    await expect(saved.getByText(addressB)).toBeVisible();
+    await expect(saved.getByText("Replacement County")).toBeVisible();
+    await expect(saved.getByText(addressA)).toHaveCount(0);
+    expect(resolutionRequests).toHaveLength(2);
+    expect(savedResidenceRequests(privacy, "POST")).toHaveLength(2);
+    expect(
+      JSON.parse(savedResidenceRequests(privacy, "POST")[1].postData ?? ""),
+    ).toEqual(saveRequestB);
+
+    if (postgres) {
+      const rawB = await readRawResidence(postgres, primaryUserId);
+      expect(rawB.parents).toHaveLength(1);
+      expect(rawB.parents[0].key_version).toBe(legacyKeyVersion);
+      expect(rawB.divisions).toEqual(
+        expectedRawDivisions(residenceB, primaryUserId),
+      );
+      assertRawPrivacy(rawB, [
+        addressA,
+        addressB,
+        responseA.resolutionToken,
+        responseB.resolutionToken,
         String(deviceCoordinates.latitude),
         String(deviceCoordinates.longitude),
       ]);
@@ -485,57 +567,18 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
       const rotated = await readRawResidence(postgres, primaryUserId);
       expect(rotated.parents).toHaveLength(1);
       expect(rotated.parents[0].key_version).toBe(currentKeyVersion);
-      expect(rotated.parents[0].ciphertext).not.toBe(rawA.parents[0].ciphertext);
-      expect(rotated.parents[0].iv).not.toBe(rawA.parents[0].iv);
-      expect(rotated.parents[0].tag).not.toBe(rawA.parents[0].tag);
-      expect(rotated.divisions).toEqual(expectedRawDivisions(residenceA));
-      assertRawPrivacy(rotated, [addressA, responseA.resolutionToken]);
+      expect(rotated.parents[0].ciphertext).not.toBe(
+        rawB.parents[0].ciphertext,
+      );
+      expect(rotated.parents[0].iv).not.toBe(rawB.parents[0].iv);
+      expect(rotated.parents[0].tag).not.toBe(rawB.parents[0].tag);
+      expect(rotated.divisions).toEqual(rawB.divisions);
+      assertRawPrivacy(rotated, [addressB, responseB.resolutionToken]);
 
       await page.reload();
-      await expect(saved.getByText(addressA)).toBeVisible();
-      await expect(saved.getByText("Example State")).toBeVisible();
-      expect(resolutionRequests).toHaveLength(1);
-    }
-
-    await address.fill(addressB);
-    await page.getByRole("button", { name: "Check residence" }).click();
-    await expect(page.locator(".residence-status")).toHaveText(
-      "Partial residence match. Review the coverage notes below.",
-    );
-    await expect(
-      page.getByText(
-        "Saving this residence replaces your existing saved residence. No prior residence history will be retained.",
-      ),
-    ).toBeVisible();
-    await consent.check();
-    await save.dblclick();
-    await expect(page.locator(".residence-status")).toHaveText(
-      "Saved residence was replaced.",
-    );
-    await expect(saved.getByText(addressB)).toBeVisible();
-    await expect(saved.getByText("Replacement County")).toBeVisible();
-    await expect(saved.getByText(addressA)).toHaveCount(0);
-    expect(resolutionRequests).toHaveLength(2);
-    expect(savedResidenceRequests(privacy, "POST")).toHaveLength(2);
-    expect(JSON.parse(savedResidenceRequests(privacy, "POST")[1].postData ?? ""))
-      .toEqual({
-        address: addressB,
-        consent: { accepted: true, version: "saved-residence-v1" },
-        resolutionToken: responseB.resolutionToken,
-      });
-
-    if (postgres) {
-      const rawB = await readRawResidence(postgres, primaryUserId);
-      expect(rawB.parents).toHaveLength(1);
-      expect(rawB.divisions).toEqual(expectedRawDivisions(residenceB));
-      assertRawPrivacy(rawB, [
-        addressA,
-        addressB,
-        responseA.resolutionToken,
-        responseB.resolutionToken,
-        String(deviceCoordinates.latitude),
-        String(deviceCoordinates.longitude),
-      ]);
+      await expect(saved.getByText(addressB)).toBeVisible();
+      await expect(saved.getByText("Replacement County")).toBeVisible();
+      expect(resolutionRequests).toHaveLength(2);
     }
 
     const deleteSaved = saved.getByRole("button", {
@@ -551,10 +594,11 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
     const confirm = saved.getByRole("button", { name: "Confirm deletion" });
     await expect(confirm).toHaveJSProperty("tagName", "BUTTON");
     await confirm.dblclick();
-    await expect(page.locator(".residence-status")).toHaveText(
+    await expect(residenceStatus(page)).toHaveText(
       "Saved residence was deleted.",
     );
-    await expect(saved.getByText("No residence is saved.")).toBeVisible();
+    await expect(savedSection.getByText("No residence is saved.")).toBeVisible();
+    await expect(saved).toHaveCount(0);
     await expect(page.getByText("Signed in as voter@example.invalid")).toBeVisible();
     await expect(address).toBeFocused();
     expect(savedResidenceRequests(privacy, "DELETE")).toHaveLength(1);
@@ -566,6 +610,7 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
       expect(deleted.divisions).toHaveLength(0);
     }
 
+    await expectSavedGetCountStable(page, privacy, postgres ? 3 : 2);
     assertNoProviderOrUnexpectedResolverTraffic(privacy, 2);
     await assertNoBrowserPersistence(
       context,
@@ -579,7 +624,30 @@ test("saves, reloads, rotates, replaces, and deletes one consented residence", a
         String(deviceCoordinates.latitude),
         String(deviceCoordinates.longitude),
       ],
-      [addressA, addressB],
+      {
+        authorizedRequests: [
+          {
+            body: { kind: "address", address: addressA },
+            method: "POST",
+            path: "/api/v1/location/resolve",
+          },
+          {
+            body: saveRequestA,
+            method: "POST",
+            path: "/api/v1/residence",
+          },
+          {
+            body: { kind: "address", address: addressB },
+            method: "POST",
+            path: "/api/v1/location/resolve",
+          },
+          {
+            body: saveRequestB,
+            method: "POST",
+            path: "/api/v1/residence",
+          },
+        ],
+      },
     );
   } finally {
     await postgres?.pool.end();
@@ -593,6 +661,11 @@ test("deleting a second account cascades its private residence and revokes its s
   await context.clearCookies();
   await installSessionCookie(context, secondarySessionToken);
   const responseC = signedResidenceResponse(residenceC, secondaryUserId);
+  const saveRequestC = {
+    address: addressC,
+    consent: { accepted: true, version: "saved-residence-v1" },
+    resolutionToken: responseC.resolutionToken,
+  };
   const resolutionRequests = await queueResidenceResponses(page, [
     { body: responseC, status: 200 },
   ]);
@@ -604,8 +677,13 @@ test("deleting a second account cascades its private residence and revokes its s
     await expect(
       page.getByText("Signed in as secondary-voter@example.invalid"),
     ).toBeVisible();
+    const savedSection = page.locator("section.saved-residence");
     const saved = page.getByRole("region", { name: "Saved residence" });
-    await expect(saved.getByText("No residence is saved.")).toBeVisible();
+    await expect(
+      savedSection.getByRole("heading", { name: "Saved residence" }),
+    ).toBeVisible();
+    await expect(savedSection.getByText("No residence is saved.")).toBeVisible();
+    await expect(saved).toHaveCount(0);
 
     const address = page.getByLabel("Voting residence address");
     await address.fill(addressC);
@@ -616,12 +694,16 @@ test("deleting a second account cascades its private residence and revokes its s
     });
     await consent.check();
     await page.getByRole("button", { name: "Save residence" }).dblclick();
-    await expect(page.locator(".residence-status")).toHaveText(
+    await expect(residenceStatus(page)).toHaveText(
       "Saved residence was saved.",
     );
+    await expect(saved).toBeVisible();
     await expect(saved.getByText(addressC)).toBeVisible();
     await expect(saved.getByText("Secondary State House District 3")).toBeVisible();
     expect(savedResidenceRequests(privacy, "POST")).toHaveLength(1);
+    expect(
+      JSON.parse(savedResidenceRequests(privacy, "POST")[0].postData ?? ""),
+    ).toEqual(saveRequestC);
     expect(resolutionRequests).toHaveLength(1);
 
     if (postgres) {
@@ -672,13 +754,27 @@ test("deleting a second account cascades its private residence and revokes its s
       });
     }
 
+    await expectSavedGetCountStable(page, privacy, 1);
     assertNoProviderOrUnexpectedResolverTraffic(privacy, 1);
     await assertNoBrowserPersistence(
       context,
       page,
       privacy,
       [addressC, responseC.resolutionToken],
-      [addressC],
+      {
+        authorizedRequests: [
+          {
+            body: { kind: "address", address: addressC },
+            method: "POST",
+            path: "/api/v1/location/resolve",
+          },
+          {
+            body: saveRequestC,
+            method: "POST",
+            path: "/api/v1/residence",
+          },
+        ],
+      },
     );
   } finally {
     await postgres?.pool.end();
@@ -716,8 +812,14 @@ type CapturedRequest = {
   url: string;
 };
 
+type AuthorizedPrivateRequest = {
+  body: unknown;
+  method: "POST";
+  path: "/api/v1/location/resolve" | "/api/v1/residence";
+};
+
 type PrivacyAudit = {
-  consoleErrors: string[];
+  consoleMessages: Array<{ text: string; type: string }>;
   historyWrites: string[];
   navigations: string[];
   pageErrors: string[];
@@ -726,11 +828,22 @@ type PrivacyAudit = {
 
 type RawResidenceParent = {
   ciphertext: string;
+  consent_version: string;
+  consented_at: Date;
+  coverage_notes: string[];
+  created_at: Date;
   envelope_version: string;
   iv: string;
   key_version: string;
   resolution_status: string;
+  source_benchmark: string | null;
+  source_checked_at: Date;
+  source_effective_at: Date | null;
+  source_name: string;
+  source_url: string;
+  source_vintage: string | null;
   tag: string;
+  updated_at: Date;
   user_id: string;
 };
 
@@ -740,6 +853,7 @@ type RawResidenceDivision = {
   id_scheme: string;
   name: string;
   type: string;
+  user_id: string;
 };
 
 type RawResidence = {
@@ -791,17 +905,19 @@ function signedResidenceResponse(
 
 async function installPrivacyAudit(page: Page): Promise<PrivacyAudit> {
   const audit: PrivacyAudit = {
-    consoleErrors: [],
+    consoleMessages: [],
     historyWrites: [],
     navigations: [],
     pageErrors: [],
     requests: [],
   };
 
+  // Browser console is not Next.js stdout/stderr. Server non-logging is
+  // executable in the saved-residence route test, which injects private
+  // sentinels into persistence failures and spies console.error/warn/log;
+  // provider tests independently spy every console method.
   page.on("console", (message) => {
-    if (message.type() === "error") {
-      audit.consoleErrors.push(message.text());
-    }
+    audit.consoleMessages.push({ text: message.text(), type: message.type() });
   });
   page.on("framenavigated", (frame) => {
     if (frame === page.mainFrame()) {
@@ -859,6 +975,20 @@ function accountDeleteRequests(audit: PrivacyAudit) {
   );
 }
 
+async function expectSavedGetCountStable(
+  page: Page,
+  audit: PrivacyAudit,
+  expected: number,
+) {
+  expect(savedResidenceRequests(audit, "GET")).toHaveLength(expected);
+  await page.waitForTimeout(1_250);
+  expect(savedResidenceRequests(audit, "GET")).toHaveLength(expected);
+}
+
+function residenceStatus(page: Page) {
+  return page.locator(".residence-preview").getByRole("status");
+}
+
 function assertNoProviderOrUnexpectedResolverTraffic(
   audit: PrivacyAudit,
   expectedResolverRequests: number,
@@ -882,8 +1012,10 @@ async function assertNoBrowserPersistence(
   page: Page,
   audit: PrivacyAudit,
   secrets: readonly string[],
-  addressAllowedInOwnerDom: readonly string[] = [],
-  allowSavedResidenceUnavailable = false,
+  options: {
+    allowSavedResidenceUnavailable?: boolean;
+    authorizedRequests: readonly AuthorizedPrivateRequest[];
+  },
 ) {
   const browserState = await page.evaluate(() => ({
     currentHistoryState: history.state,
@@ -911,29 +1043,67 @@ async function assertNoBrowserPersistence(
     url: page.url(),
   });
   const diagnostics = JSON.stringify({
-    consoleErrors: audit.consoleErrors,
+    consoleMessages: audit.consoleMessages,
     pageErrors: audit.pageErrors,
   });
   const documentText = (await page.locator("body").textContent()) ?? "";
 
   expect(
-    allowSavedResidenceUnavailable
-      ? audit.consoleErrors.filter(
+    options.allowSavedResidenceUnavailable
+      ? audit.consoleMessages.filter(
           (message) =>
-            message !==
-            "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+            !(
+              message.type === "error" &&
+              message.text ===
+                "Failed to load resource: the server responded with a status of 503 (Service Unavailable)"
+            )
         )
-      : audit.consoleErrors,
+      : audit.consoleMessages,
   ).toEqual([]);
   expect(audit.pageErrors).toEqual([]);
+  assertPrivateRequestBoundaries(audit, secrets, options.authorizedRequests);
   for (const secret of secrets) {
     for (const representation of [secret, encodeURIComponent(secret)]) {
       expect(persistentState).not.toContain(representation);
       expect(diagnostics).not.toContain(representation);
     }
-    if (!addressAllowedInOwnerDom.includes(secret)) {
-      expect(documentText).not.toContain(secret);
+    expect(documentText).not.toContain(secret);
+  }
+}
+
+function assertPrivateRequestBoundaries(
+  audit: PrivacyAudit,
+  secrets: readonly string[],
+  authorizedRequests: readonly AuthorizedPrivateRequest[],
+) {
+  for (const request of audit.requests) {
+    for (const secret of secrets) {
+      for (const representation of [secret, encodeURIComponent(secret)]) {
+        expect(request.url).not.toContain(representation);
+      }
     }
+    if (
+      request.postData === null ||
+      !secrets.some((secret) =>
+        [secret, encodeURIComponent(secret)].some((representation) =>
+          request.postData?.includes(representation),
+        ),
+      )
+    ) {
+      continue;
+    }
+
+    const parsedBody = JSON.parse(request.postData) as unknown;
+    const path = new URL(request.url).pathname;
+    expect(
+      authorizedRequests.some(
+        (authorized) =>
+          authorized.method === request.method &&
+          authorized.path === path &&
+          isDeepStrictEqual(authorized.body, parsedBody),
+      ),
+      `${request.method} ${path} carried unapproved private data`,
+    ).toBe(true);
   }
 }
 
@@ -969,32 +1139,39 @@ async function assertSavedResponsiveAndAccessible(
     const saved = page.getByRole("region", { name: "Saved residence" });
     await saved.scrollIntoViewIfNeeded();
     const layout = await page.evaluate(() => {
-      const savedRegion = document.querySelector(".saved-residence");
-      const preview = document.querySelector(".residence-preview");
-      if (!savedRegion || !preview) {
+      const visibleBoxes = (selector: string) =>
+        Array.from(document.querySelectorAll(selector))
+          .map((element) => element.getBoundingClientRect())
+          .filter((box) => box.width > 0 && box.height > 0);
+      const savedBoxes = visibleBoxes(".saved-residence");
+      const previewBoxes = visibleBoxes(".residence-preview");
+      if (savedBoxes.length === 0 || previewBoxes.length === 0) {
         throw new Error("Saved residence layout targets are missing.");
       }
-      const savedBox = savedRegion.getBoundingClientRect();
-      const previewBox = preview.getBoundingClientRect();
-      const clippedControls = Array.from(
-        document.querySelectorAll(".saved-residence a, .saved-residence button"),
-      ).filter((element) => {
-        const box = element.getBoundingClientRect();
-        return box.width > 0 && (box.left < 0 || box.right > innerWidth);
-      }).length;
+      const inspectedBoxes = visibleBoxes(
+        ".saved-residence, .saved-residence *, .residence-preview, .residence-preview *",
+      );
       return {
-        clippedControls,
+        clippedNodes: inspectedBoxes.filter(
+          (box) => box.left < 0 || box.right > innerWidth,
+        ).length,
         horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
-        sectionsOverlap: savedBox.bottom > previewBox.top + 1,
+        inspectedNodes: inspectedBoxes.length,
+        sectionsOverlap: savedBoxes.some((savedBox) =>
+          previewBoxes.some(
+            (previewBox) => savedBox.bottom > previewBox.top + 1,
+          ),
+        ),
       };
     });
-    expect(layout).toEqual({
-      clippedControls: 0,
+    expect(layout.inspectedNodes).toBeGreaterThan(0);
+    expect(layout).toMatchObject({
+      clippedNodes: 0,
       horizontalOverflow: false,
       sectionsOverlap: false,
     });
     const path = testInfo.outputPath(`${viewport.name}.png`);
-    await page.screenshot({ path });
+    await page.screenshot({ fullPage: true, path });
     await testInfo.attach(viewport.name, { contentType: "image/png", path });
   }
 }
@@ -1040,19 +1217,26 @@ async function assertSavedContrast(page: Page, testInfo: TestInfo) {
       ".saved-residence .residence-result h3",
       ".saved-residence .residence-provenance a",
       ".saved-residence-details > button",
-    ].map((selector) => {
-      const element = document.querySelector(selector);
-      if (!element) {
+    ].flatMap((selector) => {
+      const elements = Array.from(document.querySelectorAll(selector)).filter(
+        (element) => {
+          const box = element.getBoundingClientRect();
+          return box.width > 0 && box.height > 0;
+        },
+      );
+      if (elements.length === 0) {
         throw new Error(`Missing saved contrast target: ${selector}`);
       }
-      const foreground = getComputedStyle(element).color;
-      const backdrop = background(element);
-      const lighter = Math.max(luminance(foreground), luminance(backdrop));
-      const darker = Math.min(luminance(foreground), luminance(backdrop));
-      return {
-        ratio: (lighter + 0.05) / (darker + 0.05),
-        selector,
-      };
+      return elements.map((element, index) => {
+        const foreground = getComputedStyle(element).color;
+        const backdrop = background(element);
+        const lighter = Math.max(luminance(foreground), luminance(backdrop));
+        const darker = Math.min(luminance(foreground), luminance(backdrop));
+        return {
+          ratio: (lighter + 0.05) / (darker + 0.05),
+          selector: `${selector}[${index}]`,
+        };
+      });
     });
   });
   for (const sample of contrast) {
@@ -1066,9 +1250,21 @@ async function assertSavedContrast(page: Page, testInfo: TestInfo) {
 
 async function openPostgresInspection(): Promise<PostgresInspection | null> {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString || !/^postgres(?:ql)?:\/\//i.test(connectionString)) {
+  const hosted =
+    process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+  if (!connectionString || connectionString.startsWith("pglite://")) {
+    if (hosted) {
+      throw new Error(
+        "Hosted residence E2E requires the authoritative PostgreSQL DATABASE_URL.",
+      );
+    }
     return null;
   }
+  if (!/^postgres(?:ql)?:\/\//i.test(connectionString)) {
+    throw new Error("Residence E2E DATABASE_URL is not PostgreSQL or PGlite.");
+  }
+  // The Playwright app and seed must inherit this same DATABASE_URL. The raw
+  // row checks after browser mutations fail if either side points elsewhere.
   return { connectionString, pool: new Pool({ connectionString }) };
 }
 
@@ -1078,13 +1274,11 @@ async function readRawResidence(
 ): Promise<RawResidence> {
   const [parent, divisions] = await Promise.all([
     inspection.pool.query<RawResidenceParent>(
-      `select "user_id", "envelope_version", "key_version", "iv", "ciphertext", "tag", "resolution_status"
-       from "saved_residence" where "user_id" = $1`,
+      `select * from "saved_residence" where "user_id" = $1`,
       [userId],
     ),
     inspection.pool.query<RawResidenceDivision>(
-      `select "type", "id_scheme", "division_id", "name", "display_order"
-       from "saved_residence_division" where "user_id" = $1
+      `select * from "saved_residence_division" where "user_id" = $1
        order by "display_order" asc`,
       [userId],
     ),
@@ -1094,6 +1288,7 @@ async function readRawResidence(
 
 function expectedRawDivisions(
   residence: ResolvedResidence,
+  userId: string,
 ): RawResidenceDivision[] {
   return residence.divisions.map((division, displayOrder) => ({
     display_order: displayOrder,
@@ -1101,6 +1296,7 @@ function expectedRawDivisions(
     id_scheme: division.idScheme,
     name: division.name,
     type: division.type,
+    user_id: userId,
   }));
 }
 
@@ -1169,16 +1365,25 @@ async function runRotation(connectionString: string): Promise<{
     child.stdout.on("data", (chunk: string) => {
       stdout += chunk;
     });
+    let spawnError: Error | null = null;
+    let timedOut = false;
     const timeout = setTimeout(() => {
-      child.kill();
-      reject(new Error("Saved residence rotation timed out."));
-    }, 30_000);
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, 20_000);
     child.once("error", (error) => {
-      clearTimeout(timeout);
-      reject(error);
+      spawnError = error;
     });
     child.once("close", (code) => {
       clearTimeout(timeout);
+      if (timedOut) {
+        reject(new Error("Saved residence rotation timed out and terminated."));
+        return;
+      }
+      if (spawnError) {
+        reject(spawnError);
+        return;
+      }
       resolveResult({ code, stderr, stdout });
     });
   });
