@@ -69,7 +69,10 @@ export function ResidencePreview() {
   const deletePendingRef = useRef(false);
   const focusManualAfterPendingRef = useRef(false);
   const focusDeleteAfterConfirmationRef = useRef(false);
+  const focusSignInAfterPendingRef = useRef(false);
+  const candidateControlsRef = useRef<HTMLElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const signInRef = useRef<HTMLAnchorElement>(null);
   const mountedRef = useRef(true);
   const resolutionRequestRef = useRef(0);
 
@@ -136,6 +139,15 @@ export function ResidencePreview() {
       focusDeleteAfterConfirmationRef.current = false;
       deleteButtonRef.current?.focus();
     }
+    if (
+      savedState === "unauthenticated" &&
+      !savePending &&
+      !deletePending &&
+      focusSignInAfterPendingRef.current
+    ) {
+      focusSignInAfterPendingRef.current = false;
+      signInRef.current?.focus();
+    }
   }, [
     candidate,
     deleteConfirmation,
@@ -158,7 +170,11 @@ export function ResidencePreview() {
       if (!mountedRef.current) {
         return;
       }
-      focusManualAfterPendingRef.current = true;
+      const activeElement = document.activeElement;
+      focusManualAfterPendingRef.current =
+        activeElement === null ||
+        activeElement === document.body ||
+        (candidateControlsRef.current?.contains(activeElement) ?? false);
       setCandidate(null);
       setConsentAccepted(false);
       setStatus(
@@ -179,6 +195,7 @@ export function ResidencePreview() {
     setSavedState("unauthenticated");
     setSavedError(message);
     setDeleteConfirmation(false);
+    focusSignInAfterPendingRef.current = true;
     clearCandidate();
     setStatus("");
   }
@@ -557,7 +574,9 @@ export function ResidencePreview() {
             <p role="status">{savedError}</p>
             <p>No saved residence data was changed.</p>
             {savedState === "unauthenticated" ? (
-              <a href="/sign-in">Sign in</a>
+              <a href="/sign-in" ref={signInRef}>
+                Sign in
+              </a>
             ) : (
               <button
                 className="secondary-button"
@@ -693,6 +712,7 @@ export function ResidencePreview() {
           <section
             aria-labelledby="save-residence-heading"
             className="save-residence"
+            ref={candidateControlsRef}
           >
             <h3 id="save-residence-heading">Save this residence</h3>
             {savedResidence ? (
@@ -731,6 +751,11 @@ function ResidenceResult({
   label: "Residence preview match" | "Saved residence match";
   result: SavedResidenceResolution;
 }) {
+  const provenanceLabel =
+    label === "Saved residence match"
+      ? "Saved residence source and freshness"
+      : "Residence preview source and freshness";
+
   return (
     <section aria-label={label} className="residence-result">
       <h3>
@@ -748,7 +773,7 @@ function ResidenceResult({
         ))}
       </ul>
 
-      <section aria-label="Source and freshness" className="residence-provenance">
+      <section aria-label={provenanceLabel} className="residence-provenance">
         <h4>Source and freshness</h4>
         <p>
           Source: <a href={result.source.url}>{result.source.name}</a>
