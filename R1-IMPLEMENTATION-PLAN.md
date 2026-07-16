@@ -4,9 +4,9 @@
 
 The RED/GREEN workers must also use `superpowers:test-driven-development`, the coordinator must use `superpowers:requesting-code-review` before VERIFIED, and every completion claim must use `superpowers:verification-before-completion`.
 
-**Goal:** Bind the user-approved concurrent-roadmap operating model into repository policy, prove it with durable contract tests, and merge both the R1 feature PR and its post-merge closeout PR without activating or implementing F4–F14, G1, or G2.
+**Goal:** Bind the user-approved concurrent-roadmap operating model and mandatory `ponytail full` then `caveman full` feature-design-agent injection into repository policy, prove both with durable contract tests, and merge the R1 feature and closeout PRs without activating or implementing F4–F14, G1, or G2.
 
-**Architecture:** `AGENTS.md` owns binding contributor/agent behavior; `ROADMAP.md` owns the concise execution contract, item state, and evidence; `README.md` mirrors public status; `tests/foundation-contract.test.ts` enforces durable semantic invariants; `.gitignore` isolates feature worktrees. R1 executes sequentially because its test and policy files form one shared mutable contract. Independent review is read-only.
+**Architecture:** `AGENTS.md` owns binding contributor/agent behavior, including one portable feature-design dispatch line; `ROADMAP.md` owns the concise execution contract, item state, and evidence; `README.md` mirrors public status; `tests/foundation-contract.test.ts` enforces durable semantic invariants; `.gitignore` isolates feature worktrees. R1 adds no wrapper skill or machine path. Work stays sequential because its test and policy files form one shared mutable contract.
 
 **Tech Stack:** Markdown policy, TypeScript, Vitest, npm 11 on Node 24, Git worktrees/branches, GitHub pull requests and Actions.
 
@@ -17,6 +17,8 @@ The RED/GREEN workers must also use `superpowers:test-driven-development`, the c
 - R1 is the sole transition exception to the worktree rule: its branch was created in the root checkout before the rule becomes binding. Every roadmap item activated after R1 closes uses the new isolated worktree contract.
 - Do not modify production code, migrations, environment variables, CI, F4–F14, G1, or G2.
 - The coordinator alone edits `AGENTS.md`, `ROADMAP.md`, and `README.md`, changes roadmap state, creates PRs, decides merges, and records evidence.
+- Every dispatch that includes `DISCOVER/DESIGN/PLAN`, including the feature lead, must include `Required skills: invoke ponytail full, then caveman full, before exploration.` Skill names resolve through the agent's catalog; never inject a machine-specific path.
+- Ponytail may remove speculative design, never explicit requirements, trust-boundary validation, data-loss prevention, privacy, security, accessibility, or required tests. Caveman may compress prose, never required design/Gate evidence; full prose returns when compression risks ambiguity.
 - The RED agent may modify only `tests/foundation-contract.test.ts`.
 - Run Windows commands through `npm.cmd`. Do not use skipped or quarantined tests.
 - A `DONE` heading on a closeout branch has no authority until that branch is merged into `main`.
@@ -28,7 +30,7 @@ The RED/GREEN workers must also use `superpowers:test-driven-development`, the c
 
 | ID | Outcome | Expected RED/check | Mutable files | Depends on | Stop condition |
 | --- | --- | --- | --- | --- | --- |
-| R1-T1 | Falsifiable contract tests exist | Focused run reports seven new policy failures and the amendment-state guard passes | `tests/foundation-contract.test.ts`; coordinator records evidence in `ROADMAP.md` | Human Gate A | RED evidence independently reproduced |
+| R1-T1 | Falsifiable contract tests exist | Focused run reports seven new policy failures, including missing portable feature-design skill injection, and the amendment-state guard passes | `tests/foundation-contract.test.ts`; coordinator records evidence in `ROADMAP.md` | Human Gate A | RED evidence independently reproduced |
 | R1-T2 | Binding policy matches the approved model | Focused run passes all foundation contract tests | `AGENTS.md`, `ROADMAP.md`, `README.md`, `.gitignore` | R1-T1 | GREEN evidence recorded |
 | R1-T3 | Whole change is independently verified | Focused/full/E2E/security/diff checks pass; read-only review has no unresolved Critical or Important finding | Coordinator evidence updates only | R1-T2 | R1 is `VERIFIED` |
 | R1-T4 | R1 feature change is reviewed and merged | PR CI passes, GitHub is mergeable, Human Gate B is approved, feature PR merges | Feature branch and GitHub PR | R1-T3 | Feature commit is reachable from `main` |
@@ -52,7 +54,7 @@ There are no parallel implementation lanes in R1. R1-T1 must establish RED befor
 
 **Agent brief**
 
-- **Outcome:** Durable tests fail specifically because the old single-item/direct-to-DONE policy is still binding.
+- **Outcome:** Durable tests fail because the old single-item/direct-to-DONE policy and skill-free feature-design briefs are still binding.
 - **Allowed file:** `tests/foundation-contract.test.ts` only.
 - **Applicable DNA IDs:** None; this is contributor workflow.
 - **Dependencies/interfaces:** Human Gate A approved; clean `codex/r1-roadmap-coordinator-contract` branch; current `ROADMAP.md` R1 design is read-only to the agent.
@@ -212,17 +214,38 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("separates coordinator, feature lead, reviewer, and shared-file authority", () => {
+  it("separates roles and requires portable feature-design skills", () => {
     const agents = readRepositoryFile("AGENTS.md")
+    const roadmap = readRepositoryFile("ROADMAP.md")
     const delegation = readMarkdownSection(
       agents,
       "### Task graph and delegation",
     )
-    const admission = readMarkdownSection(
-      agents,
-      "### Concurrency admission and shared ownership",
-    )
+    const execution = readMarkdownSection(roadmap, "## Execution contract")
 
+    expectTokensInOrder(delegation, ["ponytail full", "caveman full"])
+    expect(delegation).toContain(
+      "Required skills: invoke ponytail full, then caveman full, before exploration.",
+    )
+    expect(delegation).toContain(
+      "This applies to every dispatch that includes `DISCOVER/DESIGN/PLAN`, including the feature lead.",
+    )
+    expect(delegation).toContain(
+      "Resolve both skills by name from the agent's available skill catalog; never hardcode a machine path.",
+    )
+    expect(delegation).toContain(
+      "Ponytail governs design scope but cannot simplify away explicit requirements, trust-boundary validation, data-loss prevention, privacy, security, accessibility, or required tests.",
+    )
+    expect(delegation).toContain(
+      "Caveman governs communication but cannot omit outcome, dependencies, interfaces, decisions, rejected alternatives, risks, non-goals, expected RED, evidence, Human Gates, or blockers.",
+    )
+    expect(delegation).toContain(
+      "Use full prose whenever compression would create ambiguity.",
+    )
+    expect(execution).toContain(
+      "DESIGN AGENTS: every dispatch that includes DISCOVER/DESIGN/PLAN, including the feature lead, requires ponytail full then caveman full before exploration.",
+    )
+    expect(agents).not.toMatch(/(?:[A-Za-z]:[\\/]|\/(?:Users|home)\/)/)
     expect(delegation).toContain(
       "The coordinator owns dependency and concurrency audits",
     )
@@ -233,6 +256,10 @@ describe("concurrent roadmap delivery contract", () => {
       "cannot change roadmap status, merge, edit another worktree, or modify coordinator-owned authoritative files",
     )
     expect(delegation).toContain("Independent review agents remain read-only")
+    const admission = readMarkdownSection(
+      agents,
+      "### Concurrency admission and shared ownership",
+    )
     expect(admission).toContain(
       "exactly one active branch that owns each shared file",
     )
@@ -377,7 +404,7 @@ Run:
 npm.cmd test -- tests/foundation-contract.test.ts
 ```
 
-Expected: exit 1; 14 tests total, 7 failed and 7 passed. The seven failures must map to admission, isolation, ordered completion, roles, durable records, conflict recovery, and escalation/scope. The amendment-state guard must pass.
+Expected: exit 1; 14 tests total, 7 failed and 7 passed. The seven failures must map to admission, isolation, ordered completion, roles/feature-design skill injection, durable records, conflict recovery, and escalation/scope. The amendment-state guard must pass.
 
 - [ ] **Step 4: Have the coordinator reproduce RED**
 
@@ -388,7 +415,7 @@ The coordinator inspects the complete test diff and independently runs `npm.cmd 
 Change the R1 heading to `[IN PROGRESS (RED)]` and append:
 
 ```md
-- **RED evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: seven expected policy failures and seven passes (the six pre-existing foundation checks plus the transition-safe R1 amendment guard). The failures prove that the binding contract still lacks concurrent admission, branch/worktree isolation, ordered feature/closeout completion, role/shared-file authority, durable coordination records, conflict recovery, and explicit escalation/scope governance.
+- **RED evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: seven expected policy failures and seven passes (the six pre-existing foundation checks plus the transition-safe R1 amendment guard). The failures prove that the binding contract still lacks concurrent admission, branch/worktree isolation, ordered feature/closeout completion, role/shared-file/feature-design-skill authority, durable coordination records, conflict recovery, and explicit escalation/scope governance.
 ```
 
 - [ ] **Step 6: Commit RED**
@@ -467,6 +494,9 @@ Before RED or production work for an item, present its overall design, tests-fir
 - The coordinator owns dependency and concurrency audits, branch/worktree creation, task briefs, `AGENTS.md`, `ROADMAP.md`, `README.md`, roadmap status, Human Gates, review orchestration, CI/PR monitoring, merge decisions, post-merge checks, closeout PRs, and blocker reports; it does not implement feature production code.
 - One feature lead owns one roadmap item from discovery through `VERIFIED` and may coordinate bounded implementation subtasks. It cannot change roadmap status, merge, edit another worktree, or modify coordinator-owned authoritative files.
 - Give each subagent one bounded task with the roadmap/task ID, outcome, allowed files, applicable DNA IDs, dependencies and interfaces, expected RED failure, focused test command, and stop condition.
+- Every feature-design dispatch copies this exact portable line: `Required skills: invoke ponytail full, then caveman full, before exploration.` This applies to every dispatch that includes `DISCOVER/DESIGN/PLAN`, including the feature lead. Resolve both skills by name from the agent's available skill catalog; never hardcode a machine path.
+- Ponytail governs design scope but cannot simplify away explicit requirements, trust-boundary validation, data-loss prevention, privacy, security, accessibility, or required tests.
+- Caveman governs communication but cannot omit outcome, dependencies, interfaces, decisions, rejected alternatives, risks, non-goals, expected RED, evidence, Human Gates, or blockers. Use full prose whenever compression would create ambiguity.
 - Subagents do not change roadmap status or mark work complete. The coordinator inspects their diffs and reruns their tests.
 - Independent review agents remain read-only unless the coordinator assigns a separately approved fix task.
 
@@ -541,6 +571,7 @@ Roadmap items move through `TODO → explicit authorization → feature branch/w
 - ADMISSION: `PASS` requires dependencies `DONE` on `main`, settled interfaces, disjoint mutable files/external state, independent tests, worktrees, and merge order. `CONDITIONAL` additionally records exactly one owner for each shared surface plus deferred integration. `FAIL` means unresolved coupling prevents concurrent work.
 - ISOLATION: every roadmap item activated after R1 closes uses `codex/<roadmap-id>-<slug>` and `.worktrees/<roadmap-id>-<slug>` from dependency-complete `main`; R1 is the sole documented transition exception. The base commit and integrated-main commit are recorded; current `main` must be an ancestor of feature HEAD under `git merge-base --is-ancestor <current-main> <feature-head>` before review or merge.
 - DESIGN/PLAN: record applicable DNA, design, testable task graph, dependencies, interfaces, parallel lanes, risks, and non-goals in the active item; extract one linked plan only when inline detail stops being readable.
+- DESIGN AGENTS: every dispatch that includes DISCOVER/DESIGN/PLAN, including the feature lead, requires ponytail full then caveman full before exploration. Resolve skills by catalog name, never machine path; minimalism cannot remove required safeguards, and compression cannot omit required design or Gate evidence.
 - HUMAN GATE A: user approves the item's design and tests-first plan before RED or production work.
 - RED: record the exact test and expected failure before production code.
 - GREEN: write minimum code required to pass.
@@ -649,6 +680,8 @@ Run:
 
 ```powershell
 rg -n 'single roadmap item|At most one item may be|At most one roadmap item may be|only explicit user approval marks the item `DONE`|only explicit user approval permits `DONE`' AGENTS.md ROADMAP.md
+rg -n '[A-Za-z]:[\\/]|/(Users|home)/' AGENTS.md
+rg -n 'ponytail full|caveman full' AGENTS.md ROADMAP.md
 git diff --name-only main...HEAD
 git status --short
 ```
@@ -656,6 +689,7 @@ git status --short
 Expected:
 
 - The obsolete-policy search prints nothing and exits 1.
+- The machine-path search prints nothing and exits 1; the skill-name search finds both required skills in `AGENTS.md` and `ROADMAP.md`.
 - Changed paths are exactly `.gitignore`, `AGENTS.md`, `README.md`, `ROADMAP.md`, `R1-IMPLEMENTATION-PLAN.md`, and `tests/foundation-contract.test.ts`.
 - Worktree status is clean after evidence updates are committed.
 
@@ -668,7 +702,7 @@ Assign a fresh reviewer this brief:
 - **Allowed files:** Read the complete `main...HEAD` diff and relevant current files; no writes.
 - **Applicable DNA IDs:** None.
 - **Dependencies:** Focused/full verification evidence is available.
-- **Falsifiable check:** Every approved lifecycle, role, admission, ownership, merge, closeout, conflict, escalation, and scope rule is bound and tested; F4–F14/G1/G2 remain untouched.
+- **Falsifiable check:** Every approved lifecycle, role, admission, ownership, portable feature-design skill injection, merge, closeout, conflict, escalation, and scope rule is bound and tested; F4–F14/G1/G2 remain untouched.
 - **Stop condition:** Return findings ranked Critical, Important, Minor; no fix.
 
 The coordinator triages findings. Any Critical or Important finding gets a separately bounded fix task followed by all affected verification and another independent review.
@@ -732,7 +766,7 @@ Expected: push succeeds.
 Run:
 
 ```powershell
-gh pr create --base main --head codex/r1-roadmap-coordinator-contract --title "R1 roadmap coordination: bind concurrent delivery" --body "Binds the approved two-item admission, isolated branch/worktree, coordinator and feature-lead authority, feature and closeout PRs, conflict recovery, escalation, and scope rules. Verified with the focused foundation contract, db:check, full check, E2E, audit, and diff checks recorded in ROADMAP.md. Includes no F4-F14, G1, or G2 production work or activation."
+gh pr create --base main --head codex/r1-roadmap-coordinator-contract --title "R1 roadmap coordination: bind concurrent delivery" --body "Binds the approved two-item admission, isolated branch/worktree, coordinator and feature-lead authority, mandatory portable ponytail-full then caveman-full feature-design briefs, feature and closeout PRs, conflict recovery, escalation, and scope rules. Verified with the focused foundation contract, db:check, full check, E2E, audit, and diff checks recorded in ROADMAP.md. Includes no F4-F14, G1, or G2 production work or activation."
 ```
 
 Expected: GitHub returns the URL of a ready PR targeting `main`.
