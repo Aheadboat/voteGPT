@@ -331,7 +331,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Done:** `POST /api/v1/location/resolve` and the signed-in dashboard preview satisfy the request, provider, token, privacy, recovery, and UX contracts; all focused/full checks and required manual evidence pass; raw input is discarded and never persisted.
 - **Non-goals:** Saved home, shared location cache, distributed rate limiter, local boundary engine, officials, elections, map, reverse-geocoded background tracking, or generalized provider framework.
 
-## R1 — Concurrent Roadmap Delivery Contract [IN PROGRESS (GREEN)]
+## R1 — Concurrent Roadmap Delivery Contract [VERIFIED]
 
 - **Outcome:** The repository can safely coordinate, review, merge, and close up to two dependency-independent roadmap items without weakening explicit authorization, Human Gates, TDD, branch isolation, or main-branch verification.
 - **Dependencies:** F3 is approved, committed, and merged to `main` at `e524494`; hosted PostgreSQL-backed [CI run 29467547931](https://github.com/Aheadboat/voteGPT/actions/runs/29467547931) passed before this branch was created.
@@ -343,13 +343,15 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Whole-branch review correction GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 tests passing after binding the inert activation/setup exception, single `main` activation record, complete admission and stale-branch recovery semantics, structured active-item coordination fields, future-item non-predesign rule, accurate README state, and synchronized plan helper.
 - **Second whole-branch review correction RED evidence (2026-07-15):** Re-review confirmed every prior finding resolved, then `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: two expected failures and twelve passes. The failures prove the contract still lacks an allowed read-only dependency/interface/admission audit before inert activation and lacks a complete two-level authority model for pair state on `main` versus coordinator-authored item phase/evidence on feature branches. Exact active-phase mapping already passes.
 - **Second whole-branch review correction GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 tests passing after binding the coordinator-only read-only pre-activation audit, complete `PASS`/`CONDITIONAL`/`FAIL` outcomes, explicit sequential-order escalation, and two-level authority with no direct-main status writes.
+- **Final integrated verification evidence (2026-07-15):** At branch head `e83ba02`, fetched `origin/main` at `e524494` is an ancestor. The focused foundation contract passed 14/14; `npm.cmd run db:check` passed; `npm.cmd run check` passed 13 Vitest files and 90/90 tests plus route type generation, strict TypeScript, zero-warning lint, and the optimized build; Chromium E2E passed 11/11; `npm.cmd audit --json` reported zero vulnerabilities; diff, obsolete-policy, machine-path, required-skill, exact six-file scope, and clean-worktree checks passed.
+- **Final independent review evidence (2026-07-15):** A read-only whole-branch review confirmed every prior finding resolved and reported 0 Critical, 0 Important, and 0 Minor findings with `Ready to merge: Yes`. No tracked file changed during review.
 - **Implementation plan:** [R1 Concurrent Roadmap Delivery Contract Implementation Plan](./R1-IMPLEMENTATION-PLAN.md). It is separate because the exact RED assertions, binding replacement text, verification commands, PR sequence, and closeout sequence would make this roadmap item unreadable inline.
 - **Applicable UX DNA IDs:** None. R1 changes contributor and agent workflow, not an end-user interface.
 - **Working branch:** `codex/r1-roadmap-coordinator-contract`, created from dependency-complete `main`. R1 remains the sole active item under the existing single-item contract until this amendment is merged and closed. Its root checkout is the explicit transition exception because the isolated-worktree rule does not become binding until R1 is closed; every later roadmap item uses the new worktree contract.
 
 ### Coordination record
 
-- **Phase:** `GREEN`
+- **Phase:** `VERIFIED`
 - **Branch:** `codex/r1-roadmap-coordinator-contract`
 - **Base commit:** `e524494665e882882d36faf0e0cf7d97f773a506`
 - **Integrated-main commit:** `e524494665e882882d36faf0e0cf7d97f773a506`
@@ -357,7 +359,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** `N/A` — coordinator-owned workflow contract; no feature production code.
 - **Ownership:** Coordinator owns authoritative policy/status/evidence; bounded test agents own only assigned contract-test patches.
 - **Merge order:** R1 feature PR, post-merge verification, then R1 closeout PR.
-- **Feature PR/CI:** Pending VERIFIED evidence and PR creation.
+- **Feature PR/CI:** Pending PR creation and hosted CI; local verification and independent review are clean.
 - **Blockers:** None.
 - **Feature merge:** Pending Human Gate B.
 - **Post-merge evidence:** Pending feature merge.
