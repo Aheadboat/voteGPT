@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 
 import { createDatabase } from "@/db";
 import { federalOfficialCache } from "@/db/schema";
@@ -117,6 +117,9 @@ export function createFederalOfficialCacheRepository(
       }
 
       return database.transaction(async (transaction) => {
+        await transaction.execute(
+          sql`lock table ${federalOfficialCache} in share row exclusive mode`,
+        );
         const [existing] = await transaction
           .select({
             cacheKey: federalOfficialCache.cacheKey,
@@ -154,14 +157,29 @@ export function createFederalOfficialCacheRepository(
         const displacedKeys = previousProfileIds
           .filter((id) => !currentSet.has(id))
           .map((id) => profileKey(id));
-        if (displacedKeys.length > 0) {
-          await transaction
-            .delete(federalOfficialCache)
-            .where(inArray(federalOfficialCache.cacheKey, displacedKeys));
-        }
-
-        for (const profile of validated.profiles) {
-          await upsertRecord(transaction, profile);
+        const profilesByKey = new Map(
+          validated.profiles.map((profile) => [profile.cacheKey, profile]),
+        );
+        const affectedKeys = [
+          ...new Set([...displacedKeys, ...profilesByKey.keys()]),
+        ].sort();
+        for (const cacheKey of affectedKeys) {
+          const profile = profilesByKey.get(cacheKey);
+          if (profile) {
+            await upsertRecord(transaction, profile);
+          } else {
+            await transaction
+              .delete(federalOfficialCache)
+              .where(
+                and(
+                  eq(federalOfficialCache.cacheKey, cacheKey),
+                  lte(
+                    federalOfficialCache.retrievedAt,
+                    validated.roster.retrievedAt,
+                  ),
+                ),
+              );
+          }
         }
         await upsertRecord(transaction, validated.roster);
         return { status: "written" } as const;
@@ -314,19 +332,23 @@ async function refreshRoster(
       profiles,
     });
     if (result.status === "ignored") {
+      const latestTime = finiteClock(options.now);
+      if (latestTime === null) {
+        return null;
+      }
       const latest = await safeRead(options.cache, cacheKey);
       const validLatest = latest
-        ? validateRosterRecord(latest, cacheKey, jurisdiction, currentTime)
+        ? validateRosterRecord(latest, cacheKey, jurisdiction, latestTime)
         : null;
       if (
         validLatest === null ||
-        currentTime.getTime() >= validLatest.record.staleAfter.getTime()
+        latestTime.getTime() >= validLatest.record.staleAfter.getTime()
       ) {
         return null;
       }
       return availableRoster(
         validLatest,
-        currentTime.getTime() < validLatest.record.refreshAfter.getTime()
+        latestTime.getTime() < validLatest.record.refreshAfter.getTime()
           ? "fresh"
           : "stale",
       );
@@ -652,7 +674,10 @@ function validateSeat(
       office === null ||
       term === null ||
       sources === null ||
-      !sources.some((source) => source.sourceType === "member")
+      !sources.some((source) => source.sourceType === "member") ||
+      (value.status === "conflict" &&
+        (!hasClerkListEvidence(sources) ||
+          !hasClerkDistrictEvidence(sources, office)))
     ) {
       return null;
     }
@@ -678,9 +703,16 @@ function validateSeat(
       null,
       office,
     );
-    return office && term && sources
-      ? { status: "vacant", office, term, sources }
-      : null;
+    if (
+      office === null ||
+      term === null ||
+      sources === null ||
+      !hasClerkListEvidence(sources) ||
+      !hasClerkDistrictEvidence(sources, office)
+    ) {
+      return null;
+    }
+    return { status: "vacant", office, term, sources };
   }
   if (value.status === "unknown") {
     if (!hasExactKeys(value, ["status", "office", "sources"])) {
@@ -865,7 +897,8 @@ function validateCoverage(value: unknown, house: FederalSeat, senateCount: numbe
   }
   const validHouse =
     house.status === "serving"
-      ? value.house === "verified" || value.house === "partial"
+      ? value.house === "partial" ||
+        (value.house === "verified" && hasClerkListEvidence(house.sources))
       : house.status === "vacant"
         ? value.house === "vacant"
         : house.status === "conflict"
@@ -1023,6 +1056,25 @@ function validClerkUrl(url: string, office: Office | null) {
   const district = String(office.district).padStart(2, "0");
   return url ===
     `https://clerk.house.gov/members/${office.stateCode}${district}/vacancy`;
+}
+
+function hasClerkListEvidence(sources: readonly SourceRef[]) {
+  return sources.some(
+    ({ sourceType, url }) =>
+      sourceType === "vacancy" && url === clerkListUrl,
+  );
+}
+
+function hasClerkDistrictEvidence(
+  sources: readonly SourceRef[],
+  office: Office,
+) {
+  return sources.some(
+    ({ sourceType, url }) =>
+      sourceType === "vacancy" &&
+      url !== clerkListUrl &&
+      validClerkUrl(url, office),
+  );
 }
 
 function servingProfiles(roster: FederalOfficialsRoster) {
@@ -1200,6 +1252,10 @@ async function upsertRecord(
     .values(cacheRecord)
     .onConflictDoUpdate({
       target: federalOfficialCache.cacheKey,
+      setWhere: lte(
+        federalOfficialCache.retrievedAt,
+        cacheRecord.retrievedAt,
+      ),
       set: {
         payload: cacheRecord.payload,
         refreshAfter: cacheRecord.refreshAfter,
