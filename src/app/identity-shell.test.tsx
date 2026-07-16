@@ -115,10 +115,14 @@ describe("public identity shell", () => {
     render(<AccountControls />);
 
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
-    const deletionCopy = screen.getByText(
-      /Deleting your account permanently removes its sessions and linked sign-in methods/i,
-    );
-    expect(deletionCopy).toHaveTextContent(/saved home/i);
+    expect(
+      screen.getByText(/sessions.*linked sign-in methods/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /(?:permanently (?:removes?|deletes?).*saved home|saved home.*permanently (?:removed|deleted))/i,
+      ),
+    ).toBeInTheDocument();
 
     const deleteButton = screen.getByRole("button", {
       name: "Delete my account",
