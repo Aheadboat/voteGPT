@@ -47,6 +47,8 @@ const savedResidenceConsentVersion =
   "saved-residence-v1" satisfies SaveResidenceRequest["consent"]["version"];
 const consentCopy =
   "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
+const unauthenticatedMessage =
+  "Sign in again before managing a saved residence.";
 
 export function ResidencePreview() {
   const [address, setAddress] = useState("");
@@ -172,10 +174,10 @@ export function ResidencePreview() {
   ]);
 
   useLayoutEffect(() => {
-    if (deleteConfirmation) {
+    if (deleteConfirmation && !deletePending) {
       confirmDeleteButtonRef.current?.focus();
     }
-  }, [deleteConfirmation]);
+  }, [deleteConfirmation, deletePending]);
 
   useEffect(() => {
     if (!candidate) {
@@ -270,13 +272,23 @@ export function ResidencePreview() {
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-      const body = (await response.json()) as
-        | ResolutionResponse
-        | ResolutionErrorResponse;
+      const rawBody = await readJsonBody(response);
 
       if (!canApplyResolution(requestId)) {
         return;
       }
+
+      if (
+        response.status === 401 ||
+        hasResponseStatus(rawBody, "unauthenticated")
+      ) {
+        invalidatePrivateResidence(authMessage(rawBody));
+        return;
+      }
+
+      const body = rawBody as
+        | ResolutionResponse
+        | ResolutionErrorResponse;
 
       if (
         response.ok &&
@@ -299,17 +311,6 @@ export function ResidencePreview() {
             : body.status === "matched"
               ? "Residence matched. Review the divisions and source below."
               : "Partial residence match. Review the coverage notes below.",
-        );
-        return;
-      }
-
-      if (
-        (response.status === 401 || body.status === "unauthenticated")
-      ) {
-        invalidatePrivateResidence(
-          "message" in body
-            ? body.message
-            : "Sign in again before managing a saved residence.",
         );
         return;
       }
@@ -446,13 +447,23 @@ export function ResidencePreview() {
         headers: { "content-type": "application/json" },
         method: "POST",
       });
-      const body = (await response.json()) as
-        | SaveResidenceResponse
-        | SavedResidenceErrorResponse;
+      const rawBody = await readJsonBody(response);
 
       if (!mountedRef.current) {
         return;
       }
+
+      if (
+        response.status === 401 ||
+        hasResponseStatus(rawBody, "unauthenticated")
+      ) {
+        invalidatePrivateResidence(authMessage(rawBody));
+        return;
+      }
+
+      const body = rawBody as
+        | SaveResidenceResponse
+        | SavedResidenceErrorResponse;
 
       if (response.ok && body.status === "saved") {
         setSavedResidence(body.residence);
@@ -464,15 +475,6 @@ export function ResidencePreview() {
           body.replaced
             ? "Saved residence was replaced."
             : "Saved residence was saved.",
-        );
-        return;
-      }
-
-      if (response.status === 401 || body.status === "unauthenticated") {
-        invalidatePrivateResidence(
-          "message" in body
-            ? body.message
-            : "Sign in again before managing a saved residence.",
         );
         return;
       }
@@ -530,13 +532,23 @@ export function ResidencePreview() {
         headers: { "content-type": "application/json" },
         method: "DELETE",
       });
-      const body = (await response.json()) as
-        | DeleteSavedResidenceResponse
-        | SavedResidenceErrorResponse;
+      const rawBody = await readJsonBody(response);
 
       if (!mountedRef.current) {
         return;
       }
+
+      if (
+        response.status === 401 ||
+        hasResponseStatus(rawBody, "unauthenticated")
+      ) {
+        invalidatePrivateResidence(authMessage(rawBody));
+        return;
+      }
+
+      const body = rawBody as
+        | DeleteSavedResidenceResponse
+        | SavedResidenceErrorResponse;
 
       if (
         response.ok &&
@@ -548,15 +560,6 @@ export function ResidencePreview() {
         clearCandidate();
         focusManualAfterPendingRef.current = true;
         setStatus("Saved residence was deleted.");
-        return;
-      }
-
-      if (response.status === 401 || body.status === "unauthenticated") {
-        invalidatePrivateResidence(
-          "message" in body
-            ? body.message
-            : "Sign in again before managing a saved residence.",
-        );
         return;
       }
 
@@ -785,6 +788,34 @@ export function ResidencePreview() {
       </section>
     </>
   );
+}
+
+async function readJsonBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function hasResponseStatus(
+  body: unknown,
+  status: string,
+): body is { status: string } {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "status" in body &&
+    body.status === status
+  );
+}
+
+function authMessage(body: unknown) {
+  return hasResponseStatus(body, "unauthenticated") &&
+    "message" in body &&
+    typeof body.message === "string"
+    ? body.message
+    : unauthenticatedMessage;
 }
 
 function ResidenceResult({
