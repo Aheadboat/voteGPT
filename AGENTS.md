@@ -107,6 +107,15 @@ For each active item, `ROADMAP.md` records phase, branch, base commit, integrate
 
 The coordinator may investigate and propose a new roadmap item only for a demonstrated launch, safety, compliance, operability, or dependency gap not covered by existing items. Adding, ordering, activating, deferring, or removing an item requires explicit user approval. No agent may silently widen scope.
 
+## Temporary autonomous F4-F8 integration batch
+
+- **Scope and base:** The user's 2026-07-16 standing authorization covers the ordered feature set F4, F5, F6, F7, and F8 on `codex/autonomous-f4-f8-integration`, forked from actual `main` at `d5978ba830f0ee715c9162afba8963139c0fb707`. It also covers the prerequisite G1 evaluation needed by F7 only through a no-spend public-source fallback; there is no paid vendor commitment.
+- **Temporary authority:** For this batch only, `codex/autonomous-f4-f8-integration` substitutes for `main` in activation, current-base, feature-merge, closeout, and `DONE` rules. Coordinator-owned activation, feature and closeout PRs target that branch, retain independent review and hosted CI, and merge only when the normal mergeability, verification, ownership, and conflict rules pass. Actual `main` stays unchanged.
+- **Admission:** Standing authorization places work in an authorized queue; it does not make queued work active. At most two roadmap items may be active. Before each activation the coordinator performs the normal read-only dependency/interface/admission audit, records ownership and merge order, and activates only dependency-complete work. Coupled work remains sequential.
+- **Delegated gates:** The user delegated interim approvals so the coordinator may satisfy delegated Gate A after a complete design and tests-first plan receive independent review with no unresolved Critical or Important finding. The coordinator may satisfy delegated Gate B only after fresh focused and full verification, independent whole-feature review, hosted CI, mergeability, and the complete evidence packet. Records must identify the user's standing authorization and the coordinator's gate decision; they must not claim the user reviewed an unseen artifact.
+- **Quality and role boundaries:** TDD, privacy, security, accessibility, civic/editorial integrity, provider-rights checks, equal treatment, source/freshness evidence, feature-lead isolation, and conflict recovery remain binding. The coordinator remains coordinator-only and does not implement feature production code. Product, legal, credential, or spending needs that cannot be resolved within the approved no-spend scope remain true blockers.
+- **Final handoff:** After the authorized items close on the integration branch, the coordinator opens a cumulative PR from `codex/autonomous-f4-f8-integration` to actual `main` with all evidence for final human review and must not merge it. Only the user's later approval may integrate the batch into actual `main`.
+
 ## Domain contracts
 
 `AGENTS.md` is the context router. Before domain work, read the matching contract, do not load unrelated domain contracts, and give its applicable IDs to any delegated agent.

@@ -61,6 +61,15 @@ Roadmap items move through `TODO → explicit authorization → read-only depend
 - No skipped tests or arbitrary coverage percentage.
 - External providers use small fixtures and contract tests; credentialed live tests remain optional.
 
+## Temporary autonomous F4-F8 integration batch
+
+- **Standing authorization:** On 2026-07-16 the user authorized the ordered feature set F4, F5, F6, F7, and F8 for autonomous coordination on `codex/autonomous-f4-f8-integration`, based on actual `main` at `d5978ba830f0ee715c9162afba8963139c0fb707`. The authorization also covers the required G1 evaluation only through a no-spend public-source fallback; there is no paid vendor commitment.
+- **Authority boundary:** Actual `main` remains frozen at the batch base. For this batch, the integration branch is the authoritative base for activation, active slots, ownership, merges, closeout, and `DONE`; coordinator-owned activation, feature and closeout PRs target it and retain independent review, hosted CI, mergeability, and focused/full verification.
+- **Admission boundary:** Authorization is a queue, not activation. At most two roadmap items may be active, and every candidate still receives a read-only dependency/interface/admission audit, isolated worktree, ownership record, and merge order. F4 closes before F5 accepts its shared-surface handoff; F6 waits for F5; G1 waits for F6; F7 waits for G1; F8 waits for F7.
+- **Delegated gates:** Standing authorization permits the coordinator to record delegated Gate A only after a complete design and tests-first task graph pass independent plan review. It permits delegated Gate B only after fresh focused/full verification, independent whole-feature review, hosted CI, GitHub mergeability, and a complete evidence packet. The record distinguishes the user's standing authorization from the coordinator's artifact-specific decision.
+- **Safety boundary:** The batch does not waive TDD, privacy, security, accessibility, equal-candidate treatment, deterministic civic rules, provider rights, source/freshness evidence, conflict recovery, or coordinator/feature-lead separation. Unresolvable product, legal, credential, or spending needs remain blockers.
+- **Final handoff:** After the five features and required G1 gate close on the integration branch, the coordinator opens a cumulative integration-to-actual-`main` PR for final human review and must not merge it. The morning review is the only authority to move this batch onto actual `main`.
+
 ## R0 — Durable Project Contract [DONE]
 
 - **Outcome:** Repository has durable product, roadmap, and agent guidance before application code.

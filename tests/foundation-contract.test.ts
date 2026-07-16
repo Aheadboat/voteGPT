@@ -571,6 +571,51 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
+  it("scopes standing F4-F8 authorization to an isolated integration branch", () => {
+    const agents = readRepositoryFile("AGENTS.md")
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const readme = readRepositoryFile("README.md")
+    const agentBatch = readMarkdownSection(
+      agents,
+      "## Temporary autonomous F4-F8 integration batch",
+    )
+    const roadmapBatch = readMarkdownSection(
+      roadmap,
+      "## Temporary autonomous F4-F8 integration batch",
+    )
+
+    for (const batch of [agentBatch, roadmapBatch]) {
+      expect(batch).toContain("`codex/autonomous-f4-f8-integration`")
+      expect(batch).toContain("`d5978ba830f0ee715c9162afba8963139c0fb707`")
+      expectTokensInOrder(batch, ["F4", "F5", "F6", "F7", "F8"])
+      expect(batch).toContain("At most two roadmap items may be active")
+      expect(batch).toContain("dependency/interface/admission audit")
+      expect(batch).toContain("independent review")
+      expect(batch).toContain("hosted CI")
+      expect(batch).toContain("feature and closeout PRs")
+      expect(batch).toContain("standing authorization")
+      expect(batch).toContain("delegated Gate A")
+      expect(batch).toContain("delegated Gate B")
+      expect(batch).toContain("G1")
+      expect(batch).toContain("no paid vendor commitment")
+      expect(batch).toContain("final human review")
+      expect(batch).toContain("must not merge")
+    }
+
+    expect(agentBatch).toContain(
+      "The coordinator remains coordinator-only and does not implement feature production code.",
+    )
+    expect(roadmapBatch).toContain(
+      "Actual `main` remains frozen at the batch base",
+    )
+    expect(readme).toContain(
+      "F4-F8 autonomous integration batch is staged on `codex/autonomous-f4-f8-integration`",
+    )
+    expect(readme).toContain(
+      "The batch branch will not merge into `main` before final human review.",
+    )
+  })
+
   it("keeps human escalation packets and scope changes explicit", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const recovery = readMarkdownSection(
@@ -789,7 +834,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readme).toMatch(/F5[^.\n]*active/i)
     }
     expect(readme).toContain(
-      "F6 and every later roadmap item remain TODO",
+      "F6, F7, and F8 remain TODO in the authorized batch queue",
     )
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
