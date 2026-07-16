@@ -1,0 +1,24 @@
+{
+  "member": {
+    "bioguideId": "S000002",
+    "currentMember": true,
+    "directOrderName": "Morgan Patel",
+    "invertedOrderName": "Patel, Morgan",
+    "state": "California",
+    "terms": [
+      {
+        "memberType": "Senator",
+        "chamber": "Senate",
+        "congress": 119,
+        "stateCode": "CA",
+        "stateName": "California",
+        "startYear": 2025
+      }
+    ],
+    "updateDate": "2026-07-15T07:30:00Z"
+  },
+  "request": {
+    "contentType": "application/json",
+    "format": "json"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "member": {
+    "bioguideId": "H000001",
+    "currentMember": true,
+    "directOrderName": "Alex Rivera",
+    "invertedOrderName": "Rivera, Alex",
+    "state": "California",
+    "district": 12,
+    "terms": [
+      {
+        "memberType": "Representative",
+        "chamber": "House of Representatives",
+        "congress": 119,
+        "stateCode": "CA",
+        "stateName": "California",
+        "district": 12,
+        "startYear": 2025
+      }
+    ],
+    "updateDate": "2026-07-15T09:30:00Z"
+  },
+  "request": {
+    "contentType": "application/json",
+    "format": "json"
+  }
+}
