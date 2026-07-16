@@ -31,6 +31,19 @@ const minimalFixture = `<!doctype html>
     <a href="/members/GA13/vacancy">Current vacancy</a>
   </li>
 </div>`;
+const inertMarkupTags = [
+  "script",
+  "style",
+  "textarea",
+  "template",
+  "xmp",
+  "iframe",
+  "noembed",
+  "noframes",
+  "plaintext",
+  "title",
+  "noscript",
+] as const;
 
 afterEach(() => {
   vi.useRealTimers();
@@ -172,6 +185,10 @@ describe("House Clerk current-vacancy adapter", () => {
       fixture.replace("/members/GA13/vacancy", "/Members/GA13/Vacancy"),
     ],
     [
+      "percent-encoded vacancy path",
+      fixture.replace("/members/GA13/vacancy", "/members/GA13/%76acancy"),
+    ],
+    [
       "malformed anchor markup",
       fixture.replace("Current vacancy</a>", "Current vacancy"),
     ],
@@ -213,6 +230,30 @@ describe("House Clerk current-vacancy adapter", () => {
   ] as const)("does not promote %s to verified evidence", async (_label, html) => {
     await expect(
       lookup(vi.fn(async () => htmlResponse(html))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it.each([
+    [
+      "visible vacancy text",
+      '<a href="/profile">Current vacancy</a>',
+    ],
+    [
+      "vacancy semantics in another attribute",
+      '<a href="/profile" data-seat="current vacancy">Former member profile</a>',
+    ],
+    [
+      "percent-encoded vacancy semantics in another attribute",
+      '<a href="/profile" data-seat="/members/GA13/%76acancy">Former member profile</a>',
+    ],
+  ] as const)("fails closed on noncanonical %s", async (_label, anchor) => {
+    const adversarial = fixture.replace(
+      '<a href="/members/GA13/vacancy">Current vacancy</a>',
+      anchor,
+    );
+
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(adversarial))),
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 
@@ -356,16 +397,32 @@ describe("House Clerk current-vacancy adapter", () => {
     },
   );
 
-  it.each(["script", "style", "textarea", "template"])(
+  it.each(inertMarkupTags)(
     "fails closed before %s content can synthesize vacancy tags",
-    async (rawTextTag) => {
+    async (inertTag) => {
       const rawTextFixture = minimalFixture.replace(
         '<a href="/members/GA13/vacancy">Current vacancy</a>',
-        `<${rawTextTag}>"<a href='/members/TX01/vacancy'>fake</a>"</${rawTextTag}>`,
+        `<${inertTag}>"<a href='/members/TX01/vacancy'>fake</a>"</${inertTag}>`,
       );
 
+      const outcome = await lookup(
+        vi.fn(async () => htmlResponse(rawTextFixture)),
+      );
+      if (inertTag === "title") {
+        expect(expectAvailable(outcome).vacancies).toEqual([]);
+      } else {
+        expect(outcome).toEqual({ status: "unavailable", reason: "malformed" });
+      }
+    },
+  );
+
+  it.each(inertMarkupTags)(
+    "fails closed before %s content can synthesize a full owner",
+    async (inertTag) => {
+      const fakeOwner = `<${inertTag}>"${minimalFixture}"</${inertTag}>`;
+
       await expect(
-        lookup(vi.fn(async () => htmlResponse(rawTextFixture))),
+        lookup(vi.fn(async () => htmlResponse(fakeOwner))),
       ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
     },
   );
@@ -493,6 +550,7 @@ describe("House Clerk current-vacancy adapter", () => {
     });
     expect(cancelled).toBe(true);
   });
+
 });
 
 function lookup(providerFetch: typeof globalThis.fetch) {

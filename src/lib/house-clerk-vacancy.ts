@@ -8,7 +8,19 @@ const clerkOrigin = "https://clerk.house.gov";
 const vacancyListUrl = `${clerkOrigin}/Members/ViewVacancies`;
 const timeoutMilliseconds = 5_000;
 const maximumBodyBytes = 1024 * 1024;
-const rawTextNames = new Set(["script", "style", "textarea", "template"]);
+const rawTextNames = new Set([
+  "script",
+  "style",
+  "textarea",
+  "template",
+  "xmp",
+  "iframe",
+  "noembed",
+  "noframes",
+  "plaintext",
+  "title",
+  "noscript",
+]);
 const jurisdictionCodes = new Set([
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
   "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -224,19 +236,16 @@ function parseVacancies(html: string, currentCongress: number) {
   const vacancies: Array<{ stateCode: string; district: number; url: string }> = [];
   const seenSeats = new Set<string>();
   for (const link of links) {
+    if (!anchorLooksVacant(link)) {
+      continue;
+    }
     const href = link.attributes.get("href");
     if (href === undefined || href === null) {
-      if (anchorWithoutHrefLooksVacant(link)) {
-        return null;
-      }
-      continue;
+      return null;
     }
     const parsed = vacancyLink(href);
-    if (parsed.status === "unrelated") {
-      continue;
-    }
     if (
-      parsed.status === "invalid" ||
+      parsed.status !== "valid" ||
       seenSeats.has(`${parsed.stateCode}:${parsed.district}`)
     ) {
       return null;
@@ -327,6 +336,16 @@ function relevantTokens(html: string): TagToken[] | null {
       nameEnd += 1;
     }
     const rawName = html.slice(nameStart, nameEnd).toLowerCase();
+    if (rawName === "title" && !closing) {
+      const closingTitle = /<\/title[\t\n\f\r ]*>/gi;
+      closingTitle.lastIndex = end + 1;
+      const match = closingTitle.exec(html);
+      if (match === null) {
+        return null;
+      }
+      cursor = match.index + match[0].length;
+      continue;
+    }
     if (rawTextNames.has(rawName)) {
       return null;
     }
@@ -475,13 +494,22 @@ function hasClasses(value: string | null | undefined, ...required: string[]) {
   return required.every((name) => classes.has(name));
 }
 
-function anchorWithoutHrefLooksVacant(element: RelevantElement) {
-  return (
-    /\bvacancy\b/i.test(plainText(element.content)) ||
-    [...element.attributes.values()].some(
-      (value) => value !== null && /\/vacancy\b/i.test(value),
-    )
+function anchorLooksVacant(element: RelevantElement) {
+  return [plainText(element.content), ...element.attributes.values()].some(
+    (value) => value !== null && hasVacancySemantics(value),
   );
+}
+
+function hasVacancySemantics(value: string) {
+  if (/vacanc(?:y|ies)/i.test(value)) {
+    return true;
+  }
+
+  try {
+    return /vacanc(?:y|ies)/i.test(decodeURIComponent(value));
+  } catch {
+    return false;
+  }
 }
 
 function vacancyLink(
