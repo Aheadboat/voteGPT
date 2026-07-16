@@ -36,8 +36,9 @@ export default async function DashboardPage() {
           to save it to your account. Public information remains accessible
           from the home page.
         </p>
-        <ResidencePreview />
-        <AccountControls />
+        <AccountControls>
+          <ResidencePreview />
+        </AccountControls>
       </section>
     </main>
   );
