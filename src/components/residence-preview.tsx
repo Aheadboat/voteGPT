@@ -80,12 +80,14 @@ export function ResidencePreview() {
   const signInRef = useRef<HTMLAnchorElement>(null);
   const mountedRef = useRef(true);
   const resolutionRequestRef = useRef(0);
+  const authResponseGenerationRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       resolutionRequestRef.current += 1;
+      authResponseGenerationRef.current += 1;
       pendingRef.current = false;
     };
   }, []);
@@ -224,6 +226,24 @@ export function ResidencePreview() {
     setStatus("");
   }
 
+  function invalidateUnauthorizedResponse(
+    response: Response,
+    responseGeneration: number,
+  ) {
+    invalidatePrivateResidence(unauthenticatedMessage);
+    void readJsonBody(response).then((body) => {
+      const message = trustedAuthMessage(body);
+      if (
+        message === null ||
+        !mountedRef.current ||
+        authResponseGenerationRef.current !== responseGeneration
+      ) {
+        return;
+      }
+      setSavedError(message);
+    });
+  }
+
   function begin(message: string) {
     if (
       pendingRef.current ||
@@ -235,6 +255,7 @@ export function ResidencePreview() {
 
     const requestId = resolutionRequestRef.current + 1;
     resolutionRequestRef.current = requestId;
+    authResponseGenerationRef.current += 1;
     pendingRef.current = true;
     setPending(true);
     setResult(null);
@@ -266,23 +287,33 @@ export function ResidencePreview() {
     requestId: number,
     manualAddress?: string,
   ) {
+    const responseGeneration = authResponseGenerationRef.current;
     try {
       const response = await fetch(resolveEndpoint, {
         body: JSON.stringify(input),
         headers: { "content-type": "application/json" },
         method: "POST",
       });
+
+      if (!canApplyResolution(requestId)) {
+        return;
+      }
+
+      if (response.status === 401) {
+        invalidateUnauthorizedResponse(response, responseGeneration);
+        return;
+      }
+
       const rawBody = await readJsonBody(response);
 
       if (!canApplyResolution(requestId)) {
         return;
       }
 
-      if (
-        response.status === 401 ||
-        hasResponseStatus(rawBody, "unauthenticated")
-      ) {
-        invalidatePrivateResidence(authMessage(rawBody));
+      if (hasResponseStatus(rawBody, "unauthenticated")) {
+        invalidatePrivateResidence(
+          trustedAuthMessage(rawBody) ?? unauthenticatedMessage,
+        );
         return;
       }
 
@@ -427,6 +458,8 @@ export function ResidencePreview() {
     }
 
     savePendingRef.current = true;
+    authResponseGenerationRef.current += 1;
+    const responseGeneration = authResponseGenerationRef.current;
     setSavePending(true);
     setStatus(
       savedResidence
@@ -447,17 +480,26 @@ export function ResidencePreview() {
         headers: { "content-type": "application/json" },
         method: "POST",
       });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (response.status === 401) {
+        invalidateUnauthorizedResponse(response, responseGeneration);
+        return;
+      }
+
       const rawBody = await readJsonBody(response);
 
       if (!mountedRef.current) {
         return;
       }
 
-      if (
-        response.status === 401 ||
-        hasResponseStatus(rawBody, "unauthenticated")
-      ) {
-        invalidatePrivateResidence(authMessage(rawBody));
+      if (hasResponseStatus(rawBody, "unauthenticated")) {
+        invalidatePrivateResidence(
+          trustedAuthMessage(rawBody) ?? unauthenticatedMessage,
+        );
         return;
       }
 
@@ -523,6 +565,8 @@ export function ResidencePreview() {
     }
 
     deletePendingRef.current = true;
+    authResponseGenerationRef.current += 1;
+    const responseGeneration = authResponseGenerationRef.current;
     setDeletePending(true);
     setStatus("Deleting saved residence…");
 
@@ -532,17 +576,26 @@ export function ResidencePreview() {
         headers: { "content-type": "application/json" },
         method: "DELETE",
       });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      if (response.status === 401) {
+        invalidateUnauthorizedResponse(response, responseGeneration);
+        return;
+      }
+
       const rawBody = await readJsonBody(response);
 
       if (!mountedRef.current) {
         return;
       }
 
-      if (
-        response.status === 401 ||
-        hasResponseStatus(rawBody, "unauthenticated")
-      ) {
-        invalidatePrivateResidence(authMessage(rawBody));
+      if (hasResponseStatus(rawBody, "unauthenticated")) {
+        invalidatePrivateResidence(
+          trustedAuthMessage(rawBody) ?? unauthenticatedMessage,
+        );
         return;
       }
 
@@ -810,12 +863,12 @@ function hasResponseStatus(
   );
 }
 
-function authMessage(body: unknown) {
+function trustedAuthMessage(body: unknown) {
   return hasResponseStatus(body, "unauthenticated") &&
     "message" in body &&
     typeof body.message === "string"
     ? body.message
-    : unauthenticatedMessage;
+    : null;
 }
 
 function ResidenceResult({
