@@ -12,15 +12,14 @@ import type {
   ResolutionErrorResponse,
   ResolutionResponse,
 } from "@/lib/residence";
-import {
-  SAVED_RESIDENCE_CONSENT_VERSION,
-  type DeleteSavedResidenceResponse,
-  type GetSavedResidenceResponse,
-  type SaveResidenceRequest,
-  type SaveResidenceResponse,
-  type SavedResidenceErrorResponse,
-  type SavedResidenceResolution,
-  type SavedResidenceView,
+import type {
+  DeleteSavedResidenceResponse,
+  GetSavedResidenceResponse,
+  SaveResidenceRequest,
+  SaveResidenceResponse,
+  SavedResidenceErrorResponse,
+  SavedResidenceResolution,
+  SavedResidenceView,
 } from "@/lib/saved-residence";
 
 type SaveCandidate = Pick<
@@ -44,6 +43,8 @@ type SavedLoadOutcome =
 
 const resolveEndpoint = "/api/v1/location/resolve";
 const savedEndpoint = "/api/v1/residence";
+const savedResidenceConsentVersion =
+  "saved-residence-v1" satisfies SaveResidenceRequest["consent"]["version"];
 const consentCopy =
   "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
 
@@ -282,7 +283,7 @@ export function ResidencePreview() {
           resolutionToken: candidate.resolutionToken,
           consent: {
             accepted: true,
-            version: SAVED_RESIDENCE_CONSENT_VERSION,
+            version: savedResidenceConsentVersion,
           },
         } satisfies SaveResidenceRequest),
         headers: { "content-type": "application/json" },
