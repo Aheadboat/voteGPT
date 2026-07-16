@@ -186,7 +186,10 @@ describe("House Clerk current-vacancy adapter", () => {
     ],
     [
       "percent-encoded vacancy path",
-      fixture.replace("/members/GA13/vacancy", "/members/GA13/%76acancy"),
+      fixture.replace(
+        '<a href="/members/GA13/vacancy">Current vacancy</a>',
+        '<a href="/members/GA13/%76acancy">Seat details</a>',
+      ),
     ],
     [
       "malformed anchor markup",
@@ -257,6 +260,42 @@ describe("House Clerk current-vacancy adapter", () => {
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 
+  it.each([
+    [
+      "decimal numeric reference in href",
+      '<a href="/members/GA13/vacanc&#121;">Seat details</a>',
+    ],
+    [
+      "hex numeric reference in href",
+      '<a href="/members/GA13/vacanc&#x79;">Seat details</a>',
+    ],
+    [
+      "decimal numeric reference in visible text",
+      '<a href="/profile">Current vacanc&#121;</a>',
+    ],
+    [
+      "hex numeric reference in visible text",
+      '<a href="/profile">Current vacanc&#x79;</a>',
+    ],
+    [
+      "decimal numeric reference in another attribute",
+      '<a href="/profile" data-seat="current vacanc&#121;">Seat details</a>',
+    ],
+    [
+      "hex numeric reference in another attribute",
+      '<a href="/profile" data-seat="current vacanc&#x79;">Seat details</a>',
+    ],
+  ] as const)("fails closed on %s", async (_label, anchor) => {
+    const adversarial = fixture.replace(
+      '<a href="/members/GA13/vacancy">Current vacancy</a>',
+      anchor,
+    );
+
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(adversarial))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
   it("uses only the real href when fake href text shares the opening tag", async () => {
     const mixedAttributes = fixture.replace(
       'href="/members/GA13/vacancy"',
@@ -297,6 +336,26 @@ describe("House Clerk current-vacancy adapter", () => {
 
     const available = expectAvailable(
       await lookup(vi.fn(async () => htmlResponse(laterSibling))),
+    );
+
+    expect(available.vacancies.map(({ stateCode, district }) => ({
+      stateCode,
+      district,
+    }))).toEqual([{ stateCode: "GA", district: 13 }]);
+  });
+
+  it("stops current-Congress ownership at the next vacancy heading", async () => {
+    const laterCongress = minimalFixture.replace(
+      "</div>",
+      `  <h2>Vacancies of the 118th Congress</h2>
+  <li class="vacancy_release">
+    <a href="/members/CA01/vacancy">Current vacancy</a>
+  </li>
+</div>`,
+    );
+
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(laterCongress))),
     );
 
     expect(available.vacancies.map(({ stateCode, district }) => ({
