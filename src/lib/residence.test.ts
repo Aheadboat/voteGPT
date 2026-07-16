@@ -232,6 +232,26 @@ describe("resolution token", () => {
       case: "division-ID-fragment coordinates",
       input: { kind: "coordinates" as const, latitude: 1, longitude: 2 },
     },
+    {
+      case: "comma-separated population prose",
+      input: { kind: "coordinates" as const, latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Population 1,000"],
+      },
+    },
+    {
+      case: "slash-separated reference prose",
+      input: {
+        kind: "coordinates" as const,
+        latitude: 77.0365,
+        longitude: 45,
+      },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Reference 77/0365"],
+      },
+    },
   ] satisfies Array<{
     case: string;
     input: ResidenceInput;
@@ -251,6 +271,38 @@ describe("resolution token", () => {
     expect(verifyResolutionToken(resolutionToken, userId, secret, now)).toEqual(
       resolution ?? resolvedResidence,
     );
+  });
+
+  it("validates a non-reflecting resolution at every public bound", () => {
+    const boundedText = "z".repeat(2_048);
+    const maximumResolution = {
+      ...resolvedResidence,
+      divisions: Array.from({ length: 64 }, () => ({
+        type: "other" as const,
+        name: boundedText,
+        id: boundedText,
+        idScheme: boundedText,
+      })),
+      source: {
+        ...resolvedResidence.source,
+        benchmark: boundedText,
+        vintage: boundedText,
+      },
+      coverageNotes: Array.from({ length: 64 }, () => boundedText),
+    } satisfies Extract<
+      ResolutionOutcome,
+      { status: "matched" | "partial" }
+    >;
+
+    expect(() =>
+      createResolutionToken(
+        { kind: "address", address: "Q" },
+        maximumResolution,
+        userId,
+        secret,
+        now,
+      ),
+    ).not.toThrow();
   });
 
   it.each([
@@ -369,6 +421,30 @@ describe("resolution token", () => {
       },
     },
     {
+      case: "combining-mark separated address",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 1\u030023 Main Street"],
+      },
+    },
+    {
+      case: "deleted hyphen in an address",
+      input: { kind: "address", address: "12 O-Connor Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 12 OConnor Street"],
+      },
+    },
+    {
+      case: "deleted space in an address",
+      input: { kind: "address", address: "12 O Connor Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 12 OConnor Street"],
+      },
+    },
+    {
       case: "Arabic-digit address",
       input: { kind: "address", address: "123 Main Street" },
       resolution: {
@@ -430,6 +506,53 @@ describe("resolution token", () => {
       resolution: {
         ...resolvedResidence,
         coverageNotes: ["Latitude \u0661\u066b\u0660"],
+      },
+    },
+    {
+      case: "combining-mark coordinate equivalent",
+      input: { kind: "coordinates", latitude: 12.3, longitude: 45 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 1\u03002.3"],
+      },
+    },
+    {
+      case: "decimal coordinate in a structured identifier",
+      input: coordinateInput,
+      resolution: {
+        ...resolvedResidence,
+        divisions: [
+          {
+            ...resolvedResidence.divisions[0],
+            id: `private:${coordinateInput.latitude}`,
+          },
+        ],
+      },
+    },
+    {
+      case: "signed coordinate in a structured identifier",
+      input: { kind: "coordinates", latitude: -77, longitude: 45 },
+      resolution: {
+        ...resolvedResidence,
+        divisions: [
+          {
+            ...resolvedResidence.divisions[0],
+            id: "private:-77",
+          },
+        ],
+      },
+    },
+    {
+      case: "scientific coordinate in a structured identifier",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        divisions: [
+          {
+            ...resolvedResidence.divisions[0],
+            id: "private:1e0",
+          },
+        ],
       },
     },
   ] satisfies Array<{
