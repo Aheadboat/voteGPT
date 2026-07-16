@@ -71,7 +71,9 @@ export function ResidencePreview() {
   const focusDeleteAfterConfirmationRef = useRef(false);
   const focusSignInAfterPendingRef = useRef(false);
   const candidateControlsRef = useRef<HTMLElement>(null);
+  const savedHeadingRef = useRef<HTMLHeadingElement>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmDeleteButtonRef = useRef<HTMLButtonElement>(null);
   const signInRef = useRef<HTMLAnchorElement>(null);
   const mountedRef = useRef(true);
   const resolutionRequestRef = useRef(0);
@@ -106,6 +108,7 @@ export function ResidencePreview() {
     if (savedLoadPendingRef.current) {
       return;
     }
+    savedHeadingRef.current?.focus();
     savedLoadPendingRef.current = true;
     setSavedState("loading");
     setSavedError("");
@@ -156,6 +159,12 @@ export function ResidencePreview() {
     savePending,
     savedState,
   ]);
+
+  useLayoutEffect(() => {
+    if (deleteConfirmation) {
+      confirmDeleteButtonRef.current?.focus();
+    }
+  }, [deleteConfirmation]);
 
   useEffect(() => {
     if (!candidate) {
@@ -277,6 +286,18 @@ export function ResidencePreview() {
             : body.status === "matched"
               ? "Residence matched. Review the divisions and source below."
               : "Partial residence match. Review the coverage notes below.",
+        );
+        return;
+      }
+
+      if (
+        savedResidence &&
+        (response.status === 401 || body.status === "unauthenticated")
+      ) {
+        invalidatePrivateResidence(
+          "message" in body
+            ? body.message
+            : "Sign in again before managing a saved residence.",
         );
         return;
       }
@@ -561,7 +582,9 @@ export function ResidencePreview() {
         }
         className="saved-residence"
       >
-        <h2 id="saved-residence-heading">Saved residence</h2>
+        <h2 id="saved-residence-heading" ref={savedHeadingRef} tabIndex={-1}>
+          Saved residence
+        </h2>
 
         {savedState === "loading" ? (
           <p role="status">Loading saved residence…</p>
@@ -605,6 +628,8 @@ export function ResidencePreview() {
               </time>
             </p>
             <button
+              aria-controls="saved-residence-delete-confirmation"
+              aria-expanded={deleteConfirmation}
               className="secondary-button"
               disabled={pending || mutationPending}
               onClick={() => {
@@ -618,14 +643,20 @@ export function ResidencePreview() {
               Delete saved residence
             </button>
             {deleteConfirmation ? (
-              <div className="saved-residence-confirmation">
-                <p>
+              <div
+                aria-labelledby="saved-residence-delete-confirmation-label"
+                className="saved-residence-confirmation"
+                id="saved-residence-delete-confirmation"
+                role="group"
+              >
+                <p id="saved-residence-delete-confirmation-label">
                   Delete this saved address and its political divisions? Your
                   account will remain.
                 </p>
                 <button
                   disabled={pending || mutationPending}
                   onClick={() => void deleteResidence()}
+                  ref={confirmDeleteButtonRef}
                   type="button"
                 >
                   Confirm deletion

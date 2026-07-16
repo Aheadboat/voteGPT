@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 
@@ -9,6 +9,13 @@ export function AccountControls({ children }: { children?: ReactNode }) {
   const [deleted, setDeleted] = useState(false);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState("");
+  const deletedHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  useLayoutEffect(() => {
+    if (deleted) {
+      deletedHeadingRef.current?.focus();
+    }
+  }, [deleted]);
 
   async function signOut() {
     setPending(true);
@@ -57,7 +64,9 @@ export function AccountControls({ children }: { children?: ReactNode }) {
   if (deleted) {
     return (
       <section aria-labelledby="account-deleted-heading" className="account-actions">
-        <h2 id="account-deleted-heading">Account deleted</h2>
+        <h2 id="account-deleted-heading" ref={deletedHeadingRef} tabIndex={-1}>
+          Account deleted
+        </h2>
         <p aria-live="polite" className="auth-status">
           {status}
         </p>
