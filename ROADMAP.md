@@ -415,7 +415,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [IN PROGRESS (RED)]
+## F4 — Consented Saved Residence [IN PROGRESS (GREEN)]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
