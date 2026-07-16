@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is active and VERIFIED on `codex/r1-roadmap-coordinator-contract`; [PR #1](https://github.com/Aheadboat/voteGPT/pull/1) is open and awaits final evidence-only hosted CI plus Human Gate B. F4 and every later roadmap item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is complete on `main` through its required closeout merge. F4 and every later roadmap item remain TODO pending separate authorization; no feature is active.
 
 ## Local identity setup
 
