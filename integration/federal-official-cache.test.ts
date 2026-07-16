@@ -522,7 +522,10 @@ function servingSeat(
       endYear: 2027,
       status: "serving",
     },
-    sources: [memberSource(bioguideId, retrievedAt)],
+    sources: [
+      memberSource(bioguideId, retrievedAt),
+      ...(chamber === "house" ? [clerkListSource(retrievedAt)] : []),
+    ],
   };
 }
 
@@ -542,6 +545,17 @@ function memberSource(bioguideId: string, retrievedAt: Date): SourceRef {
     url: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
     retrievedAt: retrievedAt.toISOString(),
     recordUpdatedAt: retrievedAt.toISOString(),
+    effectiveAt: null,
+  };
+}
+
+function clerkListSource(retrievedAt: Date): SourceRef {
+  return {
+    publisher: "Office of the Clerk, U.S. House of Representatives",
+    sourceType: "vacancy",
+    url: "https://clerk.house.gov/Members/ViewVacancies",
+    retrievedAt: retrievedAt.toISOString(),
+    recordUpdatedAt: null,
     effectiveAt: null,
   };
 }
