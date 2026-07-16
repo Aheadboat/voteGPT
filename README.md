@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is complete on `main` through its required closeout merge. F4 and F5 are active in `DISCOVER/DESIGN/PLAN` under a recorded `CONDITIONAL` admission; neither may begin RED or production work before its Human Gate A approval. F4 owns the shared persistence and dashboard surfaces and closes first, after which F5 integrates current `main` and completes its deferred integration. F6 and every later roadmap item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete on actual `main`. R1 — Concurrent Roadmap Delivery Contract is complete. The F4-F8 autonomous integration batch is staged on `codex/autonomous-f4-f8-integration`, based on `main@d5978ba830f0ee715c9162afba8963139c0fb707`; F4 and F5 are active in `DISCOVER/DESIGN/PLAN` and are the only active items under their recorded `CONDITIONAL` admission. F6, F7, and F8 remain TODO in the authorized batch queue until their dependencies and admission audits pass. G1 is authorized only as F7's no-spend prerequisite. The batch branch will not merge into `main` before final human review.
 
 ## Local identity setup
 
