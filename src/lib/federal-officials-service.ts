@@ -332,11 +332,11 @@ async function refreshRoster(
       profiles,
     });
     if (result.status === "ignored") {
+      const latest = await safeRead(options.cache, cacheKey);
       const latestTime = finiteClock(options.now);
       if (latestTime === null) {
         return null;
       }
-      const latest = await safeRead(options.cache, cacheKey);
       const validLatest = latest
         ? validateRosterRecord(latest, cacheKey, jurisdiction, latestTime)
         : null;
@@ -675,6 +675,8 @@ function validateSeat(
       term === null ||
       sources === null ||
       !sources.some((source) => source.sourceType === "member") ||
+      (value.status === "serving" &&
+        hasClerkDistrictEvidence(sources, office)) ||
       (value.status === "conflict" &&
         (!hasClerkListEvidence(sources) ||
           !hasClerkDistrictEvidence(sources, office)))
@@ -731,7 +733,7 @@ function validateSeat(
       null,
       office,
     );
-    return office && sources
+    return office && sources && !hasClerkDistrictEvidence(sources, office)
       ? { status: "unknown", office, sources }
       : null;
   }
@@ -897,8 +899,12 @@ function validateCoverage(value: unknown, house: FederalSeat, senateCount: numbe
   }
   const validHouse =
     house.status === "serving"
-      ? value.house === "partial" ||
-        (value.house === "verified" && hasClerkListEvidence(house.sources))
+      ? (value.house === "partial" &&
+          !hasClerkListEvidence(house.sources) &&
+          !hasClerkDistrictEvidence(house.sources, house.office)) ||
+        (value.house === "verified" &&
+          hasClerkListEvidence(house.sources) &&
+          !hasClerkDistrictEvidence(house.sources, house.office))
       : house.status === "vacant"
         ? value.house === "vacant"
         : house.status === "conflict"
