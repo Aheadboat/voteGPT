@@ -156,6 +156,14 @@ function deferredResponse() {
   return { promise, reject, resolve };
 }
 
+function unresolvedJsonResponse(status = 401) {
+  const response = new Response(null, { status });
+  vi.spyOn(response, "json").mockImplementation(
+    () => new Promise<never>(() => undefined),
+  );
+  return response;
+}
+
 type FetchRouteHandler = (init: RequestInit | undefined) =>
   | Response
   | Promise<Response>;
@@ -1302,6 +1310,82 @@ describe("residence preview", () => {
       const signIn = screen.getByRole("link", { name: /Sign in/i });
       expect(signIn).toHaveAttribute("href", "/sign-in");
       expect(signIn).toHaveFocus();
+    },
+  );
+
+  it.each(["resolve", "save", "delete"] as const)(
+    "invalidates private state before the %s HTTP 401 body settles",
+    async (operation) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+      const unauthorizedResponse = unresolvedJsonResponse();
+      installResidenceFetch({
+        savedGet: () =>
+          jsonResponse({ status: "saved", residence: savedResidence }),
+        resolve:
+          operation === "resolve"
+            ? () => unauthorizedResponse
+            : () => jsonResponse(matchedResidenceResponse),
+        ...(operation === "save"
+          ? { save: () => unauthorizedResponse }
+          : {}),
+        ...(operation === "delete"
+          ? { remove: () => unauthorizedResponse }
+          : {}),
+      });
+      installGeolocation();
+
+      render(<ResidencePreview />);
+      const saved = await screen.findByRole("region", {
+        name: "Saved residence",
+      });
+      expect(within(saved).getByText(savedAddress)).toBeVisible();
+
+      const checkResidence = screen.getByRole("button", {
+        name: "Check residence",
+      });
+      enterAddress();
+      if (operation !== "resolve") {
+        const consent = await screen.findByRole("checkbox", {
+          name: consentCopy,
+        });
+        fireEvent.click(consent);
+
+        if (operation === "save") {
+          fireEvent.click(
+            screen.getByRole("button", { name: "Save residence" }),
+          );
+        } else {
+          fireEvent.click(
+            within(saved).getByRole("button", {
+              name: "Delete saved residence",
+            }),
+          );
+          fireEvent.click(
+            screen.getByRole("button", { name: "Confirm deletion" }),
+          );
+        }
+      }
+      expect(checkResidence).toBeDisabled();
+
+      await waitFor(() => {
+        expect(screen.queryByText(savedAddress)).toBeNull();
+        expect(checkResidence).toBeEnabled();
+        expect(
+          screen.getByRole("textbox", {
+            name: "Voting residence address",
+          }),
+        ).toBeEnabled();
+        expect(screen.getByRole("link", { name: /Sign in/i })).toHaveFocus();
+      });
+      expect(unauthorizedResponse.json).toHaveBeenCalledOnce();
+      expect(
+        screen.getByText("Sign in again before managing a saved residence."),
+      ).toBeVisible();
+      expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Confirm deletion" }),
+      ).toBeNull();
     },
   );
 
