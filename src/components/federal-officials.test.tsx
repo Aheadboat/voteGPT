@@ -83,6 +83,15 @@ describe("FederalOfficials", () => {
       expect.stringContaining("Bailey Senate"),
       expect.stringContaining("Casey Senate"),
     ]);
+    expect(
+      ["Alex House", "Bailey Senate", "Casey Senate"].map((name) =>
+        screen.getByRole("link", { name }).getAttribute("href"),
+      ),
+    ).toEqual([
+      "/officials/federal/H000001",
+      "/officials/federal/S000001",
+      "/officials/federal/S000002",
+    ]);
 
     for (const card of cards) {
       const links = within(card).getAllByRole("link");
@@ -192,7 +201,14 @@ describe("FederalOfficials", () => {
         "Sources conflict on current House seat status. Congress.gov lists Alex House; Clerk vacancy evidence disagrees.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Verified current officeholder")).toBeNull();
+    expect(
+      within(
+        screen.getByRole("article", {
+          name: "U.S. Representative — District 13: Alex House",
+        }),
+      ).queryByText("Verified current officeholder"),
+    ).toBeNull();
+    expect(screen.queryByRole("link", { name: "Alex House" })).toBeNull();
   });
 
   it("keeps partial and stale coverage explicit while retaining qualified facts", () => {
