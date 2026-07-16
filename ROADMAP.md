@@ -422,6 +422,11 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Tests first:** Consent required, authorized decrypt only, separately queryable divisions, cascading deletion, and encryption-key rotation.
 - **Done:** Versioned AES-256-GCM encryption, one-home constraint, consent version/time, and account controls pass; exact location never reaches logs, URLs, analytics, search, or LLM inputs; GPS is never stored.
 - **Non-goals:** Multiple homes, household sharing, or location history.
+- **Gate A design:** [F4 implementation plan](F4-IMPLEMENTATION-PLAN.md) freezes the consent/API/data/encryption/rotation/UI contracts and the division-only F4-to-F5 handoff. Manual eligibility is honestly UI-enforced because F3's token signs user-bound divisions but not the separately submitted address; only verified divisions drive civic personalization, while the encrypted address is owner-display account data.
+- **Applicable UI/UX DNA:** UX-01, UX-02, UX-04, UX-05, UX-06, UX-07, UX-08, and UX-09. UX-03 is not applicable because F4 presents no candidate or official set.
+- **Proposed task graph:** F4-T1 freezes contract/crypto/HTTP DTOs; F4-T2 adds persistence/handoff; F4-T3 rotation/cascade and F4-T4 private API then proceed from T2 in separate files, with T4 consuming T1 DTOs; F4-T5 owns consent/account UI from T1; F4-T6 integrates the real lifecycle; F4-T7 verifies and reviews the feature candidate. Every implementation task has an expected RED, exact files, dependencies, and done criteria in the linked plan.
+- **Proposed parallel lanes:** T1 freezes interfaces first. T2 persistence and T5 UI may then proceed in disjoint owned files; T4 waits for T2 repository signatures, T3 follows T2, and T6 waits for T3/T4/T5. Integration remains serialized through T7.
+- **Gate A decisions pending:** Atomic one-home replacement with no history; owner-visible full address; exact `saved-residence-v1` consent; UI-only manual eligibility and independently persisted address/divisions; no raw-coordinate persistence while accepting that coordinate-derived signed divisions are replayable; dedicated strict keyring plus resumable CAS rotation; and the frozen `getSavedResidenceDivisions(userId)` handoff.
 
 ### Coordination record
 
@@ -430,15 +435,15 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Base commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
 - **Integrated-main commit:** `d5978ba830f0ee715c9162afba8963139c0fb707`
 - **Admission result:** `CONDITIONAL` — both dependencies are complete and feature-local work is useful, but shared persistence, dashboard, configuration, and integrated-test surfaces require exclusive ownership and serialization.
-- **Assigned feature lead:** `f4_feature_lead` — dispatch begins only after the activation PR merges and that merge is integrated into this branch.
+- **Assigned feature lead:** `f4_feature_lead` — dispatched only after the activation merge was integrated; returned the corrected reviewed Gate A design and remains the implementation lead after approval.
 - **Ownership:** F4 exclusively owns these shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. F4 also exclusively owns its new residence-consent, encryption, persistence, account-control, and focused-test files. F4 exclusively owns the encryption-key configuration external resource. `AGENTS.md`, `ROADMAP.md`, `README.md`, and `tests/foundation-contract.test.ts` remain coordinator-owned; shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F4 feature PR → post-merge verification → F4 closeout PR/CI/merge. Only after the F4 closeout may F5 integrate current `main`, take the serialized shared-surface handoff, and approach Gate B.
-- **Feature PR/CI:** Not opened; feature dispatch awaits the activation merge and Human Gate A controls implementation.
-- **Blockers:** None. Product/privacy/design decisions discovered by the lead will be presented at Human Gate A.
+- **Feature PR/CI:** Not opened; Human Gate A controls RED and production implementation.
+- **Blockers:** Human Gate A decisions listed above. There is no unresolved technical blocker; the authoritative ownership correction merged in PR #4 and is integrated into this branch.
 - **Feature merge:** Not started.
 - **Post-merge evidence:** Not applicable before the feature merge.
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F4 `DONE` on `main`.
-- **Next Human Gate:** Human Gate A after the lead returns the overall design, tests-first task graph, dependencies, interfaces, parallel lanes, risks, and non-goals.
+- **Next Human Gate:** Human Gate A on the complete linked design, tests-first task graph, interfaces, parallel lanes, privacy/security tradeoffs, risks, and non-goals. Approval authorizes F4-T1 RED only.
 
 ## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
