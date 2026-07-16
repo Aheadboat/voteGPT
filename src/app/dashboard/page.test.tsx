@@ -35,14 +35,14 @@ describe("signed-in dashboard", () => {
     expect(
       within(main).getByRole("heading", { name: "Your dashboard" }),
     ).toBeInTheDocument();
-    const savedHomeHeading = within(main).getByRole("heading", {
-      name: "Saved home",
+    const savedResidenceHeading = within(main).getByRole("heading", {
+      name: "Saved residence",
     });
     const previewHeading = within(main).getByRole("heading", {
       name: "Preview your voting residence",
     });
     expect(
-      savedHomeHeading.compareDocumentPosition(previewHeading) &
+      savedResidenceHeading.compareDocumentPosition(previewHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
