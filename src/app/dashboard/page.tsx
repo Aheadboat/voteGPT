@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getRuntimeAuth } from "@/lib/auth";
 import { AccountControls } from "@/components/account-controls";
+import { ResidencePreview } from "@/components/residence-preview";
 
 const signInURL = "/sign-in?next=%2Fdashboard";
 
@@ -31,9 +32,10 @@ export default async function DashboardPage() {
           Signed in as <strong>{currentSession.user.email}</strong>
         </p>
         <p>
-          Personalized civic information is not available yet. Public
+          Check a residence below without saving it to your account. Public
           information remains accessible from the home page.
         </p>
+        <ResidencePreview />
         <AccountControls />
       </section>
     </main>

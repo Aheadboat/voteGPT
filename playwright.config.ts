@@ -16,7 +16,18 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "node ./node_modules/next/dist/bin/next start --hostname 127.0.0.1",
+    command:
+      "node e2e/seed-session.mjs && node ./node_modules/next/dist/bin/next start --hostname 127.0.0.1",
+    env: {
+      BETTER_AUTH_SECRET: "e2e-secret-at-least-thirty-two-characters",
+      BETTER_AUTH_URL: "http://127.0.0.1:3000",
+      DATABASE_URL: "pglite://.data/e2e",
+      EMAIL_FROM: "test@example.invalid",
+      EMAIL_SERVER: "smtp://127.0.0.1:2525",
+      GOOGLE_CIVIC_API_KEY: "",
+      GOOGLE_CLIENT_ID: "e2e",
+      GOOGLE_CLIENT_SECRET: "e2e",
+    },
     reuseExistingServer: false,
     timeout: 120_000,
     url: "http://127.0.0.1:3000",

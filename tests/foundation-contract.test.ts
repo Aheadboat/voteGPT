@@ -99,6 +99,7 @@ describe("development foundation", () => {
         "EMAIL_SERVER=",
         "GOOGLE_CLIENT_ID=",
         "GOOGLE_CLIENT_SECRET=",
+        "GOOGLE_CIVIC_API_KEY=",
       ].sort(),
     )
   })

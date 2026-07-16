@@ -65,7 +65,7 @@ describe("identity dependencies", () => {
       expect(clientSource).not.toContain(key);
     }
 
-    for (const line of exampleEnvironment.trim().split("\n")) {
+    for (const line of exampleEnvironment.trim().split(/\r?\n/)) {
       expect(line).toMatch(/^[A-Z_]+=$/);
     }
   });

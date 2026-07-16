@@ -295,6 +295,92 @@ button:disabled {
   background: #7b2f29;
 }
 
+.residence-preview {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2rem;
+  border-top: 1px solid #c7cec9;
+  padding-top: 2rem;
+}
+
+.residence-preview h2,
+.residence-preview h3,
+.residence-preview h4 {
+  margin: 0;
+}
+
+.residence-intro,
+.residence-privacy,
+.residence-device p,
+.residence-provenance p {
+  margin-top: 0.75rem;
+  color: #43534c;
+  line-height: 1.55;
+}
+
+.residence-form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.residence-form label {
+  font-weight: 700;
+}
+
+.residence-form input {
+  min-height: 3rem;
+  border: 1px solid #778a80;
+  border-radius: 0.4rem;
+  background: #fff;
+  color: #17211d;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+}
+
+.residence-device,
+.residence-result,
+.residence-provenance {
+  border: 1px solid #aebbb4;
+  border-radius: 0.65rem;
+  padding: 1rem;
+}
+
+.residence-status {
+  min-height: 1.5rem;
+  color: #273c33;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.residence-result,
+.residence-provenance,
+.residence-coverage {
+  display: grid;
+  gap: 1rem;
+}
+
+.residence-divisions li {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.division-id {
+  overflow-wrap: anywhere;
+  color: #53645c;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+@media (min-width: 42rem) {
+  .residence-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .residence-form label {
+    grid-column: 1 / -1;
+  }
+}
+
 .principles {
   display: grid;
   gap: 2.5rem;
