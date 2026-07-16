@@ -8,7 +8,12 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { Pool } from "pg";
 
 const fallbackDatabaseUrl = "pglite://.data/e2e";
-const databaseUrl = process.env.DATABASE_URL?.trim() || fallbackDatabaseUrl;
+const hosted =
+  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+const databaseUrl =
+  process.env.E2E_DATABASE_URL?.trim() ||
+  (hosted ? process.env.DATABASE_URL?.trim() : undefined) ||
+  fallbackDatabaseUrl;
 const migrationsFolder = resolve(process.cwd(), "drizzle");
 const identities = [
   {
@@ -31,20 +36,27 @@ const identities = [
   },
 ];
 
-if (
-  !databaseUrl.startsWith("pglite://") &&
-  !/^postgres(?:ql)?:\/\//i.test(databaseUrl)
-) {
-  throw new Error("E2E DATABASE_URL must use PostgreSQL or PGlite.");
+const postgres = /^postgres(?:ql)?:\/\//i.test(databaseUrl);
+const pgliteDirectory = databaseUrl.startsWith("pglite://")
+  ? databaseUrl.slice("pglite://".length)
+  : null;
+
+if (pgliteDirectory === "memory") {
+  throw new Error("E2E database must be shared and file-backed.");
+}
+if (hosted && !postgres) {
+  throw new Error("Hosted E2E requires a dedicated PostgreSQL database.");
+}
+if (!postgres && (!pgliteDirectory || !pgliteDirectory.trim())) {
+  throw new Error("E2E database must use PostgreSQL or file-backed PGlite.");
 }
 
-if (databaseUrl.startsWith("pglite://")) {
-  const dataDirectory = databaseUrl.slice("pglite://".length);
-  if (dataDirectory !== "memory") {
-    await mkdir(".data", { recursive: true });
-  }
-  const client =
-    dataDirectory === "memory" ? new PGlite() : new PGlite(dataDirectory);
+process.env.E2E_DATABASE_URL = databaseUrl;
+process.env.DATABASE_URL = databaseUrl;
+
+if (pgliteDirectory) {
+  await mkdir(".data", { recursive: true });
+  const client = new PGlite(pgliteDirectory);
 
   try {
     await migrate(drizzle(client), { migrationsFolder });

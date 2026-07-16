@@ -2,7 +2,28 @@ import { defineConfig, devices } from "@playwright/test"
 
 delete process.env.NO_COLOR
 
-const databaseUrl = process.env.DATABASE_URL?.trim() || "pglite://.data/e2e"
+const hosted =
+  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true"
+const databaseUrl =
+  process.env.E2E_DATABASE_URL?.trim() ||
+  (hosted ? process.env.DATABASE_URL?.trim() : undefined) ||
+  "pglite://.data/e2e"
+const postgres = /^postgres(?:ql)?:\/\//i.test(databaseUrl)
+const pgliteDirectory = databaseUrl.startsWith("pglite://")
+  ? databaseUrl.slice("pglite://".length)
+  : null
+
+if (pgliteDirectory === "memory") {
+  throw new Error("E2E database must be shared and file-backed.")
+}
+if (hosted && !postgres) {
+  throw new Error("Hosted E2E requires a dedicated PostgreSQL database.")
+}
+if (!postgres && (!pgliteDirectory || !pgliteDirectory.trim())) {
+  throw new Error("E2E database must use PostgreSQL or file-backed PGlite.")
+}
+
+process.env.E2E_DATABASE_URL = databaseUrl
 process.env.DATABASE_URL = databaseUrl
 const residenceEncryptionKeys = JSON.stringify([
   {
@@ -35,6 +56,7 @@ export default defineConfig({
       BETTER_AUTH_SECRET: "e2e-secret-at-least-thirty-two-characters",
       BETTER_AUTH_URL: "http://127.0.0.1:3000",
       DATABASE_URL: databaseUrl,
+      E2E_DATABASE_URL: databaseUrl,
       EMAIL_FROM: "test@example.invalid",
       EMAIL_SERVER: "smtp://127.0.0.1:2525",
       GOOGLE_CIVIC_API_KEY: "",
