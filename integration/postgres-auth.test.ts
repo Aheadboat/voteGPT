@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   account,
   authSchema,
+  databaseSchema,
   savedResidence,
   savedResidenceDivision,
   session,
@@ -44,18 +45,35 @@ afterAll(async () => {
 
 describe("hosted PostgreSQL auth contract", () => {
   it("serializes concurrent first residence saves across two PostgreSQL connections", async () => {
-    const firstPool = new Pool({ connectionString, max: 1 });
-    const secondPool = new Pool({ connectionString, max: 1 });
-    const firstDatabase = drizzle(firstPool, { schema: authSchema });
-    const secondDatabase = drizzle(secondPool, { schema: authSchema });
-    type SavedResidenceDatabase = Parameters<
-      typeof createSavedResidenceRepository
+    const firstPool = residenceRacePool();
+    const secondPool = residenceRacePool();
+    const firstDatabase = drizzle(firstPool, { schema: databaseSchema });
+    const secondDatabase = drizzle(secondPool, { schema: databaseSchema });
+    const transactionBarrier = twoPartyBarrier();
+    type RaceTransaction = Parameters<
+      Parameters<typeof firstDatabase.transaction>[0]
     >[0];
+    const synchronizeTransaction = (database: typeof firstDatabase) =>
+      new Proxy(database, {
+        get(target, property, receiver) {
+          if (property === "transaction") {
+            return async <T>(
+              callback: (transaction: RaceTransaction) => Promise<T>,
+            ) =>
+              target.transaction(async (transaction) => {
+                await transactionBarrier.arrive();
+                return callback(transaction);
+              });
+          }
+          const value = Reflect.get(target, property, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
     const firstRepository = createSavedResidenceRepository(
-      firstDatabase as unknown as SavedResidenceDatabase,
+      synchronizeTransaction(firstDatabase),
     );
     const secondRepository = createSavedResidenceRepository(
-      secondDatabase as unknown as SavedResidenceDatabase,
+      synchronizeTransaction(secondDatabase),
     );
     const userId = "postgres_residence_race_user";
     const keyring = loadResidenceEncryptionKeyring({
@@ -77,8 +95,8 @@ describe("hosted PostgreSQL auth contract", () => {
       source: {
         checkedAt: "2026-07-16T20:10:00.000Z",
         effectiveAt: null,
-        name: "Synthetic Alpha Civic Source",
-        url: "https://example.com/postgres-race-alpha",
+        name: "Google Civic Information API",
+        url: "https://developers.google.com/civic-information",
       },
       status: "matched",
     };
@@ -99,12 +117,12 @@ describe("hosted PostgreSQL auth contract", () => {
         },
       ],
       source: {
-        benchmark: "Synthetic_Current",
+        benchmark: "Public_AR_Current",
         checkedAt: "2026-07-16T20:10:01.000Z",
         effectiveAt: "2026-01-01T00:00:00.000Z",
-        name: "Synthetic Beta Civic Source",
-        url: "https://example.com/postgres-race-beta",
-        vintage: "Synthetic_2026",
+        name: "U.S. Census Geocoder",
+        url: "https://geocoding.geo.census.gov/geocoder/",
+        vintage: "Current_Current",
       },
       status: "partial",
     };
@@ -156,6 +174,7 @@ describe("hosted PostgreSQL auth contract", () => {
         false,
         true,
       ]);
+      expect(transactionBarrier.arrivals()).toBe(2);
       const replacement = results.find(({ replaced }) => replaced);
       expect(replacement).toBeDefined();
 
@@ -413,6 +432,35 @@ describe("hosted PostgreSQL auth contract", () => {
 
 function encodedKey(fill: number) {
   return Buffer.alloc(32, fill).toString("base64url");
+}
+
+function residenceRacePool() {
+  return new Pool({
+    connectionString,
+    connectionTimeoutMillis: 4_000,
+    lock_timeout: 5_000,
+    max: 1,
+    query_timeout: 8_000,
+    statement_timeout: 7_000,
+  });
+}
+
+function twoPartyBarrier() {
+  let arrivalCount = 0;
+  const ready = Promise.withResolvers<void>();
+  return {
+    arrivals: () => arrivalCount,
+    async arrive() {
+      arrivalCount += 1;
+      if (arrivalCount > 2) {
+        throw new Error("PostgreSQL transaction barrier over-subscribed");
+      }
+      if (arrivalCount === 2) {
+        ready.resolve();
+      }
+      await withinMilliseconds(ready.promise, 5_000);
+    },
+  };
 }
 
 async function withinMilliseconds<T>(promise: Promise<T>, milliseconds: number) {
