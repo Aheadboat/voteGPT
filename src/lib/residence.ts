@@ -118,6 +118,18 @@ const providerTimeoutMilliseconds = 5_000;
 const maximumPublicCollectionSize = 64;
 const maximumPublicTextLength = 2_048;
 const maximumDecodePasses = 4;
+const decimalDigitZeroCodePoints = [
+  0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6,
+  0xc66, 0xce6, 0xd66, 0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090,
+  0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0,
+  0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50,
+  0xabf0, 0xff10, 0x104a0, 0x10d30, 0x10d40, 0x11066, 0x110f0,
+  0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650, 0x116c0,
+  0x116d0, 0x116da, 0x11730, 0x118e0, 0x11950, 0x11bf0, 0x11c50,
+  0x11d50, 0x11da0, 0x11de0, 0x11f50, 0x16130, 0x16a60, 0x16ac0,
+  0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec,
+  0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0,
+] as const;
 const sourceUrlsByName: ReadonlyMap<string, string> = new Map([
   [
     "Google Civic Information API",
@@ -505,63 +517,225 @@ function reflectsResidenceInput(
   resolution: ResolvedResidence,
   input: ResidenceInput,
 ) {
-  const fingerprints =
-    input.kind === "address"
-      ? [publicTextFingerprint(input.address)]
-      : [
-          publicTextFingerprint(String(input.latitude)),
-          publicTextFingerprint(String(input.longitude)),
-        ];
-  return publicResolutionText(resolution).some((text) => {
-    const publicFingerprint = publicTextFingerprint(text);
-    return fingerprints.some((fingerprint) =>
-      publicFingerprint.includes(fingerprint),
-    );
-  });
+  const fields = publicResolutionFields(resolution);
+  return input.kind === "address"
+    ? reflectsAddress(fields, input.address)
+    : reflectsCoordinates(fields, input.latitude, input.longitude);
 }
 
-function publicResolutionText(resolution: ResolvedResidence) {
+type PublicResolutionField = {
+  kind: "identifier" | "prose" | "timestamp";
+  text: string;
+};
+
+function publicResolutionFields(
+  resolution: ResolvedResidence,
+): PublicResolutionField[] {
   return [
-    ...resolution.coverageNotes,
+    ...resolution.coverageNotes.map((text) => ({ kind: "prose" as const, text })),
     ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
-      id,
-      idScheme,
-      name,
+      { kind: "identifier" as const, text: id },
+      { kind: "identifier" as const, text: idScheme },
+      { kind: "prose" as const, text: name },
     ]),
-    resolution.source.name,
-    resolution.source.url,
-    resolution.source.checkedAt,
+    { kind: "timestamp", text: resolution.source.checkedAt },
     ...(resolution.source.effectiveAt === null
       ? []
-      : [resolution.source.effectiveAt]),
+      : [{ kind: "timestamp" as const, text: resolution.source.effectiveAt }]),
     ...(resolution.source.benchmark === undefined
       ? []
-      : [resolution.source.benchmark]),
+      : [{ kind: "identifier" as const, text: resolution.source.benchmark }]),
     ...(resolution.source.vintage === undefined
       ? []
-      : [resolution.source.vintage]),
+      : [{ kind: "identifier" as const, text: resolution.source.vintage }]),
   ];
 }
 
-function publicTextFingerprint(value: string) {
+function reflectsAddress(fields: PublicResolutionField[], address: string) {
+  const normalizedAddress = normalizeWords(address);
+  if (normalizedAddress.length === 0) {
+    return true;
+  }
+
+  const boundedAddress = ` ${normalizedAddress} `;
+  for (const field of fields) {
+    const layers = decodePublicText(field.text);
+    if (layers === null) {
+      return true;
+    }
+
+    if (
+      layers.some((layer) =>
+        ` ${normalizeWords(layer)} `.includes(boundedAddress),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function reflectsCoordinates(
+  fields: PublicResolutionField[],
+  latitude: number,
+  longitude: number,
+) {
+  for (const field of fields) {
+    const layers = decodePublicText(field.text);
+    if (layers === null) {
+      return true;
+    }
+    const fieldKind = field.kind;
+    if (fieldKind === "timestamp") {
+      continue;
+    }
+    if (
+      layers.some((layer) =>
+        containsCoordinate(layer, fieldKind, latitude, longitude),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function decodePublicText(value: string) {
+  const layers = [value];
   let decoded = value;
   for (let pass = 0; pass < maximumDecodePasses; pass += 1) {
-    const formDecoded = decoded.replaceAll("+", " ");
-    let next = formDecoded;
-    try {
-      next = decodeURIComponent(formDecoded);
-    } catch {
-      // Fold the safely decoded form syntax even when percent escapes are bad.
+    const next = decodePublicTextLayer(decoded);
+    if (next === null) {
+      return null;
     }
     if (next === decoded) {
-      break;
+      return layers;
     }
     decoded = next;
+    layers.push(decoded);
   }
-  return decoded
+
+  return decodePublicTextLayer(decoded) === null || /%[\da-f]{2}/iu.test(decoded)
+    ? null
+    : layers;
+}
+
+function decodePublicTextLayer(value: string) {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "+") {
+      decoded += " ";
+      continue;
+    }
+    if (character !== "%") {
+      decoded += character;
+      continue;
+    }
+
+    if (!isPercentEscape(value, index)) {
+      if (isLiteralPercentage(value, index)) {
+        decoded += character;
+        continue;
+      }
+      return null;
+    }
+
+    let end = index;
+    while (isPercentEscape(value, end)) {
+      end += 3;
+    }
+    try {
+      decoded += decodeURIComponent(value.slice(index, end));
+    } catch {
+      return null;
+    }
+    index = end - 1;
+  }
+
+  return decoded;
+}
+
+function isPercentEscape(value: string, index: number) {
+  return value[index] === "%" && /^[\da-f]{2}$/iu.test(value.slice(index + 1, index + 3));
+}
+
+function isLiteralPercentage(value: string, index: number) {
+  const previous = value[index - 1];
+  const next = value[index + 1];
+  return (
+    previous !== undefined &&
+    /\p{N}/u.test(previous) &&
+    (next === undefined || /[\s\p{P}]/u.test(next))
+  );
+}
+
+function normalizeWords(value: string) {
+  return normalizeUnicodeNumbers(value)
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[\s\p{P}\p{S}]+/gu, "");
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function normalizeUnicodeNumbers(value: string) {
+  return Array.from(value.normalize("NFKC"), (character) => {
+    const codePoint = character.codePointAt(0);
+    const zero = decimalDigitZeroCodePoints.find(
+      (candidate) =>
+        codePoint !== undefined &&
+        codePoint >= candidate &&
+        codePoint <= candidate + 9,
+    );
+    return zero === undefined || codePoint === undefined
+      ? character
+      : String(codePoint - zero);
+  }).join("");
+}
+
+function containsCoordinate(
+  value: string,
+  fieldKind: "identifier" | "prose",
+  latitude: number,
+  longitude: number,
+) {
+  const normalized = normalizeNumericText(value);
+  const labelled = /\b(?:coordinates?|gps|lat(?:itude)?|l(?:on|ng|ongitude))\b/iu.test(
+    normalized,
+  );
+  const numericPattern =
+    /(?<![\p{L}\p{N}])[+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?(?![\p{L}\p{N}])/giu;
+
+  for (const match of normalized.matchAll(numericPattern)) {
+    const token = match[0];
+    const number = Number(token);
+    if (number !== latitude && number !== longitude) {
+      continue;
+    }
+
+    const wholeField = normalized.trim() === token;
+    if (
+      wholeField ||
+      labelled ||
+      (fieldKind === "prose" && /[+\-.e]/iu.test(token))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeNumericText(value: string) {
+  return normalizeUnicodeNumbers(value)
+    .toLowerCase()
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, "")
+    .replaceAll("\u2212", "-")
+    .replaceAll("\u066b", ".")
+    .replace(/(?<=\d)[,/](?=\d)/gu, ".");
 }
 
 function isBoundedPublicText(value: unknown): value is string {
