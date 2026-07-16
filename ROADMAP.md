@@ -328,7 +328,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Done:** `POST /api/v1/location/resolve` and the signed-in dashboard preview satisfy the request, provider, token, privacy, recovery, and UX contracts; all focused/full checks and required manual evidence pass; raw input is discarded and never persisted.
 - **Non-goals:** Saved home, shared location cache, distributed rate limiter, local boundary engine, officials, elections, map, reverse-geocoded background tracking, or generalized provider framework.
 
-## R1 — Concurrent Roadmap Delivery Contract [IN PROGRESS (GREEN)]
+## R1 — Concurrent Roadmap Delivery Contract [IN PROGRESS (RED)]
 
 - **Outcome:** The repository can safely coordinate, review, merge, and close up to two dependency-independent roadmap items without weakening explicit authorization, Human Gates, TDD, branch isolation, or main-branch verification.
 - **Dependencies:** F3 is approved, committed, and merged to `main` at `e524494`; hosted PostgreSQL-backed [CI run 29467547931](https://github.com/Aheadboat/voteGPT/actions/runs/29467547931) passed before this branch was created.
@@ -338,13 +338,14 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 foundation-contract tests passing.
 - **Whole-branch review correction RED evidence (2026-07-15):** After independent review found four Important contract/test gaps, `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: four expected failures and ten passes. The failures prove the binding contract lacks a non-contradictory coordinator-only activation setup and single authoritative activation record, the global isolation rule omits failed-ancestry recovery, active R1 lacks its structured coordination record, and README overstates verification. The same failing checks also require complete admission semantics, removal of unauthorized F4/F5 predesign, and a synchronized implementation-plan helper before GREEN.
 - **Whole-branch review correction GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 tests passing after binding the inert activation/setup exception, single `main` activation record, complete admission and stale-branch recovery semantics, structured active-item coordination fields, future-item non-predesign rule, accurate README state, and synchronized plan helper.
+- **Second whole-branch review correction RED evidence (2026-07-15):** Re-review confirmed every prior finding resolved, then `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: two expected failures and twelve passes. The failures prove the contract still lacks an allowed read-only dependency/interface/admission audit before inert activation and lacks a complete two-level authority model for pair state on `main` versus coordinator-authored item phase/evidence on feature branches. Exact active-phase mapping already passes.
 - **Implementation plan:** [R1 Concurrent Roadmap Delivery Contract Implementation Plan](./R1-IMPLEMENTATION-PLAN.md). It is separate because the exact RED assertions, binding replacement text, verification commands, PR sequence, and closeout sequence would make this roadmap item unreadable inline.
 - **Applicable UX DNA IDs:** None. R1 changes contributor and agent workflow, not an end-user interface.
 - **Working branch:** `codex/r1-roadmap-coordinator-contract`, created from dependency-complete `main`. R1 remains the sole active item under the existing single-item contract until this amendment is merged and closed. Its root checkout is the explicit transition exception because the isolated-worktree rule does not become binding until R1 is closed; every later roadmap item uses the new worktree contract.
 
 ### Coordination record
 
-- **Phase:** `GREEN`
+- **Phase:** `RED`
 - **Branch:** `codex/r1-roadmap-coordinator-contract`
 - **Base commit:** `e524494665e882882d36faf0e0cf7d97f773a506`
 - **Integrated-main commit:** `e524494665e882882d36faf0e0cf7d97f773a506`

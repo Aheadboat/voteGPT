@@ -101,6 +101,28 @@ function readRoadmapStatuses(contents: string): Map<string, string> {
   )
 }
 
+function expectedActivePhase(status: string): string {
+  const normalizedStatus = status.replace(/[`*_]/g, "").trim().toUpperCase()
+
+  if (normalizedStatus === "IN PROGRESS (DISCOVER/DESIGN/PLAN)") {
+    return "DISCOVER/DESIGN/PLAN"
+  }
+
+  const implementationPhase = normalizedStatus.match(
+    /^IN PROGRESS \((RED|GREEN|REFACTOR)\)$/,
+  )?.[1]
+
+  if (implementationPhase) {
+    return implementationPhase
+  }
+
+  if (normalizedStatus === "VERIFIED") {
+    return "VERIFIED"
+  }
+
+  throw new Error("Unsupported active roadmap status: " + status)
+}
+
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
@@ -217,6 +239,36 @@ describe("concurrent roadmap delivery contract", () => {
     expect(admission).toContain("`CONDITIONAL`")
     expect(admission).toContain("`FAIL`")
     expect(admission).toContain("Every dependency must be `DONE` on `main`")
+
+    for (const auditContract of [protocol, execution]) {
+      expect(auditContract).toMatch(
+        /after explicit user authorization[^.\n]*before (?:creating )?(?:inert )?(?:item |feature )?branch(?:es)?(?:\/worktrees?)?[^.\n]*(?:activation PR|activation record)[^.\n]*(?:coordinator-only|only the coordinator)[^.\n]*read-only dependency\/interface\/admission audit/i,
+      )
+      expect(auditContract).toMatch(
+        /audit may inspect (?:repository|repo) and roadmap state[^.\n]*(?:cannot|must not) modify files or external state/i,
+      )
+      expect(auditContract).toMatch(
+        /no feature agent[^.\n]*DISCOVER\/DESIGN\/PLAN[^.\n]*dispatch[^.\n]*during (?:the )?audit/i,
+      )
+      expect(auditContract).toMatch(
+        /`PASS`(?:\s*\/\s*|\s+or\s+)`CONDITIONAL`[^.\n]*proceed to paired activation/i,
+      )
+      expect(auditContract).toMatch(
+        /unsettled(?:\s*\/\s*|\s+or\s+)coupled interfaces[^.\n]*(?:yield|require)[^.\n]*`FAIL`/i,
+      )
+      expect(auditContract).toMatch(
+        /`FAIL`[^.\n]*(?:does not|must not|cannot) create paired activation/i,
+      )
+      expect(auditContract).toMatch(
+        /coordinator reports (?:the )?`FAIL`[^.\n]*requires explicit user activation order for sequential work/i,
+      )
+      expect(auditContract).toMatch(
+        /user selects a sequential order after `FAIL`[^.\n]*next single-item activation record preserves the failed pair audit and chosen order/i,
+      )
+      expect(auditContract).toMatch(
+        /separately authorized single item[^.\n]*admission `N\/A`[^.\n]*after the audit confirms (?:its )?dependencies/i,
+      )
+    }
 
     for (const activationContract of [protocol, execution]) {
       expect(activationContract).toMatch(
@@ -421,6 +473,24 @@ describe("concurrent roadmap delivery contract", () => {
       "Conversation state and agent reports alone never advance status.",
     )
 
+    for (const authorityContract of [record, execution]) {
+      expect(authorityContract).toContain(
+        "`main` owns authorization, active slots, pair admission, cross-item ownership/merge order, feature merges, closeout, and `DONE`",
+      )
+      expect(authorityContract).toMatch(
+        /coordinator-authored commits on each item branch own only that item's phase\/evidence, blockers, integrated-main, and PR\/CI state until (?:the )?feature merge promotes (?:them|that state) to `main`/i,
+      )
+      expect(authorityContract).toContain(
+        "Feature agents, agent reports, and conversation cannot write or advance either authority",
+      )
+      expect(authorityContract).toContain(
+        "Item-branch state cannot activate another item or mark `DONE`",
+      )
+      expect(authorityContract).toMatch(
+        /(?:no direct(?:-|\s)(?:`main`|main) status writes|direct(?:-|\s)(?:`main`|main) status writes are forbidden)/i,
+      )
+    }
+
     const statuses = readRoadmapStatuses(roadmap)
     const activeItems = [...statuses].filter(
       ([, status]) => status !== "TODO" && status !== "DONE",
@@ -452,8 +522,8 @@ describe("concurrent roadmap delivery contract", () => {
       )
       const phase = values.get("Phase") ?? ""
 
-      expect(status.toUpperCase()).toContain(
-        phase.replace(/[`*_]/g, "").trim().toUpperCase(),
+      expect(phase.replace(/[`*_]/g, "").trim().toUpperCase()).toBe(
+        expectedActivePhase(status),
       )
       for (const commitField of ["Base commit", "Integrated-main commit"]) {
         expect(values.get(commitField), id + " " + commitField).toMatch(
@@ -536,6 +606,24 @@ describe("concurrent roadmap delivery contract", () => {
         "## R1 — Concurrent Roadmap Delivery Contract [DONE]\r\n",
       ).get("R1"),
     ).toBe("DONE")
+    expect(
+      [
+        "IN PROGRESS (DISCOVER/DESIGN/PLAN)",
+        "IN PROGRESS (RED)",
+        "IN PROGRESS (GREEN)",
+        "IN PROGRESS (REFACTOR)",
+        "VERIFIED",
+      ].map(expectedActivePhase),
+    ).toEqual([
+      "DISCOVER/DESIGN/PLAN",
+      "RED",
+      "GREEN",
+      "REFACTOR",
+      "VERIFIED",
+    ])
+    expect(() => expectedActivePhase("IN PROGRESS (PROGRESS)")).toThrow(
+      "Unsupported active roadmap status: IN PROGRESS (PROGRESS)",
+    )
 
     const syntheticRoadmap = [
       "## R1 - Active [IN PROGRESS (GREEN)]",
