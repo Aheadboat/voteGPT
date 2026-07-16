@@ -1,9 +1,11 @@
 // @vitest-environment node
 
+import { spawn } from "node:child_process";
 import { createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PGlite } from "@electric-sql/pglite";
 import { count, eq } from "drizzle-orm";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createDatabase } from "@/db";
@@ -932,6 +934,104 @@ describe("saved residence key rotation", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("runs file-backed rotation as a count-only resumable Node command without leaking residence secrets", async () => {
+    const root = await mkdtemp(join(tmpdir(), "votegpt-residence-command-"));
+    const databasePath = join(root, "database");
+    const connectionString = pgliteConnection(databasePath);
+    const db = await createDatabase(connectionString);
+    const repository = createSavedResidenceRepository(db);
+    const address = "901 Private Residence Lane";
+    const legacyKeyring = loadResidenceEncryptionKeyring(
+      validEnvironment({ activeVersion: "2026-01" }),
+    );
+    let databaseClosed = false;
+
+    try {
+      await db.insert(user).values(testUser("command"));
+      await saveRotationResidence(
+        repository,
+        "user_command",
+        address,
+        legacyKeyring,
+      );
+      await closeDatabase(db);
+      databaseClosed = true;
+
+      const failed = await runRotationCommand({
+        DATABASE_URL: connectionString,
+        ...validEnvironment({
+          entries: [
+            { version: "2026-01", key: encodedKey(9) },
+            { version: "2026-07", key: encodedKey(2) },
+          ],
+        }),
+      });
+      expect(failed).toEqual({
+        code: 1,
+        stderr: "Saved residence key rotation failed.\n",
+        stdout: "",
+      });
+
+      const first = await runRotationCommand({
+        DATABASE_URL: connectionString,
+        ...validEnvironment(),
+      });
+      expect(first).toEqual({
+        code: 0,
+        stderr: "",
+        stdout: '{"rotated":1,"skipped":0,"remaining":0}\n',
+      });
+
+      const resumed = await runRotationCommand({
+        DATABASE_URL: connectionString,
+        ...validEnvironment(),
+      });
+      expect(resumed).toEqual({
+        code: 0,
+        stderr: "",
+        stdout: '{"rotated":0,"skipped":0,"remaining":0}\n',
+      });
+
+      const inspection = new PGlite(databasePath);
+      try {
+        const stored = await inspection.query<{ key_version: string }>(
+          'select "key_version" from "saved_residence"',
+        );
+        expect(stored.rows).toEqual([{ key_version: "2026-07" }]);
+      } finally {
+        await inspection.close();
+      }
+
+      const output = [failed, first, resumed]
+        .flatMap(({ stderr, stdout }) => [stderr, stdout])
+        .join("");
+      for (const secret of [
+        address,
+        "user_command",
+        "2026-01",
+        "2026-07",
+        encodedKey(1),
+        encodedKey(2),
+        encodedKey(9),
+        "Saved residence encrypted address is invalid.",
+      ]) {
+        expect(output).not.toContain(secret);
+      }
+
+      const manifest = JSON.parse(
+        await readFile(resolve(process.cwd(), "package.json"), "utf8"),
+      ) as { scripts?: Record<string, string> };
+      expect(manifest.scripts?.["db:rotate-residence-keys"]).toBe(
+        "node scripts/rotate-saved-residence-keys.mts",
+      );
+    } finally {
+      if (!databaseClosed) {
+        await closeDatabase(db);
+      }
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 30_000);
 });
 
 describe("saved residence persistence", () => {
@@ -1327,6 +1427,38 @@ function rawDatabaseClient(
       params?: unknown[],
     ): Promise<{ rows: Row[] }>;
   };
+}
+
+function runRotationCommand(environment: Readonly<Record<string, string>>) {
+  return new Promise<{ code: number; stderr: string; stdout: string }>(
+    (resolveCommand, rejectCommand) => {
+      const child = spawn(
+        process.execPath,
+        [resolve(process.cwd(), "scripts/rotate-saved-residence-keys.mts")],
+        {
+          cwd: process.cwd(),
+          env: { ...process.env, ...environment },
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 15_000,
+          windowsHide: true,
+        },
+      );
+      let stderr = "";
+      let stdout = "";
+      child.stderr.setEncoding("utf8");
+      child.stdout.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      child.once("error", rejectCommand);
+      child.once("close", (code) => {
+        resolveCommand({ code: code ?? 1, stderr, stdout });
+      });
+    },
+  );
 }
 
 function encodedKey(fill: number) {

@@ -15,6 +15,7 @@
     "build": "next build",
     "db:check": "drizzle-kit check --dialect=postgresql --out=drizzle",
     "db:migrate": "drizzle-kit migrate",
+    "db:rotate-residence-keys": "node scripts/rotate-saved-residence-keys.mts",
     "start": "next start",
     "test": "vitest run",
     "test:postgres": "vitest run --config vitest.postgres.config.mts",
