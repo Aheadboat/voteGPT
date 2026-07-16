@@ -120,7 +120,23 @@ describe("PostgreSQL federal official cache", () => {
       BEGIN
         IF NEW.cache_key = 'roster:v1:GA:13'
           AND NEW.retrieved_at = TIMESTAMPTZ '${NOW.toISOString()}' THEN
-          RAISE EXCEPTION 'synthetic roster write failure';
+          IF EXISTS (
+            SELECT 1 FROM federal_official_cache
+            WHERE cache_key = 'profile:v2:O000001'
+          ) THEN
+            RAISE EXCEPTION 'displaced profile was not deleted before roster write';
+          END IF;
+          IF (
+            SELECT count(*) FROM federal_official_cache
+            WHERE cache_key IN (
+              'profile:v2:H000001',
+              'profile:v2:S000001',
+              'profile:v2:S000002'
+            )
+          ) <> 3 THEN
+            RAISE EXCEPTION 'current profiles were not inserted before roster write';
+          END IF;
+          RAISE EXCEPTION 'synthetic roster write failure after profile replacement';
         END IF;
         RETURN NEW;
       END;
@@ -135,7 +151,9 @@ describe("PostgreSQL federal official cache", () => {
         repository.replaceRoster(
           replacement("H000001", ["S000001", "S000002"], NOW),
         ),
-      ).rejects.toThrow("synthetic roster write failure");
+      ).rejects.toThrow(
+        "synthetic roster write failure after profile replacement",
+      );
     } finally {
       await pool.query(
         "DROP TRIGGER IF EXISTS f5_reject_roster_write ON federal_official_cache",
@@ -168,10 +186,9 @@ describe("PostgreSQL federal official cache", () => {
         replacement("H000001", ["S000001", "S000002"], NOW),
       );
       releaseOlder.resolve();
-      await olderWrite.catch((error: unknown) => {
-        if (!(error instanceof Error)) {
-          throw error;
-        }
+      await expect(olderWrite).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
       });
 
       const rows = await storedRows();
