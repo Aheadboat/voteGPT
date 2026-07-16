@@ -209,6 +209,96 @@ describe("PostgreSQL federal official cache", () => {
     }
   }, 15_000);
 
+  it("ignores an older generation that read an initially empty roster before a newer commit", async () => {
+    const olderPool = new Pool({ connectionString, max: 1 });
+    const newerPool = new Pool({ connectionString, max: 1 });
+    const olderDatabase = drizzle(olderPool, { schema: databaseSchema });
+    const newerDatabase = drizzle(newerPool, { schema: databaseSchema });
+    const olderRead = Promise.withResolvers<void>();
+    const releaseOlder = Promise.withResolvers<void>();
+    const olderRepository = createFederalOfficialCacheRepository(
+      gateRosterRead(olderDatabase, olderRead, releaseOlder.promise),
+    );
+    const newerRepository = createFederalOfficialCacheRepository(newerDatabase);
+    const olderWrite = olderRepository.replaceRoster(
+      replacement("O000002", [], hoursBefore(1)),
+    );
+
+    try {
+      await within(olderRead.promise, 5_000, "older empty-roster read");
+      await within(
+        newerRepository.replaceRoster(
+          replacement("H000001", ["S000001", "S000002"], NOW),
+        ),
+        5_000,
+        "newer empty-roster replacement",
+      );
+      releaseOlder.resolve();
+
+      await expect(
+        within(olderWrite, 5_000, "older empty-roster replacement"),
+      ).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+      const rows = await storedRows();
+      expect(
+        rows.map(({ cacheKey, retrievedAt }) => [cacheKey, retrievedAt]),
+      ).toEqual([
+        ["profile:v2:H000001", NOW],
+        ["profile:v2:S000001", NOW],
+        ["profile:v2:S000002", NOW],
+        ["roster:v1:GA:13", NOW],
+      ]);
+    } finally {
+      releaseOlder.resolve();
+      await Promise.allSettled([olderWrite]);
+      await Promise.all([olderPool.end(), newerPool.end()]);
+    }
+  }, 15_000);
+
+  it("preserves newer shared senator profiles across reverse-order district publications", async () => {
+    const newerDistrict13 = orderProfiles(
+      replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001", "S000002"],
+        NOW,
+      ),
+      ["profile:v2:S000002", "profile:v2:S000001", "profile:v2:H000013"],
+    );
+    const olderDistrict12 = orderProfiles(
+      replacementForDistrict(
+        12,
+        "H000012",
+        ["S000001", "S000002"],
+        hoursBefore(2),
+      ),
+      ["profile:v2:S000001", "profile:v2:S000002", "profile:v2:H000012"],
+    );
+
+    await repository.replaceRoster(newerDistrict13);
+    await repository.replaceRoster(olderDistrict12);
+    await repository.replaceRoster(
+      replacementForDistrict(
+        12,
+        "H000012",
+        ["S000002"],
+        hoursBefore(1),
+      ),
+    );
+
+    const sharedProfiles = (await storedRows()).filter(({ cacheKey }) =>
+      ["profile:v2:S000001", "profile:v2:S000002"].includes(cacheKey),
+    );
+    expect(
+      sharedProfiles.map(({ cacheKey, retrievedAt }) => [cacheKey, retrievedAt]),
+    ).toEqual([
+      ["profile:v2:S000001", NOW],
+      ["profile:v2:S000002", NOW],
+    ]);
+  }, 15_000);
+
   it("rejects wrong-key, private, and invalid-time snapshots before persistence", async () => {
     const valid = replacement("H000001", ["S000001", "S000002"], NOW);
     const wrongKey: FederalRosterReplacement = {
@@ -251,15 +341,24 @@ function replacement(
   senateIds: readonly string[],
   retrievedAt: Date,
 ): FederalRosterReplacement {
+  return replacementForDistrict(13, houseId, senateIds, retrievedAt);
+}
+
+function replacementForDistrict(
+  district: number,
+  houseId: string,
+  senateIds: readonly string[],
+  retrievedAt: Date,
+): FederalRosterReplacement {
   const jurisdiction: FederalJurisdiction = {
     stateCode: "GA",
-    district: 13,
+    district,
     divisionIds: [
       "ocd-division/country:us/state:ga",
-      "ocd-division/country:us/state:ga/cd:13",
+      `ocd-division/country:us/state:ga/cd:${district}`,
     ],
   };
-  const house = servingSeat("house", houseId, 13, jurisdiction, retrievedAt);
+  const house = servingSeat("house", houseId, district, jurisdiction, retrievedAt);
   const senate = senateIds.map((id) =>
     servingSeat("senate", id, null, jurisdiction, retrievedAt),
   );
@@ -273,11 +372,31 @@ function replacement(
     },
   };
   return {
-    roster: cacheRecord("roster:v1:GA:13", roster, retrievedAt),
+    roster: cacheRecord(
+      `roster:v1:GA:${String(district).padStart(2, "0")}`,
+      roster,
+      retrievedAt,
+    ),
     profiles: [house, ...senate].map((seat) =>
       cacheRecord(`profile:v2:${seat.person.bioguideId}`, profileFor(seat), retrievedAt),
     ),
   };
+}
+
+function orderProfiles(
+  replacement: FederalRosterReplacement,
+  cacheKeys: readonly string[],
+): FederalRosterReplacement {
+  const profiles = cacheKeys.map((cacheKey) => {
+    const profile = replacement.profiles.find(
+      (candidate) => candidate.cacheKey === cacheKey,
+    );
+    if (!profile) {
+      throw new Error(`missing ordered profile ${cacheKey}`);
+    }
+    return profile;
+  });
+  return { ...replacement, profiles };
 }
 
 function cacheRecord(
@@ -380,4 +499,97 @@ function gateTransactions(
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+}
+
+function gateRosterRead(
+  database: typeof db,
+  read: PromiseWithResolvers<void>,
+  release: Promise<void>,
+) {
+  type Transaction = Parameters<
+    Parameters<typeof database.transaction>[0]
+  >[0];
+  return new Proxy(database, {
+    get(target, property, receiver) {
+      if (property === "transaction") {
+        return async <T>(
+          callback: (transaction: Transaction) => Promise<T>,
+        ) =>
+          target.transaction((transaction) =>
+            callback(gateTransactionSelect(transaction, read, release)),
+          );
+      }
+      const value = Reflect.get(target, property, receiver) as unknown;
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function gateTransactionSelect<T extends object>(
+  transaction: T,
+  read: PromiseWithResolvers<void>,
+  release: Promise<void>,
+): T {
+  return new Proxy(transaction, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (property !== "select" || typeof value !== "function") {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (...args: unknown[]) =>
+        gateSelectBuilder(
+          Reflect.apply(value, target, args) as object,
+          read,
+          release,
+        );
+    },
+  });
+}
+
+function gateSelectBuilder(
+  builder: object,
+  read: PromiseWithResolvers<void>,
+  release: Promise<void>,
+): object {
+  return new Proxy(builder, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver) as unknown;
+      if (typeof value !== "function") {
+        return value;
+      }
+      return (...args: unknown[]) => {
+        const next = Reflect.apply(value, target, args) as unknown;
+        if (property === "for") {
+          return (async () => {
+            const rows = await Promise.resolve(next);
+            read.resolve();
+            await release;
+            return rows;
+          })();
+        }
+        return typeof next === "object" && next !== null
+          ? gateSelectBuilder(next, read, release)
+          : next;
+      };
+    },
+  });
+}
+
+async function within<T>(promise: Promise<T>, timeoutMs: number, label: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }

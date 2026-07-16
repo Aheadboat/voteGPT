@@ -246,6 +246,45 @@ describe("federal official cache service", () => {
     );
   });
 
+  it("rereads the newer roster after an older refresh loses the write race", async () => {
+    const expiredAt = new Date(NOW.getTime() - 72 * HOUR);
+    const newerAt = new Date(NOW.getTime() + HOUR);
+    const newerRoster = verifiedRoster(jurisdiction, "N000001", newerAt);
+    const newerRecord = cacheRecord(
+      "roster:v1:GA:13",
+      newerRoster,
+      newerAt,
+    );
+    let stored = cacheRecord(
+      "roster:v1:GA:13",
+      verifiedRoster(jurisdiction, "O000001", expiredAt),
+      expiredAt,
+    );
+    const repository: FederalOfficialCacheRepository = {
+      read: vi.fn(async () => stored),
+      replaceRoster: vi.fn(async () => {
+        stored = newerRecord;
+        return { status: "ignored", reason: "older_generation" } as const;
+      }),
+    };
+    const now = vi
+      .fn<() => Date>()
+      .mockReturnValueOnce(new Date(NOW))
+      .mockReturnValue(new Date(NOW.getTime() + 2 * HOUR));
+    const harness = serviceHarness(repository, { now });
+
+    expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+      status: "available",
+      view: {
+        ...newerRoster,
+        freshness: freshnessFor(newerRecord, "fresh"),
+      },
+    });
+    expect(repository.read).toHaveBeenCalledTimes(2);
+    expect(repository.replaceRoster).toHaveBeenCalledTimes(1);
+    expect(now).toHaveBeenCalledTimes(2);
+  });
+
   it("excludes a Clerk-conflicted House member from refreshed profiles", async () => {
     const retrievedAt = new Date(NOW.getTime() - 24 * HOUR);
     const oldRoster = verifiedRoster(jurisdiction, "O000001", retrievedAt);
@@ -406,6 +445,25 @@ describe("federal official cache service", () => {
     expect(harness.fetchCongressRoster).toHaveBeenCalledTimes(1);
     expect(cache.replacements).toEqual([]);
   });
+
+  it.each(houseEvidenceCases(new Date(NOW.getTime() - HOUR)))(
+    "rejects cached House evidence when %s",
+    async (_label, roster) => {
+      const cache = memoryCache([
+        cacheRecord("roster:v1:GA:13", roster, new Date(NOW.getTime() - HOUR)),
+      ]);
+      const harness = serviceHarness(cache.repository, {
+        environment: { CONGRESS_GOV_API_KEY: "" },
+      });
+
+      expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+        status: "unavailable",
+      });
+      expect(cache.reads).toEqual(["roster:v1:GA:13"]);
+      expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+      expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects unsupported jurisdictions before cache or provider work", async () => {
     const unsupported: FederalJurisdiction = {
@@ -603,6 +661,7 @@ function serviceHarness(
     congress?: CongressRosterOutcome;
     clerk?: HouseVacancyOutcome;
     environment?: Readonly<{ CONGRESS_GOV_API_KEY?: string }>;
+    now?: () => Date;
   } = {},
 ) {
   const fetchCongressRoster = vi.fn(async () =>
@@ -620,7 +679,7 @@ function serviceHarness(
       fetch: vi.fn() as unknown as typeof globalThis.fetch,
       fetchCongressRoster,
       fetchCurrentHouseVacancies,
-      now: () => new Date(NOW),
+      now: options.now ?? (() => new Date(NOW)),
     }),
   };
 }
@@ -676,6 +735,66 @@ function verifiedRoster(
     ),
     availableClerk([], retrievedAt),
   );
+}
+
+function houseEvidenceCases(
+  retrievedAt: Date,
+): ReadonlyArray<readonly [string, FederalOfficialsRoster]> {
+  const senators = [
+    servingSeat("senate", "S000001", null, jurisdiction, retrievedAt),
+    servingSeat("senate", "S000002", null, jurisdiction, retrievedAt),
+  ];
+  const serving = verifiedRoster(jurisdiction, "H000001", retrievedAt);
+  const vacant = reconcileFederalOfficials(
+    jurisdiction,
+    availableCongress([], senators),
+    availableClerk(
+      [
+        {
+          stateCode: "GA",
+          district: 13,
+          source: {
+            ...clerkSource,
+            retrievedAt: retrievedAt.toISOString(),
+            url: "https://clerk.house.gov/members/GA13/vacancy",
+          },
+        },
+      ],
+      retrievedAt,
+    ),
+  );
+  if (serving.house.status !== "serving" || vacant.house.status !== "vacant") {
+    throw new Error("test fixtures require serving and vacant House seats");
+  }
+  const memberOnly = serving.house.sources.filter(
+    ({ sourceType }) => sourceType === "member",
+  );
+  const clerkListOnly = vacant.house.sources.filter(
+    ({ url }) => url === "https://clerk.house.gov/Members/ViewVacancies",
+  );
+
+  return [
+    [
+      "a vacant seat has no Clerk evidence",
+      { ...vacant, house: { ...vacant.house, sources: [] } },
+    ],
+    [
+      "a vacant seat lacks district-specific Clerk evidence",
+      { ...vacant, house: { ...vacant.house, sources: clerkListOnly } },
+    ],
+    [
+      "a conflict has only member evidence",
+      {
+        ...serving,
+        house: { ...serving.house, status: "conflict", sources: memberOnly },
+        coverage: { ...serving.coverage, house: "partial" },
+      },
+    ],
+    [
+      "verified serving lacks the Clerk current-list source",
+      { ...serving, house: { ...serving.house, sources: memberOnly } },
+    ],
+  ];
 }
 
 function servingSeat(
