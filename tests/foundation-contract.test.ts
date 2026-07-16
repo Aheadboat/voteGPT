@@ -123,6 +123,28 @@ function expectedActivePhase(status: string): string {
   throw new Error("Unsupported active roadmap status: " + status)
 }
 
+function expectedAuthorizedPairActiveIds(statuses: Map<string, string>) {
+  const f4Status = statuses.get("F4") ?? ""
+  const f5Status = statuses.get("F5") ?? ""
+
+  for (const status of [f4Status, f5Status]) {
+    if (status !== "DONE") {
+      expectedActivePhase(status)
+    }
+  }
+
+  if (f5Status === "DONE" && f4Status !== "DONE") {
+    throw new Error("F5 cannot close before F4")
+  }
+
+  return [
+    ["F4", f4Status],
+    ["F5", f5Status],
+  ]
+    .filter(([, status]) => status !== "DONE")
+    .map(([id]) => id)
+}
+
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
@@ -668,6 +690,8 @@ describe("concurrent roadmap delivery contract", () => {
       .map(([id]) => id)
     const f4 = readRoadmapItem(roadmap, "F4")
     const f5 = readRoadmapItem(roadmap, "F5")
+    const f4Status = statuses.get("F4") ?? ""
+    const f5Status = statuses.get("F5") ?? ""
     const f4Ownership = readCoordinationField(f4, "Ownership")
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
@@ -696,7 +720,47 @@ describe("concurrent roadmap delivery contract", () => {
     ]
 
     expect(r1Status).toBe("DONE")
-    expect(activeIds).toEqual(["F4", "F5"])
+    expect(activeIds).toEqual(expectedAuthorizedPairActiveIds(statuses))
+    expect(
+      expectedAuthorizedPairActiveIds(
+        new Map([
+          ["F4", "IN PROGRESS (RED)"],
+          ["F5", "IN PROGRESS (DISCOVER/DESIGN/PLAN)"],
+        ]),
+      ),
+    ).toEqual(["F4", "F5"])
+    expect(
+      expectedAuthorizedPairActiveIds(
+        new Map([
+          ["F4", "DONE"],
+          ["F5", "IN PROGRESS (GREEN)"],
+        ]),
+      ),
+    ).toEqual(["F5"])
+    expect(
+      expectedAuthorizedPairActiveIds(
+        new Map([
+          ["F4", "DONE"],
+          ["F5", "DONE"],
+        ]),
+      ),
+    ).toEqual([])
+    expect(() =>
+      expectedAuthorizedPairActiveIds(
+        new Map([
+          ["F4", "IN PROGRESS (GREEN)"],
+          ["F5", "DONE"],
+        ]),
+      ),
+    ).toThrow("F5 cannot close before F4")
+    expect(() =>
+      expectedAuthorizedPairActiveIds(
+        new Map([
+          ["F4", "TODO"],
+          ["F5", "IN PROGRESS (DISCOVER/DESIGN/PLAN)"],
+        ]),
+      ),
+    ).toThrow("Unsupported active roadmap status: TODO")
     for (const id of inactiveLaterRoadmapIds) {
       expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
     }
@@ -707,9 +771,18 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readme).toContain(
       "R1 — Concurrent Roadmap Delivery Contract is complete",
     )
-    expect(readme).toContain(
-      "F4 and F5 are active in `DISCOVER/DESIGN/PLAN`",
-    )
+    if (f4Status === "DONE") {
+      expect(readme).toMatch(/F4[^.\n]*complete/i)
+    } else {
+      expect(readme).toContain(
+        "F4 and F5 are active in `DISCOVER/DESIGN/PLAN`",
+      )
+    }
+    if (f5Status === "DONE") {
+      expect(readme).toMatch(/F5[^.\n]*complete/i)
+    } else {
+      expect(readme).toMatch(/F5[^.\n]*active/i)
+    }
     expect(readme).toContain(
       "F6 and every later roadmap item remain TODO",
     )
@@ -717,11 +790,12 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",
       )
-      for (const field of ["Base commit", "Integrated-main commit"]) {
-        expect(readCoordinationField(item, field).replace(/`/g, "")).toBe(
-          activationBase,
-        )
-      }
+      expect(
+        readCoordinationField(item, "Base commit").replace(/`/g, ""),
+      ).toBe(activationBase)
+      expect(
+        readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
+      ).toMatch(/^[0-9a-f]{40}$/i)
       expect(item).toContain(
         "Human Gate A remains required before RED or production work.",
       )
@@ -731,6 +805,10 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(readCoordinationField(f5, "Branch")).toContain(
       "codex/f5-federal-officials",
+    )
+    expect(f4Ownership).toContain("F4 exclusively owns these shared surfaces:")
+    expect(f5Ownership).toContain(
+      "F5 defers these F4-owned shared surfaces:",
     )
     for (const surface of sharedSurfaces) {
       expect(f4Ownership, "F4 must own " + surface).toContain(surface)
@@ -745,9 +823,11 @@ describe("concurrent roadmap delivery contract", () => {
       expect(f4Ownership).toContain(coordinatorFile)
     }
     expect(f4Ownership).toContain("shared PostgreSQL schema/migration history")
-    expect(f4Ownership).toContain("encryption-key configuration")
+    expect(f4Ownership).toContain(
+      "F4 exclusively owns the encryption-key configuration external resource",
+    )
     expect(f5Ownership).toContain(
-      "Congress.gov request/configuration external resource",
+      "F5 exclusively owns the Congress.gov request/configuration external resource",
     )
     expect(f4Ownership).toContain(
       "shared CI configuration and generated artifacts remain frozen",
