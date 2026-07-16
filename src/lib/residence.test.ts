@@ -201,6 +201,37 @@ describe("resolution token", () => {
 
   it.each([
     {
+      case: "canonical provider acronym address",
+      input: { kind: "address" as const, address: "API" },
+    },
+    {
+      case: "single-character address",
+      input: { kind: "address" as const, address: "Q" },
+    },
+    {
+      case: "zero and timestamp-fragment coordinates",
+      input: { kind: "coordinates" as const, latitude: 0, longitude: 20 },
+    },
+    {
+      case: "division-ID-fragment coordinates",
+      input: { kind: "coordinates" as const, latitude: 1, longitude: 2 },
+    },
+  ])("signs safe $case", ({ input }) => {
+    const { resolutionToken } = createResolutionToken(
+      input,
+      resolvedResidence,
+      userId,
+      secret,
+      now,
+    );
+
+    expect(verifyResolutionToken(resolutionToken, userId, secret, now)).toEqual(
+      resolvedResidence,
+    );
+  });
+
+  it.each([
+    {
       case: "raw address",
       input: addressInput,
       resolution: {
@@ -280,6 +311,54 @@ describe("resolution token", () => {
         coverageNotes: [
           `Longitude ${encodeURIComponent(String(coordinateInput.longitude))}`,
         ],
+      },
+    },
+    {
+      case: "malformed percent suffix after an encoded address",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 123%20Main%20Street%ZZ"],
+      },
+    },
+    {
+      case: "address nested beyond the decode limit",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: [encodeNested("123 Main Street", 5)],
+      },
+    },
+    {
+      case: "default-ignorable separated address",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for 123\u200bMain\u200bStreet"],
+      },
+    },
+    {
+      case: "Arabic-digit address",
+      input: { kind: "address", address: "123 Main Street" },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Resolved for ١٢٣ Main Street"],
+      },
+    },
+    {
+      case: "scientific-coordinate decimal equivalent",
+      input: { kind: "coordinates", latitude: 1e-7, longitude: 45 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 0.0000001"],
+      },
+    },
+    {
+      case: "encoded short coordinate with a numeric boundary",
+      input: { kind: "coordinates", latitude: 1, longitude: 2 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude%3A+1"],
       },
     },
   ] satisfies Array<{
@@ -820,6 +899,14 @@ function sharedNamesMatch(
   return left.divisions
     .filter((division) => rightNames.has(division.type))
     .every((division) => rightNames.get(division.type) === division.name);
+}
+
+function encodeNested(value: string, passes: number) {
+  let encoded = value;
+  for (let pass = 0; pass < passes; pass += 1) {
+    encoded = encodeURIComponent(encoded);
+  }
+  return encoded;
 }
 
 function signResolutionPayload(payload: unknown) {

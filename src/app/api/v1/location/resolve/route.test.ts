@@ -338,6 +338,47 @@ describe("POST /api/v1/location/resolve", () => {
 
   it.each([
     {
+      case: "canonical provider acronym address",
+      input: { kind: "address" as const, address: "API" },
+    },
+    {
+      case: "zero and timestamp-fragment coordinates",
+      input: { kind: "coordinates" as const, latitude: 0, longitude: 20 },
+    },
+    {
+      case: "division-ID-fragment coordinates",
+      input: { kind: "coordinates" as const, latitude: 1, longitude: 2 },
+    },
+  ])("returns a signed safe $case preview", async ({ input }) => {
+    vi.spyOn(residenceModule, "resolveResidence").mockResolvedValue({
+      status: "matched",
+      divisions: [
+        {
+          type: "congressional_district",
+          name: "Example Congressional District 1",
+          id: "ocd-division/country:us/state:ex/cd:1",
+          idScheme: "ocd",
+        },
+      ],
+      source: {
+        name: "Google Civic Information API",
+        url: "https://developers.google.com/civic-information",
+        checkedAt: now.toISOString(),
+        effectiveAt: null,
+      },
+      coverageNotes: ["Local divisions may be unavailable."],
+    });
+    const providerFetch = vi.fn<typeof globalThis.fetch>();
+    vi.stubGlobal("fetch", providerFetch);
+
+    const response = await POST(resolveRequest(input));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(providerFetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
       case: "percent-encoded address",
       input: {
         kind: "address" as const,
@@ -371,6 +412,39 @@ describe("POST /api/v1/location/resolve", () => {
         longitude: -77.0365,
       },
       leak: "Longitude −77／0365",
+    },
+    {
+      case: "malformed suffix after encoded address",
+      input: {
+        kind: "address" as const,
+        address: "123 Main Street",
+      },
+      leak: "Resolved for 123%20Main%20Street%ZZ",
+    },
+    {
+      case: "address nested beyond the decode limit",
+      input: {
+        kind: "address" as const,
+        address: "123 Main Street",
+      },
+      leak: encodeNested("123 Main Street", 5),
+    },
+    {
+      case: "default-ignorable separated address",
+      input: {
+        kind: "address" as const,
+        address: "123 Main Street",
+      },
+      leak: "Resolved for 123\u200bMain\u200bStreet",
+    },
+    {
+      case: "scientific-coordinate decimal equivalent",
+      input: {
+        kind: "coordinates" as const,
+        latitude: 1e-7,
+        longitude: 45,
+      },
+      leak: "Latitude 0.0000001",
     },
   ])("fails closed on $case in otherwise public facts", async ({ input, leak }) => {
     vi.spyOn(residenceModule, "resolveResidence").mockResolvedValue({
@@ -500,6 +574,14 @@ async function expectPrivateJson(
 function decodedToken(token: string) {
   const [, payload] = token.split(".");
   return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as unknown;
+}
+
+function encodeNested(value: string, passes: number) {
+  let encoded = value;
+  for (let pass = 0; pass < passes; pass += 1) {
+    encoded = encodeURIComponent(encoded);
+  }
+  return encoded;
 }
 
 function toUrl(input: Parameters<typeof globalThis.fetch>[0]) {

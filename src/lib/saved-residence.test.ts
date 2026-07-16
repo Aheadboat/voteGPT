@@ -1185,11 +1185,65 @@ describe("saved residence persistence", () => {
     }
   });
 
+  it("persists a safe short address when only canonical source metadata contains it", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+
+    try {
+      const saved = await repository.save(
+        "user_one",
+        saveRequest("API", "private.short"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+      );
+
+      expect(saved.replaced).toBe(false);
+      expect(saved.residence.address).toBe("API");
+      expect(await repository.get("user_one", keyring)).toEqual(
+        saved.residence,
+      );
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
   it("rejects full-address reflection across every persisted public surface before writing", async () => {
     const { db, keyring, repository } = await persistenceFixture();
     const address = "456 Oak Avenue";
     const timestampAddress = "2026-07-16T20:00:00.000Z";
     const reflectedResolutions = [
+      {
+        address: "123 Main Street",
+        label: "malformed suffix after encoded address",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: ["Resolved for 123%20Main%20Street%ZZ"],
+        },
+      },
+      {
+        address: "123 Main Street",
+        label: "address nested beyond the decode limit",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: [encodeNested("123 Main Street", 5)],
+        },
+      },
+      {
+        address: "123 Main Street",
+        label: "default-ignorable separated address",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: ["Resolved for 123\u200bMain\u200bStreet"],
+        },
+      },
+      {
+        address: "123 Main Street",
+        label: "Arabic-digit address",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: ["Resolved for ١٢٣ Main Street"],
+        },
+      },
       {
         address,
         label: "percent-encoded coverage note",
@@ -1745,6 +1799,13 @@ function testUser(suffix: string) {
 
 function pgliteConnection(path: string) {
   return `pglite://${path.replaceAll("\\", "/")}`;
+}
+
+function encodeNested(value: string, layers: number) {
+  return Array.from({ length: layers }, () => undefined).reduce<string>(
+    (encoded) => encodeURIComponent(encoded),
+    value,
+  );
 }
 
 function residenceEnvironment() {
