@@ -238,23 +238,50 @@ export function reconcileFederalOfficials(
   clerk: HouseVacancyOutcome,
 ): FederalOfficialsRoster {
   const houseOffice = office("house", jurisdiction, null);
-  const houseMembers =
-    congress.status === "available"
-      ? congress.house.filter(
-          (seat): seat is Extract<FederalSeat, { status: "serving" }> =>
-            seat.status === "serving" &&
-            seat.office.chamber === "house" &&
-            seat.office.stateCode === jurisdiction.stateCode &&
-            seat.office.district === jurisdiction.district &&
-            seat.term.congress === congress.currentCongress,
+  if (congress.status === "unavailable") {
+    const availableClerk = clerk.status === "available" ? clerk : null;
+    const vacancyMatches = availableClerk
+      ? availableClerk.vacancies.filter(
+          ({ stateCode, district }) =>
+            stateCode === jurisdiction.stateCode &&
+            district === jurisdiction.district,
         )
       : [];
+    return {
+      jurisdiction,
+      house: {
+        status: "unknown",
+        office: houseOffice,
+        sources: availableClerk
+          ? [
+              availableClerk.source,
+              ...(vacancyMatches.length === 1
+                ? [vacancyMatches[0].source]
+                : []),
+            ]
+          : [],
+      },
+      senate: [],
+      coverage: {
+        house: availableClerk ? "partial" : "unknown",
+        senate: "unknown",
+      },
+    };
+  }
+  const houseMembers =
+    congress.house.filter(
+      (seat): seat is Extract<FederalSeat, { status: "serving" }> =>
+        seat.status === "serving" &&
+        seat.office.chamber === "house" &&
+        seat.office.stateCode === jurisdiction.stateCode &&
+        seat.office.district === jurisdiction.district &&
+        seat.term.congress === congress.currentCongress,
+    );
   const houseMember = houseMembers.length === 1 ? houseMembers[0] : null;
   const availableClerk = clerk.status === "available" ? clerk : null;
   const qualifyingClerk =
     availableClerk !== null &&
-    (congress.status !== "available" ||
-      availableClerk.currentCongress === congress.currentCongress)
+    availableClerk.currentCongress === congress.currentCongress
       ? availableClerk
       : null;
   const vacancyMatches = qualifyingClerk
@@ -320,16 +347,14 @@ export function reconcileFederalOfficials(
   }
 
   const senateCandidates =
-    congress.status === "available"
-      ? congress.senate.filter(
-          (seat): seat is Extract<FederalSeat, { status: "serving" }> =>
-            seat.status === "serving" &&
-            seat.office.chamber === "senate" &&
-            seat.office.stateCode === jurisdiction.stateCode &&
-            seat.office.district === null &&
-            seat.term.congress === congress.currentCongress,
-        )
-      : [];
+    congress.senate.filter(
+      (seat): seat is Extract<FederalSeat, { status: "serving" }> =>
+        seat.status === "serving" &&
+        seat.office.chamber === "senate" &&
+        seat.office.stateCode === jurisdiction.stateCode &&
+        seat.office.district === null &&
+        seat.term.congress === congress.currentCongress,
+    );
   const senatorIds = senateCandidates.map(({ person }) => person.bioguideId);
   const distinctSenators = new Set(senatorIds).size === senatorIds.length;
   const senateCoverage =

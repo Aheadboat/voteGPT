@@ -364,26 +364,94 @@ describe("federal roster reconciliation", () => {
     expect(clerkDown.house).toEqual(house);
   });
 
+  it("does not invent a House vacancy when Congress is unavailable", () => {
+    const roster = reconcileFederalOfficials(
+      jurisdiction,
+      { status: "unavailable", reason: "timeout" },
+      availableClerk([
+        { stateCode: "CA", district: 12, source: clerkSeatSource },
+      ]),
+    );
+
+    expect(roster.house).toEqual({
+      status: "unknown",
+      office: expect.objectContaining({
+        chamber: "house",
+        stateCode: "CA",
+        district: 12,
+      }),
+      sources: [clerkListSource, clerkSeatSource],
+    });
+    expect(roster.coverage).toEqual({ house: "partial", senate: "unknown" });
+    expect(roster.senate).toEqual([]);
+  });
+
+  it("matches only the exact selected district, including at-large district zero", () => {
+    const irrelevant = reconcileFederalOfficials(
+      jurisdiction,
+      availableCongress([], []),
+      availableClerk([
+        {
+          stateCode: "CA",
+          district: 11,
+          source: { ...clerkSeatSource, url: "https://clerk.house.gov/members/CA11/vacancy" },
+        },
+        {
+          stateCode: "OR",
+          district: 12,
+          source: { ...clerkSeatSource, url: "https://clerk.house.gov/members/OR12/vacancy" },
+        },
+      ]),
+    );
+    expect(irrelevant.house).toMatchObject({
+      status: "unknown",
+      sources: [clerkListSource],
+    });
+
+    const atLargeJurisdiction: FederalJurisdiction = {
+      stateCode: "AK",
+      district: 0,
+      divisionIds: ["02", "0200"],
+    };
+    const atLargeSource: SourceRef = {
+      ...clerkSeatSource,
+      url: "https://clerk.house.gov/members/AK00/vacancy",
+    };
+    const atLarge = reconcileFederalOfficials(
+      atLargeJurisdiction,
+      { status: "available", currentCongress: 119, house: [], senate: [] },
+      availableClerk([
+        { stateCode: "AK", district: 0, source: atLargeSource },
+      ]),
+    );
+    expect(atLarge.house).toMatchObject({
+      status: "vacant",
+      office: { stateCode: "AK", district: 0 },
+      sources: [clerkListSource, atLargeSource],
+    });
+  });
+
   it("marks one senator partial and zero, excess, or duplicate senators unknown", () => {
     const first = servingSeat("senate", "S000001", null);
     const second = servingSeat("senate", "S000002", null);
     const third = servingSeat("senate", "S000003", null);
 
-    expect(
-      reconcileFederalOfficials(
-        jurisdiction,
-        availableCongress([], [first]),
-        availableClerk([]),
-      ).coverage.senate,
-    ).toBe("partial");
+    const oneSenator = reconcileFederalOfficials(
+      jurisdiction,
+      availableCongress([], [first]),
+      availableClerk([]),
+    );
+    expect(oneSenator.coverage.senate).toBe("partial");
+    expect(oneSenator.senate).toEqual([first]);
     for (const senate of [[], [first, second, third], [first, first]]) {
-      expect(
-        reconcileFederalOfficials(
-          jurisdiction,
-          availableCongress([], senate),
-          availableClerk([]),
-        ).coverage.senate,
-      ).toBe("unknown");
+      const roster = reconcileFederalOfficials(
+        jurisdiction,
+        availableCongress([], senate),
+        availableClerk([]),
+      );
+      expect(roster.coverage.senate).toBe("unknown");
+      expect(roster.senate).toEqual([]);
+      expect(roster.senate.some((seat) => seat.status === "vacant")).toBe(false);
     }
   });
 
