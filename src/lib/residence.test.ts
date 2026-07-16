@@ -469,6 +469,30 @@ describe("resolution token", () => {
       },
     },
     {
+      case: "labelled slash-substituted latitude",
+      input: { kind: "coordinates", latitude: 77.0365, longitude: 45 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 77/0365"],
+      },
+    },
+    {
+      case: "labelled comma-substituted latitude",
+      input: { kind: "coordinates", latitude: 77.0365, longitude: 45 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Latitude 77,0365"],
+      },
+    },
+    {
+      case: "labelled slash-substituted signed longitude",
+      input: { kind: "coordinates", latitude: 38.8977, longitude: -77.0365 },
+      resolution: {
+        ...resolvedResidence,
+        coverageNotes: ["Longitude -77/0365"],
+      },
+    },
+    {
       case: "labelled zero coordinate",
       input: { kind: "coordinates", latitude: 0, longitude: 20 },
       resolution: {
