@@ -68,6 +68,19 @@ export function ResidencePreview() {
   const savePendingRef = useRef(false);
   const deletePendingRef = useRef(false);
   const focusManualAfterPendingRef = useRef(false);
+  const focusDeleteAfterConfirmationRef = useRef(false);
+  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const mountedRef = useRef(true);
+  const resolutionRequestRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      resolutionRequestRef.current += 1;
+      pendingRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -95,6 +108,9 @@ export function ResidencePreview() {
     setSavedError("");
     const outcome = await requestSavedResidence();
     savedLoadPendingRef.current = false;
+    if (!mountedRef.current) {
+      return;
+    }
     setSavedState(outcome.state);
     setSavedResidence(outcome.state === "saved" ? outcome.residence : null);
     setSavedError("message" in outcome ? outcome.message : "");
@@ -110,11 +126,61 @@ export function ResidencePreview() {
       focusManualAfterPendingRef.current = false;
       inputRef.current?.focus();
     }
-  }, [deletePending, pending, savePending, savedState]);
+    if (
+      !deleteConfirmation &&
+      !pending &&
+      !savePending &&
+      !deletePending &&
+      focusDeleteAfterConfirmationRef.current
+    ) {
+      focusDeleteAfterConfirmationRef.current = false;
+      deleteButtonRef.current?.focus();
+    }
+  }, [
+    candidate,
+    deleteConfirmation,
+    deletePending,
+    pending,
+    savePending,
+    savedState,
+  ]);
+
+  useEffect(() => {
+    if (!candidate) {
+      return;
+    }
+
+    const expiresAt = Date.parse(candidate.expiresAt);
+    const delay = Number.isFinite(expiresAt)
+      ? Math.max(0, expiresAt - Date.now())
+      : 0;
+    const timeout = window.setTimeout(() => {
+      if (!mountedRef.current) {
+        return;
+      }
+      focusManualAfterPendingRef.current = true;
+      setCandidate(null);
+      setConsentAccepted(false);
+      setStatus(
+        "The residence preview expired. Preview your voting residence again before saving.",
+      );
+    }, delay);
+
+    return () => window.clearTimeout(timeout);
+  }, [candidate]);
 
   function clearCandidate() {
     setCandidate(null);
     setConsentAccepted(false);
+  }
+
+  function invalidatePrivateResidence(message: string) {
+    setSavedResidence(null);
+    setSavedState("unauthenticated");
+    setSavedError(message);
+    setDeleteConfirmation(false);
+    clearCandidate();
+    setStatus("");
   }
 
   function begin(message: string) {
@@ -123,23 +189,42 @@ export function ResidencePreview() {
       savePendingRef.current ||
       deletePendingRef.current
     ) {
-      return false;
+      return null;
     }
 
+    const requestId = resolutionRequestRef.current + 1;
+    resolutionRequestRef.current = requestId;
     pendingRef.current = true;
     setPending(true);
     setResult(null);
+    setDeleteConfirmation(false);
     clearCandidate();
     setStatus(message);
-    return true;
+    return requestId;
   }
 
-  function finish() {
+  function finish(requestId: number) {
+    if (!mountedRef.current || resolutionRequestRef.current !== requestId) {
+      return;
+    }
     pendingRef.current = false;
     setPending(false);
   }
 
-  async function resolve(input: ResidenceInput, manualAddress?: string) {
+  function canApplyResolution(requestId: number) {
+    return (
+      mountedRef.current &&
+      resolutionRequestRef.current === requestId &&
+      pendingRef.current &&
+      !deletePendingRef.current
+    );
+  }
+
+  async function resolve(
+    input: ResidenceInput,
+    requestId: number,
+    manualAddress?: string,
+  ) {
     try {
       const response = await fetch(resolveEndpoint, {
         body: JSON.stringify(input),
@@ -149,6 +234,10 @@ export function ResidencePreview() {
       const body = (await response.json()) as
         | ResolutionResponse
         | ResolutionErrorResponse;
+
+      if (!canApplyResolution(requestId)) {
+        return;
+      }
 
       if (
         response.ok &&
@@ -182,17 +271,21 @@ export function ResidencePreview() {
       );
       focusManualAfterPendingRef.current = true;
     } catch {
+      if (!canApplyResolution(requestId)) {
+        return;
+      }
       setStatus(
         "We could not reach the server. Your residence was not checked. Try again.",
       );
       focusManualAfterPendingRef.current = true;
     } finally {
-      finish();
+      finish(requestId);
     }
   }
 
   function submitAddress(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setDeleteConfirmation(false);
     const normalizedAddress = address.trim();
 
     if (!normalizedAddress) {
@@ -202,9 +295,11 @@ export function ResidencePreview() {
       return;
     }
 
-    if (begin("Checking residence…")) {
+    const requestId = begin("Checking residence…");
+    if (requestId !== null) {
       void resolve(
         { kind: "address", address: normalizedAddress },
+        requestId,
         normalizedAddress,
       );
     }
@@ -215,6 +310,7 @@ export function ResidencePreview() {
       return;
     }
 
+    setDeleteConfirmation(false);
     clearCandidate();
     if (!("geolocation" in navigator)) {
       setStatus(
@@ -224,22 +320,32 @@ export function ResidencePreview() {
       return;
     }
 
-    if (!begin("Getting this device's location…")) {
+    const requestId = begin("Getting this device's location…");
+    if (requestId === null) {
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        void resolve({
-          kind: "coordinates",
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        });
+        if (!canApplyResolution(requestId)) {
+          return;
+        }
+        void resolve(
+          {
+            kind: "coordinates",
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          },
+          requestId,
+        );
       },
       (error) => {
+        if (!canApplyResolution(requestId)) {
+          return;
+        }
         focusManualAfterPendingRef.current = true;
         setStatus(deviceErrorMessage(error.code));
-        finish();
+        finish(requestId);
       },
       {
         enableHighAccuracy: false,
@@ -261,6 +367,7 @@ export function ResidencePreview() {
     }
 
     if (!isFresh(candidate.expiresAt)) {
+      focusManualAfterPendingRef.current = true;
       clearCandidate();
       setStatus(
         "The residence preview expired. Preview your voting residence again before saving.",
@@ -293,9 +400,15 @@ export function ResidencePreview() {
         | SaveResidenceResponse
         | SavedResidenceErrorResponse;
 
+      if (!mountedRef.current) {
+        return;
+      }
+
       if (response.ok && body.status === "saved") {
         setSavedResidence(body.residence);
         setSavedState("saved");
+        setDeleteConfirmation(false);
+        focusManualAfterPendingRef.current = true;
         clearCandidate();
         setStatus(
           body.replaced
@@ -305,7 +418,17 @@ export function ResidencePreview() {
         return;
       }
 
+      if (response.status === 401 || body.status === "unauthenticated") {
+        invalidatePrivateResidence(
+          "message" in body
+            ? body.message
+            : "Sign in again before managing a saved residence.",
+        );
+        return;
+      }
+
       if (response.status === 422 || body.status === "invalid_token") {
+        focusManualAfterPendingRef.current = true;
         clearCandidate();
         setStatus(
           "message" in body
@@ -323,12 +446,17 @@ export function ResidencePreview() {
         } ${unchangedResidenceMessage(savedResidence)}`,
       );
     } catch {
+      if (!mountedRef.current) {
+        return;
+      }
       setStatus(
         `We could not save the residence. Try again. ${unchangedResidenceMessage(savedResidence)}`,
       );
     } finally {
       savePendingRef.current = false;
-      setSavePending(false);
+      if (mountedRef.current) {
+        setSavePending(false);
+      }
     }
   }
 
@@ -336,7 +464,8 @@ export function ResidencePreview() {
     if (
       !savedResidence ||
       deletePendingRef.current ||
-      savePendingRef.current
+      savePendingRef.current ||
+      pendingRef.current
     ) {
       return;
     }
@@ -355,6 +484,10 @@ export function ResidencePreview() {
         | DeleteSavedResidenceResponse
         | SavedResidenceErrorResponse;
 
+      if (!mountedRef.current) {
+        return;
+      }
+
       if (
         response.ok &&
         (body.status === "deleted" || body.status === "empty")
@@ -368,6 +501,15 @@ export function ResidencePreview() {
         return;
       }
 
+      if (response.status === 401 || body.status === "unauthenticated") {
+        invalidatePrivateResidence(
+          "message" in body
+            ? body.message
+            : "Sign in again before managing a saved residence.",
+        );
+        return;
+      }
+
       setStatus(
         `${
           "message" in body
@@ -376,12 +518,17 @@ export function ResidencePreview() {
         } Your saved residence is unchanged.`,
       );
     } catch {
+      if (!mountedRef.current) {
+        return;
+      }
       setStatus(
         "We could not delete the saved residence. Try again. Your saved residence is unchanged.",
       );
     } finally {
       deletePendingRef.current = false;
-      setDeletePending(false);
+      if (mountedRef.current) {
+        setDeletePending(false);
+      }
     }
   }
 
@@ -428,7 +575,10 @@ export function ResidencePreview() {
             <p>
               <strong>Saved address:</strong> {savedResidence.address}
             </p>
-            <ResidenceResult result={savedResidence.resolution} />
+            <ResidenceResult
+              label="Saved residence match"
+              result={savedResidence.resolution}
+            />
             <p>
               Consent recorded:{" "}
               <time dateTime={savedResidence.consent.acceptedAt}>
@@ -437,8 +587,13 @@ export function ResidencePreview() {
             </p>
             <button
               className="secondary-button"
-              disabled={mutationPending}
-              onClick={() => setDeleteConfirmation(true)}
+              disabled={pending || mutationPending}
+              onClick={() => {
+                if (!pendingRef.current) {
+                  setDeleteConfirmation(true);
+                }
+              }}
+              ref={deleteButtonRef}
               type="button"
             >
               Delete saved residence
@@ -450,7 +605,7 @@ export function ResidencePreview() {
                   account will remain.
                 </p>
                 <button
-                  disabled={mutationPending}
+                  disabled={pending || mutationPending}
                   onClick={() => void deleteResidence()}
                   type="button"
                 >
@@ -458,8 +613,11 @@ export function ResidencePreview() {
                 </button>
                 <button
                   className="secondary-button"
-                  disabled={mutationPending}
-                  onClick={() => setDeleteConfirmation(false)}
+                  disabled={pending || mutationPending}
+                  onClick={() => {
+                    focusDeleteAfterConfirmationRef.current = true;
+                    setDeleteConfirmation(false);
+                  }}
                   type="button"
                 >
                   Cancel
@@ -481,7 +639,8 @@ export function ResidencePreview() {
             Enter your voting residence to match it with political divisions.
           </p>
           <p className="residence-privacy">
-            Your address is used only for this check and is not saved.
+            Your address is not saved unless you explicitly choose and consent
+            to save it.
           </p>
         </div>
 
@@ -526,7 +685,9 @@ export function ResidencePreview() {
           {status}
         </p>
 
-        {result ? <ResidenceResult result={result} /> : null}
+        {result ? (
+          <ResidenceResult label="Residence preview match" result={result} />
+        ) : null}
 
         {showSaveControls ? (
           <section
@@ -563,9 +724,15 @@ export function ResidencePreview() {
   );
 }
 
-function ResidenceResult({ result }: { result: SavedResidenceResolution }) {
+function ResidenceResult({
+  label,
+  result,
+}: {
+  label: "Residence preview match" | "Saved residence match";
+  result: SavedResidenceResolution;
+}) {
   return (
-    <section aria-label="Residence match" className="residence-result">
+    <section aria-label={label} className="residence-result">
       <h3>
         {result.status === "matched"
           ? "Matched political divisions"
