@@ -1,7 +1,13 @@
 // @vitest-environment node
 
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getRuntimeAuth } from "@/lib/auth";
+import { createDatabase } from "@/db";
+import { session, user } from "@/db/schema";
+import { createAuth, getRuntimeAuth } from "@/lib/auth";
 import * as residenceModule from "@/lib/residence";
 import * as savedResidenceModule from "@/lib/saved-residence";
 import type {
@@ -10,7 +16,10 @@ import type {
 } from "@/lib/saved-residence";
 import { DELETE, GET, POST } from "./route";
 
-vi.mock("@/lib/auth", () => ({ getRuntimeAuth: vi.fn() }));
+vi.mock("@/lib/auth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth")>();
+  return { ...actual, getRuntimeAuth: vi.fn() };
+});
 
 vi.mock("@/lib/residence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/residence")>();
@@ -354,7 +363,10 @@ describe("/api/v1/residence owner behavior", () => {
 
   it("accepts only valid, unexpired tokens bound to the current user", async () => {
     const cases = [
-      { name: "invalid", token: "SENTINEL_INVALID_RESOLUTION_TOKEN" },
+      {
+        name: "tampered signature",
+        token: tamperedToken(signedToken(userId, now)),
+      },
       {
         name: "expired",
         token: signedToken(
@@ -434,6 +446,179 @@ describe("/api/v1/residence owner behavior", () => {
     );
   });
 
+  it(
+    "enforces owner boundaries with real file-backed sessions and residences",
+    async () => {
+      vi.useRealTimers();
+      const root = await mkdtemp(join(tmpdir(), "votegpt-route-owner-"));
+      const connectionString = pgliteConnection(join(root, "database"));
+      const keyVersion = "2026-07";
+      const encodedKey = Buffer.alloc(32, 7).toString("base64url");
+      let db: Awaited<ReturnType<typeof createDatabase>> | undefined;
+
+      vi.stubEnv("DATABASE_URL", connectionString);
+      vi.stubEnv("RESIDENCE_ENCRYPTION_ACTIVE_KEY", keyVersion);
+      vi.stubEnv(
+        "RESIDENCE_ENCRYPTION_KEYS",
+        JSON.stringify([{ version: keyVersion, key: encodedKey }]),
+      );
+
+      try {
+        db = await createDatabase(connectionString);
+        const deliveries: Array<{
+          email: string;
+          token: string;
+          url: string;
+        }> = [];
+        const auth = createAuth({
+          baseURL: appOrigin,
+          database: db,
+          secret,
+          sendMagicLink: async (delivery) => {
+            deliveries.push(delivery);
+          },
+        });
+        const signIn = async (email: string) => {
+          const sent = await auth.handler(
+            new Request(`${appOrigin}/api/auth/sign-in/magic-link`, {
+              body: JSON.stringify({ email }),
+              headers: {
+                "content-type": "application/json",
+                origin: appOrigin,
+              },
+              method: "POST",
+            }),
+          );
+          expect(sent.status).toBe(200);
+          const delivery = deliveries.at(-1);
+          expect(delivery?.email).toBe(email);
+          const signedIn = await auth.handler(new Request(delivery!.url));
+          expect(signedIn.status).toBe(302);
+          const cookie = signedIn.headers.get("set-cookie")?.split(";", 1)[0];
+          expect(cookie).toMatch(/^better-auth\.session_token=/);
+          return cookie!;
+        };
+
+        const firstEmail = "route-owner-one@example.test";
+        const secondEmail = "route-owner-two@example.test";
+        const firstCookie = await signIn(firstEmail);
+        const secondCookie = await signIn(secondEmail);
+        expect(secondCookie).not.toBe(firstCookie);
+
+        const [firstUser] = await db
+          .select()
+          .from(user)
+          .where(eq(user.email, firstEmail));
+        const [secondUser] = await db
+          .select()
+          .from(user)
+          .where(eq(user.email, secondEmail));
+        expect(firstUser).toBeDefined();
+        expect(secondUser).toBeDefined();
+        if (!firstUser || !secondUser) {
+          throw new Error("Expected both signed-in users.");
+        }
+        expect(
+          new Set(
+            (await db.select().from(session)).map((row) => row.userId),
+          ),
+        ).toEqual(new Set([firstUser.id, secondUser.id]));
+
+        const actualSavedResidence = await vi.importActual<
+          typeof import("@/lib/saved-residence")
+        >("@/lib/saved-residence");
+        const repository =
+          actualSavedResidence.createSavedResidenceRepository(db);
+        const keyring = actualSavedResidence.loadResidenceEncryptionKeyring();
+        const secondResolution = {
+          ...resolution,
+          divisions: [
+            {
+              ...resolution.divisions[0],
+              id: "ocd-division/country:us/state:ex/cd:13",
+              name: "Example Congressional District 13",
+            },
+          ],
+        } satisfies SavedResidenceResolution;
+        const firstStored = await repository.save(
+          firstUser.id,
+          validSaveBody("unused", "111 First Owner Lane"),
+          resolution,
+          now,
+          keyring,
+        );
+        const secondStored = await repository.save(
+          secondUser.id,
+          validSaveBody("unused", "222 Second Owner Road"),
+          secondResolution,
+          now,
+          keyring,
+        );
+        vi.mocked(savedResidenceModule.getSavedResidence).mockImplementation(
+          actualSavedResidence.getSavedResidence,
+        );
+        vi.mocked(savedResidenceModule.deleteSavedResidence).mockImplementation(
+          actualSavedResidence.deleteSavedResidence,
+        );
+        vi.mocked(getRuntimeAuth).mockResolvedValue(auth);
+
+        await expectPrivateJson(
+          await GET(
+            residenceRequest("GET", undefined, { cookie: firstCookie }),
+          ),
+          200,
+          { status: "saved", residence: firstStored.residence },
+        );
+        await expectPrivateJson(
+          await GET(
+            residenceRequest("GET", undefined, { cookie: secondCookie }),
+          ),
+          200,
+          { status: "saved", residence: secondStored.residence },
+        );
+
+        await expectPrivateJson(
+          await DELETE(
+            residenceRequest("DELETE", validDeleteBody(), {
+              cookie: firstCookie,
+            }),
+          ),
+          200,
+          { status: "deleted" },
+        );
+        expect(await repository.get(firstUser.id, keyring)).toBeNull();
+        expect(await repository.get(secondUser.id, keyring)).toEqual(
+          secondStored.residence,
+        );
+
+        await db
+          .delete(session)
+          .where(eq(session.userId, secondUser.id));
+        vi.mocked(savedResidenceModule.deleteSavedResidence).mockClear();
+        const revokedRequest = residenceRequest("DELETE", validDeleteBody(), {
+          cookie: secondCookie,
+        });
+        const readBody = vi.spyOn(revokedRequest, "json");
+        await expectPrivateJson(
+          await DELETE(revokedRequest),
+          401,
+          errors.unauthenticated,
+        );
+        expect(readBody).not.toHaveBeenCalled();
+        expect(savedResidenceModule.deleteSavedResidence).not.toHaveBeenCalled();
+        expect(await repository.get(secondUser.id, keyring)).toEqual(
+          secondStored.residence,
+        );
+      } finally {
+        if (db) {
+          await closeDatabase(db);
+        }
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+    30_000,
+  );
+
   it("deletes without loading or decrypting an address key", async () => {
     vi.stubEnv("RESIDENCE_ENCRYPTION_ACTIVE_KEY", "");
     vi.stubEnv("RESIDENCE_ENCRYPTION_KEYS", "");
@@ -465,6 +650,16 @@ describe("/api/v1/residence fail-closed privacy", () => {
       503,
       errors.unavailable,
     );
+
+    getSession.mockRejectedValueOnce(
+      new Error("SENTINEL_SESSION_DATABASE_DETAIL"),
+    );
+    await expectPrivateJson(
+      await GET(residenceRequest("GET")),
+      503,
+      errors.unavailable,
+    );
+    expect(savedResidenceModule.getSavedResidence).not.toHaveBeenCalled();
 
     vi.mocked(savedResidenceModule.getSavedResidence).mockRejectedValueOnce(
       new Error("SENTINEL_DECRYPT_KEY_VERSION_CIPHERTEXT"),
@@ -532,6 +727,7 @@ describe("/api/v1/residence fail-closed privacy", () => {
 });
 
 type RequestOptions = {
+  cookie?: string;
   contentType?: string | null;
   origin?: string | null;
   raw?: boolean;
@@ -543,7 +739,8 @@ function residenceRequest(
   options: RequestOptions = {},
 ) {
   const headers = new Headers({
-    cookie: "better-auth.session_token=synthetic-session",
+    cookie:
+      options.cookie ?? "better-auth.session_token=synthetic-session",
   });
   const contentType =
     options.contentType === undefined ? "application/json" : options.contentType;
@@ -598,6 +795,13 @@ function signedToken(ownerId: string, issuedAt: Date) {
   ).resolutionToken;
 }
 
+function tamperedToken(token: string) {
+  const [version, payload, signature] = token.split(".");
+  const firstSignatureCharacter = signature[0];
+  const replacement = firstSignatureCharacter === "A" ? "B" : "A";
+  return `${version}.${payload}.${replacement}${signature.slice(1)}`;
+}
+
 function sessionFor(ownerId: string) {
   return {
     session: { id: `session_${ownerId}` },
@@ -635,4 +839,17 @@ function firstCall(mock: { mock: { invocationCallOrder: number[] } }) {
 function expectStrictlyIncreasing(order: number[]) {
   expect(order).toEqual([...order].sort((left, right) => left - right));
   expect(new Set(order).size).toBe(order.length);
+}
+
+function pgliteConnection(path: string) {
+  return `pglite://${path.replaceAll("\\", "/")}`;
+}
+
+async function closeDatabase(
+  database: Awaited<ReturnType<typeof createDatabase>>,
+) {
+  const client = database.$client as unknown as {
+    close?: () => Promise<void>;
+  };
+  await client.close?.();
 }
