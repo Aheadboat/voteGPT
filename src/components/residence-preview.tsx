@@ -65,6 +65,7 @@ export function ResidencePreview() {
   const inputRef = useRef<HTMLInputElement>(null);
   const pendingRef = useRef(false);
   const savedLoadPendingRef = useRef(false);
+  const savedLoadRequestRef = useRef(0);
   const savePendingRef = useRef(false);
   const deletePendingRef = useRef(false);
   const focusManualAfterPendingRef = useRef(false);
@@ -88,19 +89,23 @@ export function ResidencePreview() {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    const requestId = savedLoadRequestRef.current + 1;
+    savedLoadRequestRef.current = requestId;
     savedLoadPendingRef.current = true;
     void requestSavedResidence().then((outcome) => {
-      savedLoadPendingRef.current = false;
-      if (!active) {
+      if (savedLoadRequestRef.current !== requestId) {
         return;
       }
+      savedLoadPendingRef.current = false;
       setSavedState(outcome.state);
       setSavedResidence(outcome.state === "saved" ? outcome.residence : null);
       setSavedError("message" in outcome ? outcome.message : "");
     });
     return () => {
-      active = false;
+      if (savedLoadRequestRef.current === requestId) {
+        savedLoadRequestRef.current += 1;
+        savedLoadPendingRef.current = false;
+      }
     };
   }, []);
 
@@ -109,10 +114,15 @@ export function ResidencePreview() {
       return;
     }
     savedHeadingRef.current?.focus();
+    const requestId = savedLoadRequestRef.current + 1;
+    savedLoadRequestRef.current = requestId;
     savedLoadPendingRef.current = true;
     setSavedState("loading");
     setSavedError("");
     const outcome = await requestSavedResidence();
+    if (savedLoadRequestRef.current !== requestId) {
+      return;
+    }
     savedLoadPendingRef.current = false;
     if (!mountedRef.current) {
       return;
@@ -144,6 +154,7 @@ export function ResidencePreview() {
     }
     if (
       savedState === "unauthenticated" &&
+      !pending &&
       !savePending &&
       !deletePending &&
       focusSignInAfterPendingRef.current
@@ -200,6 +211,8 @@ export function ResidencePreview() {
   }
 
   function invalidatePrivateResidence(message: string) {
+    savedLoadRequestRef.current += 1;
+    savedLoadPendingRef.current = false;
     setSavedResidence(null);
     setSavedState("unauthenticated");
     setSavedError(message);
@@ -291,7 +304,6 @@ export function ResidencePreview() {
       }
 
       if (
-        savedResidence &&
         (response.status === 401 || body.status === "unauthenticated")
       ) {
         invalidatePrivateResidence(

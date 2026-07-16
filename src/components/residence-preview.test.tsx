@@ -1778,7 +1778,11 @@ describe("residence preview", () => {
       expect(message.closest('[role="status"], [aria-live]')).not.toBeNull();
       expect(input).toHaveValue(address);
       expect(input).toBeEnabled();
-      expect(input).toHaveFocus();
+      if (body.status === "unauthenticated") {
+        expect(screen.getByRole("link", { name: /Sign in/i })).toHaveFocus();
+      } else {
+        expect(input).toHaveFocus();
+      }
       expect(
         screen.queryByRole("region", {
           name: /^(?:Residence match|Residence preview match)$/i,
