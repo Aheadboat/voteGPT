@@ -109,7 +109,7 @@ function expectedActivePhase(status: string): string {
   }
 
   const implementationPhase = normalizedStatus.match(
-    /^IN PROGRESS \((RED|GREEN|REFACTOR)\)$/,
+    /^IN PROGRESS \((RED|GREEN|REFACTOR|VERIFIED)\)$/,
   )?.[1]
 
   if (implementationPhase) {
@@ -736,6 +736,7 @@ describe("concurrent roadmap delivery contract", () => {
         "IN PROGRESS (RED)",
         "IN PROGRESS (GREEN)",
         "IN PROGRESS (REFACTOR)",
+        "IN PROGRESS (VERIFIED)",
         "VERIFIED",
       ].map(expectedActivePhase),
     ).toEqual([
@@ -743,6 +744,7 @@ describe("concurrent roadmap delivery contract", () => {
       "RED",
       "GREEN",
       "REFACTOR",
+      "VERIFIED",
       "VERIFIED",
     ])
     expect(() => expectedActivePhase("IN PROGRESS (PROGRESS)")).toThrow(
