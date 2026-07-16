@@ -1,6 +1,6 @@
 # F4 Consented Saved Residence Implementation Plan
 
-> **For agentic workers:** execute task-by-task with `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Every implementation task uses `superpowers:test-driven-development`; every completion claim uses `superpowers:verification-before-completion`. The coordinator owns roadmap state, reviews, PRs, merges, and Human Gates.
+> **For agentic workers:** execute task-by-task with `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Every implementation task uses `superpowers:test-driven-development`; every completion claim uses `superpowers:verification-before-completion`. The coordinator owns roadmap state, reviews, PRs, merges, and delegated gates.
 
 **Goal:** Let a signed-in user explicitly save, replace, read, and delete one encrypted manual residence while normalized political divisions remain separately queryable for deterministic personalization.
 
@@ -10,7 +10,7 @@
 
 ## Gate and scope constraints
 
-- Human Gate A must approve the decisions in this plan before F4-T1 enters RED.
+- The user's 2026-07-16 standing authorization and clean independent plan review satisfy delegated Gate A; F4-T1 may enter RED after this branch records the transition.
 - F4 owns the shared schema, migration, dashboard, residence UI, configuration, and integration surfaces recorded in `ROADMAP.md`; it must not edit coordinator-owned files.
 - Do not modify `src/lib/residence.ts`; consume the existing F3 token and response types unchanged.
 - Manual-only save eligibility is a UI rule. The server never claims the submitted address produced the signed divisions.
@@ -22,7 +22,7 @@
 
 ## Binding product decisions
 
-Gate A approval accepts all of these together:
+Delegated Gate A accepts all of these together:
 
 1. A new explicit save atomically replaces the prior home and keeps no prior-home history.
 2. The authenticated owner can view the full decrypted saved address.
@@ -266,7 +266,7 @@ npm.cmd audit --audit-level=low
 git diff --check
 ```
 
-The coordinator independently inspects the whole diff, reruns proportionate checks, requests read-only review, qualifies hosted CI and mergeability, and presents Human Gate B. F4 is not `DONE` until its feature merge, post-merge checks, and ROADMAP/README-only closeout PR merge.
+The coordinator independently inspects the whole diff, reruns proportionate checks, requests read-only review, qualifies hosted CI and mergeability, and evaluates delegated Gate B under the standing authorization. F4 is not `DONE` until its feature merge, post-merge checks, and ROADMAP/README-only closeout PR merge.
 
 ## UI/UX DNA evidence plan
 
@@ -282,7 +282,7 @@ The coordinator independently inspects the whole diff, reruns proportionate chec
 
 ## Risks and rejected alternatives
 
-Risks retained for Gate A:
+Risks accepted at delegated Gate A:
 
 - F3 does not cryptographically bind the separately submitted address or input kind to the signed divisions. A direct caller can pair an address with coordinate-derived divisions or make their display address disagree with their own personalization, but cannot persist raw coordinates, alter another user, or forge unsigned divisions.
 - A combined database and application-key compromise can reveal addresses.

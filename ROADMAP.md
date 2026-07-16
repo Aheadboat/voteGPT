@@ -415,11 +415,11 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F4 — Consented Saved Residence [IN PROGRESS (RED)]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
-- **Authorization:** User explicitly approved paired F4/F5 activation under the recorded `CONDITIONAL` admission on 2026-07-16. This activation authorizes `DISCOVER/DESIGN/PLAN` only; Human Gate A remains required before RED or production work.
+- **Authorization:** User explicitly approved paired F4/F5 activation and then gave standing authorization for F4-F8 implementation and merges on the temporary integration branch on 2026-07-16. The batch contract delegates artifact-specific Gate A and Gate B decisions to the coordinator without claiming user review of unseen artifacts.
 - **Concurrency audit:** F3 is `DONE` on `main`, and its signed normalized residence result plus congressional-division handoff are settled. F4 and F5 have useful isolated domain/provider lanes, but the current single Drizzle schema and migration stream, authenticated dashboard shell, global styles, environment example, and final integrated verification are shared. F4 therefore owns those surfaces first; F5 defers them until F4's closeout merge and then integrates current `main`.
 - **Activation setup evidence:** The coordinator created inert `codex/f4-consented-saved-residence` and `codex/f5-federal-officials` worktrees from dependency-complete `main@735d73b0b069fa67a1e16a968a7298fb973ef17a`. Dependency installation reported zero vulnerabilities; each feature checkout passed the unchanged 13-file/90-test baseline. No feature agent was dispatched before the activation record.
 - **Activation guard RED/GREEN evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` first failed 1 of 14 tests because the unchanged roadmap had zero active items instead of the authorized F4/F5 pair. After only the activation records, README status, and state-specific assertion were updated, the same command passed 14/14.
@@ -428,6 +428,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Activation merge evidence:** [Activation PR #3](https://github.com/Aheadboat/voteGPT/pull/3) merged reviewed head `602282284bef3cdabf9b92a699a66e68d478d574` to `main` as `f9e6420edcc4665d3f8f965f055148465ca9ec6a`; push CI 29482103398 and pull-request CI 29482118123 passed on the exact head. This branch integrated that merge before feature-lead dispatch.
 - **Post-activation branch baseline:** On `codex/f4-consented-saved-residence`, the activation merge is an ancestor of `HEAD`; the focused foundation contract passed 14/14, the unchanged full suite passed 90/90, and `git diff --check` passed before feature-lead dispatch.
 - **Gate A ownership correction RED/GREEN evidence:** Independent F4 design review found that the activation record omitted five existing residence/account UI and test surfaces required by the proposed F4 work. The strengthened activation guard first failed 1 of 14 tests on missing `src/lib/account.test.ts`; after F4 ownership and matching F5 deferral were extended to all five surfaces, it passed 14/14.
+- **Delegated Gate A evidence:** `F4-IMPLEMENTATION-PLAN.md` at `15f81e5bd6a1300d433ff745ff29933fedceae14` passed final independent plan review with no Critical, Important, or Minor finding after 14/14 focused contract checks and 90/90 full tests. The coordinator confirmed the plan remains consistent with the autonomous batch contract merged at `d1e1b3ace4b8aebf833e30ac4fb387d5acfaed57`; the standing authorization therefore permits F4-T1 RED.
 - **Tests first:** Consent required, authorized decrypt only, separately queryable divisions, cascading deletion, and encryption-key rotation.
 - **Done:** Versioned AES-256-GCM encryption, one-home constraint, consent version/time, and account controls pass; exact location never reaches logs, URLs, analytics, search, or LLM inputs; GPS is never stored.
 - **Non-goals:** Multiple homes, household sharing, or location history.
@@ -439,20 +440,20 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `RED`
 - **Branch:** `codex/f4-consented-saved-residence`
 - **Base commit:** `735d73b0b069fa67a1e16a968a7298fb973ef17a`
-- **Integrated-main commit:** `d5978ba830f0ee715c9162afba8963139c0fb707`
+- **Integrated-main commit:** `d1e1b3ace4b8aebf833e30ac4fb387d5acfaed57`
 - **Admission result:** `CONDITIONAL` — both dependencies are complete and feature-local work is useful, but shared persistence, dashboard, configuration, and integrated-test surfaces require exclusive ownership and serialization.
 - **Assigned feature lead:** `f4_feature_lead` — dispatched only after the activation merge was integrated; returned the corrected reviewed Gate A design and remains the implementation lead after approval.
 - **Ownership:** F4 exclusively owns these shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. F4 also exclusively owns its new residence-consent, encryption, persistence, account-control, and focused-test files. F4 exclusively owns the encryption-key configuration external resource. `AGENTS.md`, `ROADMAP.md`, `README.md`, and `tests/foundation-contract.test.ts` remain coordinator-owned; shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F4 feature PR → post-merge verification → F4 closeout PR/CI/merge. Only after the F4 closeout may F5 integrate current `main`, take the serialized shared-surface handoff, and approach Gate B.
-- **Feature PR/CI:** Not opened; Human Gate A controls RED and production implementation.
+- **Feature PR/CI:** Not opened; the reviewed plan and delegated Gate A are complete, and F4-T1 RED is next. Hosted CI will qualify the gate-transition head before implementation evidence is promoted.
 - **Blockers:** Human Gate A decisions listed above. There is no unresolved technical blocker; the authoritative ownership correction merged in PR #4 and is integrated into this branch.
 - **Feature merge:** Not started.
 - **Post-merge evidence:** Not applicable before the feature merge.
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F4 `DONE` on `main`.
-- **Next Human Gate:** Human Gate A on the complete linked design, tests-first task graph, interfaces, parallel lanes, privacy/security tradeoffs, risks, and non-goals. Approval authorizes F4-T1 RED only.
+- **Next Human Gate:** Delegated Gate B after implementation, fresh focused/full verification, independent whole-feature review, hosted CI, and GitHub mergeability.
 
 ## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
