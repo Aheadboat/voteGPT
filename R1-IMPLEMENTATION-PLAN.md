@@ -24,6 +24,12 @@ The RED/GREEN workers must also use `superpowers:test-driven-development`, the c
 - A `DONE` heading on a closeout branch has no authority until that branch is merged into `main`.
 - If any command produces a materially different result from this plan, stop that task, preserve the evidence, and return it to the coordinator for triage.
 
+### Review-driven corrections
+
+- Task review hardened Markdown section boundaries, repeated-token ordering, all later-item TODO enforcement, and zero-active-item closeout behavior while preserving the original 14-test matrix.
+- Whole-branch review added a coordinator-only inert activation setup, one activation PR/CI/merge on `main` as the authoritative active/admission record, complete admission and stale-branch recovery assertions, structured active-item coordination fields, and an explicit ban on predesigning unauthorized future items.
+- The committed contract test is authoritative for these review additions; every correction preserved the approved scope and received its own observed RED before GREEN.
+
 ---
 
 ## Task graph
@@ -82,13 +88,14 @@ function readMarkdownSection(contents: string, heading: string): string {
     throw new Error("Markdown heading has no level: " + heading)
   }
 
-  const nextHeading = normalizedContents.indexOf(
-    "\n" + level + " ",
-    start + marker.length,
-  )
+  const nextHeadingOffset = normalizedContents
+    .slice(start + marker.length)
+    .search(new RegExp("^#{1," + level.length + "} ", "m"))
   return normalizedContents.slice(
     start,
-    nextHeading === -1 ? normalizedContents.length : nextHeading,
+    nextHeadingOffset === -1
+      ? normalizedContents.length
+      : start + marker.length + nextHeadingOffset,
   )
 }
 
@@ -96,7 +103,7 @@ function expectTokensInOrder(contents: string, tokens: string[]): void {
   let previousIndex = -1
 
   for (const token of tokens) {
-    const index = contents.indexOf(token)
+    const index = contents.indexOf(token, previousIndex + 1)
     expect(index, "missing or out-of-order token: " + token).toBeGreaterThan(
       previousIndex,
     )
@@ -457,13 +464,16 @@ In `AGENTS.md`, replace everything from `## Source of truth` through the line be
 - At most two roadmap items may be active after each candidate pair receives a recorded concurrency admission.
 - Do not begin an unauthorized or dependent item, create speculative scaffolding, or widen scope without roadmap approval.
 - Concurrent cross-item work requires the isolation, ownership, and merge-order rules below; otherwise parallelize only inside one active item.
+- Coordinator-only activation setup is the sole pre-active exception: after explicit authorization it may create inert branches/worktrees and the authoritative activation record, but no feature exploration or edits begin before that record is merged to `main` and integrated into every feature branch.
 
 ## Roadmap item protocol
 
-Roadmap items move through `TODO → explicit authorization → feature branch/worktree → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
+Roadmap items move through `TODO → explicit authorization → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
 - Only explicit user authorization starts an item.
-- The coordinator creates the item branch and worktree from dependency-complete `main` before recording the item active.
+- After explicit user authorization, coordinator-only inert activation setup may create item branches/worktrees from dependency-complete `main`; this is setup, not feature work.
+- One coordinator-owned activation PR/CI/merge on `main` records every activated item, its branch/base, assigned lead, ownership, admission, and merge order as the single authoritative active/admission record.
+- The coordinator integrates the activation merge into every feature branch before any agent dispatch or `DISCOVER/DESIGN/PLAN`.
 - At most two roadmap items may be active; zero or one remains valid.
 - Never activate a dependent or replacement item automatically.
 - An item is `DONE` only when its closeout merge places that status on `main`.
@@ -509,6 +519,7 @@ Before concurrent dispatch, record one result for the candidate pair:
 - `FAIL` applies when dependencies, interfaces, mutable state, ownership, migrations, tests, or integration order remain coupled; run those items sequentially.
 
 Completion or blockage never fills an open slot automatically. A blocked item does not stop another item whose recorded admission remains valid.
+The activation merge on `main` is the sole authoritative admission and merge-order record; item branches never carry competing coordination state.
 
 ### Review, merge, and closeout
 
@@ -564,12 +575,14 @@ Replace the complete `## Execution contract` section in `ROADMAP.md` with:
 ```md
 ## Execution contract
 
-Roadmap items move through `TODO → explicit authorization → feature branch/worktree → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
+Roadmap items move through `TODO → explicit authorization → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
-- ACTIVATION: only explicit user authorization starts an item; never activate a dependent or replacement item automatically.
+- ACTIVATION SETUP: After explicit user authorization, coordinator-only inert activation setup may create item branches/worktrees from dependency-complete `main`; no feature work starts and no dependent or replacement item activates automatically.
+- ACTIVATION RECORD: One coordinator-owned activation PR/CI/merge on `main` records all activated items, branch/base, leads, ownership, admission, and merge order as the single authoritative active/admission record.
+- ACTIVATION DISPATCH: The coordinator integrates the activation merge into every feature branch before any agent dispatch or `DISCOVER/DESIGN/PLAN`.
 - CONCURRENCY CAP: At most two roadmap items may be active; zero or one is valid. Every concurrently active pair must have a recorded `PASS` or `CONDITIONAL` admission; a `FAIL` pair runs sequentially.
-- ADMISSION: `PASS` requires dependencies `DONE` on `main`, settled interfaces, disjoint mutable files/external state, independent tests, worktrees, and merge order. `CONDITIONAL` additionally records exactly one owner for each shared surface plus deferred integration. `FAIL` means unresolved coupling prevents concurrent work.
-- ISOLATION: every roadmap item activated after R1 closes uses `codex/<roadmap-id>-<slug>` and `.worktrees/<roadmap-id>-<slug>` from dependency-complete `main`; R1 is the sole documented transition exception. The base commit and integrated-main commit are recorded; current `main` must be an ancestor of feature HEAD under `git merge-base --is-ancestor <current-main> <feature-head>` before review or merge.
+- ADMISSION: `PASS` requires dependencies `DONE` on `main`, settled interfaces, disjoint mutable files and external state, independent tests, separate worktrees, and merge order. `CONDITIONAL` additionally records exactly one owner for each shared surface, every deferred surface, serialized integration point, and merge order. `FAIL` means coupled work runs sequentially.
+- ISOLATION: every roadmap item activated after R1 closes uses `codex/<roadmap-id>-<slug>` and `.worktrees/<roadmap-id>-<slug>` from dependency-complete `main`; R1 is the sole documented transition exception. The base commit and integrated-main commit are recorded; current `main` must be an ancestor of feature HEAD under `git merge-base --is-ancestor <current-main> <feature-head>` before review or merge. If the check fails, integrate current `main`, rerun focused and full verification, and only then continue before review or merge.
 - DESIGN/PLAN: record applicable DNA, design, testable task graph, dependencies, interfaces, parallel lanes, risks, and non-goals in the active item; extract one linked plan only when inline detail stops being readable.
 - DESIGN AGENTS: every dispatch that includes DISCOVER/DESIGN/PLAN, including the feature lead, requires ponytail full then caveman full before exploration. Resolve skills by catalog name, never machine path; minimalism cannot remove required safeguards, and compression cannot omit required design or Gate evidence.
 - HUMAN GATE A: user approves the item's design and tests-first plan before RED or production work.
@@ -623,7 +636,7 @@ Expected: exit 0; all 14 foundation-contract tests pass.
 - Replace README's status paragraph with:
 
 ```md
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is active on `codex/r1-roadmap-coordinator-contract` while its binding policy is implemented and verified; F4 and every later roadmap item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete. R1 — Concurrent Roadmap Delivery Contract is active at GREEN on `codex/r1-roadmap-coordinator-contract` and awaits integrated verification; F4 and every later roadmap item remain TODO pending separate authorization.
 ```
 
 - [ ] **Step 7: Commit GREEN**

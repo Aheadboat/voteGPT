@@ -18,13 +18,16 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 - At most two roadmap items may be active after each candidate pair receives a recorded concurrency admission.
 - Do not begin an unauthorized or dependent item, create speculative scaffolding, or widen scope without roadmap approval.
 - Concurrent cross-item work requires the isolation, ownership, and merge-order rules below; otherwise parallelize only inside one active item.
+- Coordinator-only activation setup is the sole pre-active exception: after explicit authorization it may create inert branches/worktrees and the authoritative activation record, but no feature exploration or edits begin before that record is merged to `main` and integrated into every feature branch.
 
 ## Roadmap item protocol
 
-Roadmap items move through `TODO → explicit authorization → feature branch/worktree → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
+Roadmap items move through `TODO → explicit authorization → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
 - Only explicit user authorization starts an item.
-- The coordinator creates the item branch and worktree from dependency-complete `main` before recording the item active.
+- After explicit user authorization, coordinator-only inert activation setup may create item branches/worktrees from dependency-complete `main`; this is setup, not feature work.
+- One coordinator-owned activation PR/CI/merge on `main` records every activated item, its branch/base, assigned lead, ownership, admission, and merge order as the single authoritative active/admission record.
+- The coordinator integrates the activation merge into every feature branch before any agent dispatch or `DISCOVER/DESIGN/PLAN`.
 - At most two roadmap items may be active; zero or one remains valid.
 - Never activate a dependent or replacement item automatically.
 - An item is `DONE` only when its closeout merge places that status on `main`.
@@ -70,6 +73,7 @@ Before concurrent dispatch, record one result for the candidate pair:
 - `FAIL` applies when dependencies, interfaces, mutable state, ownership, migrations, tests, or integration order remain coupled; run those items sequentially.
 
 Completion or blockage never fills an open slot automatically. A blocked item does not stop another item whose recorded admission remains valid.
+The activation merge on `main` is the sole authoritative admission and merge-order record; item branches never carry competing coordination state.
 
 ### Review, merge, and closeout
 
