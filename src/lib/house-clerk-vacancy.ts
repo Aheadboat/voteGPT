@@ -226,10 +226,14 @@ function parseVacancies(html: string, currentCongress: number) {
     return null;
   }
   const currentHeading = currentHeadings[0];
+  const nextHeading = headings.find(
+    ({ start }) => start > currentHeading.start,
+  );
   const links = elements.filter(
     (element) =>
       element.name === "a" &&
       element.start >= currentHeading.end &&
+      element.start < (nextHeading?.start ?? owner.closeStart) &&
       containedBy(element, owner),
   );
 
@@ -501,15 +505,35 @@ function anchorLooksVacant(element: RelevantElement) {
 }
 
 function hasVacancySemantics(value: string) {
-  if (/vacanc(?:y|ies)/i.test(value)) {
+  const decodedReferences = decodeNumericCharacterReferences(value);
+  if (/vacanc(?:y|ies)/i.test(decodedReferences)) {
     return true;
   }
 
   try {
-    return /vacanc(?:y|ies)/i.test(decodeURIComponent(value));
+    return /vacanc(?:y|ies)/i.test(
+      decodeNumericCharacterReferences(decodeURIComponent(decodedReferences)),
+    );
   } catch {
     return false;
   }
+}
+
+function decodeNumericCharacterReferences(value: string) {
+  return value.replace(
+    /&#(?:([0-9]+)|x([0-9a-f]+));?/gi,
+    (_reference, decimal: string | undefined, hexadecimal: string | undefined) => {
+      const codePoint = Number.parseInt(
+        decimal ?? hexadecimal ?? "",
+        decimal === undefined ? 16 : 10,
+      );
+      return codePoint === 0 ||
+        codePoint > 0x10ffff ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff)
+        ? "\ufffd"
+        : String.fromCodePoint(codePoint);
+    },
+  );
 }
 
 function vacancyLink(
