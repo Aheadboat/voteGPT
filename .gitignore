@@ -12,6 +12,9 @@
 /playwright-report/
 /test-results/
 
+# isolated roadmap worktrees
+/.worktrees/
+
 # local environment values
 .env*
 !.env.example

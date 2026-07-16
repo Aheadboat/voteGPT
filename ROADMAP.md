@@ -30,18 +30,28 @@ Source precedence: stage-specific official election authority → official ballo
 
 ## Execution contract
 
-Roadmap items move through `TODO → explicit authorization → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → Human Gate B → DONE`.
+Roadmap items move through `TODO → explicit authorization → feature branch/worktree → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
-- ACTIVATION: only explicit user authorization starts an item; never roll automatically into the next item.
-- DESIGN/PLAN: record applicable DNA, design, testable task graph, dependencies, interfaces, parallel lanes, risks, and non-goals in the active item; extract one linked plan only if inline detail stops being readable.
-- HUMAN GATE A: user approves the overall design and tests-first plan before RED or production work.
-- RED: record exact test and expected failure before production code.
-- GREEN: minimum code required to pass.
+- ACTIVATION: only explicit user authorization starts an item; never activate a dependent or replacement item automatically.
+- CONCURRENCY CAP: At most two roadmap items may be active; zero or one is valid. Every concurrently active pair must have a recorded `PASS` or `CONDITIONAL` admission; a `FAIL` pair runs sequentially.
+- ADMISSION: `PASS` requires dependencies `DONE` on `main`, settled interfaces, disjoint mutable files/external state, independent tests, worktrees, and merge order. `CONDITIONAL` additionally records exactly one owner for each shared surface plus deferred integration. `FAIL` means unresolved coupling prevents concurrent work.
+- ISOLATION: every roadmap item activated after R1 closes uses `codex/<roadmap-id>-<slug>` and `.worktrees/<roadmap-id>-<slug>` from dependency-complete `main`; R1 is the sole documented transition exception. The base commit and integrated-main commit are recorded; current `main` must be an ancestor of feature HEAD under `git merge-base --is-ancestor <current-main> <feature-head>` before review or merge.
+- DESIGN/PLAN: record applicable DNA, design, testable task graph, dependencies, interfaces, parallel lanes, risks, and non-goals in the active item; extract one linked plan only when inline detail stops being readable.
+- DESIGN AGENTS: every dispatch that includes DISCOVER/DESIGN/PLAN, including the feature lead, requires ponytail full then caveman full before exploration. Resolve skills by catalog name, never machine path; minimalism cannot remove required safeguards, and compression cannot omit required design or Gate evidence.
+- HUMAN GATE A: user approves the item's design and tests-first plan before RED or production work.
+- RED: record the exact test and expected failure before production code.
+- GREEN: write minimum code required to pass.
 - REFACTOR: simplify proven code only.
-- VERIFIED: focused tests, full checks, and manual accessibility/visual review when applicable.
-- HUMAN GATE B: present delivered behavior, final design and deviations, evidence, and remaining risks; only explicit user approval permits DONE.
-- DONE: record approval and evidence, update this file, and stop with every later item still TODO.
-- At most one roadmap item may be active; zero active items is valid between explicit authorizations.
+- VERIFIED: run focused tests, full checks, and manual accessibility/visual review when applicable.
+- FEATURE PR: current branch, focused and full verification, no unresolved Critical or Important review finding, hosted CI, GitHub mergeability, and Human Gate B approval are all required.
+- HUMAN GATE B: present delivered behavior, final design/deviations, evidence, and remaining risk. Approval authorizes feature merge; it does not mark the item `DONE`.
+- MERGE/CLOSEOUT: merge the conflict-free feature PR in recorded order, verify reachability and required checks on `main`, then merge a `codex/<roadmap-id>-closeout` PR/CI that changes only `ROADMAP.md` and `README.md`. Serialize each feature merge, post-merge verification, and closeout merge before the next concurrent item reaches Gate B.
+- CONFLICTS: feature or closeout conflicts use a dedicated conflict agent, current `main` integration, focused/full verification, renewed review and CI, and renewed Gate B approval after material behavior or architecture changes.
+- OWNERSHIP: the coordinator owns authoritative docs, status, Human Gates, review/CI/PR orchestration, merges, post-merge checks, closeout, and blocker reports but not feature production code. Feature leads cannot change status, merge, edit other worktrees, or edit coordinator-owned files.
+- DURABLE RECORD: each active item records phase, branch, base commit, integrated-main commit, admission result, assigned feature lead, ownership, merge order, feature PR/CI, blockers, feature merge, post-merge evidence, closeout PR/CI/merge, and next Human Gate.
+- ESCALATION: autonomous technical triage precedes interruption. Human escalations are limited to Gates and product/privacy/editorial/legal/vendor/spending/credential/scope/material-design/launch-removal decisions or persistent blockers, and include item, branch, PR, evidence, attempts, downstream impact, recommendation, and exact decision needed.
+- SCOPE: proposing a demonstrated launch, safety, compliance, operability, or dependency gap is allowed; adding, ordering, activating, deferring, or removing an item requires explicit user approval.
+- DONE: the closeout merge places `DONE` and its evidence on `main`; completion never activates another item.
 - UI/UX work: at RED record applicable UX DNA IDs and expected behavioral failures; at VERIFIED map those IDs to automated or recorded manual evidence.
 - No skipped tests or arbitrary coverage percentage.
 - External providers use small fixtures and contract tests; credentialed live tests remain optional.
@@ -316,13 +326,14 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Done:** `POST /api/v1/location/resolve` and the signed-in dashboard preview satisfy the request, provider, token, privacy, recovery, and UX contracts; all focused/full checks and required manual evidence pass; raw input is discarded and never persisted.
 - **Non-goals:** Saved home, shared location cache, distributed rate limiter, local boundary engine, officials, elections, map, reverse-geocoded background tracking, or generalized provider framework.
 
-## R1 — Concurrent Roadmap Delivery Contract [IN PROGRESS (RED)]
+## R1 — Concurrent Roadmap Delivery Contract [IN PROGRESS (GREEN)]
 
 - **Outcome:** The repository can safely coordinate, review, merge, and close up to two dependency-independent roadmap items without weakening explicit authorization, Human Gates, TDD, branch isolation, or main-branch verification.
 - **Dependencies:** F3 is approved, committed, and merged to `main` at `e524494`; hosted PostgreSQL-backed [CI run 29467547931](https://github.com/Aheadboat/voteGPT/actions/runs/29467547931) passed before this branch was created.
 - **Authorization:** User explicitly authorized the concurrent-delivery contract on 2026-07-15. The lifecycle, ownership model, concurrency admission and two-PR closeout, reporting, escalation, scope governance, and mandatory `ponytail full` then `caveman full` feature-design-agent injection were reviewed and approved.
 - **Human Gate A evidence (2026-07-15):** User explicitly approved the revised overall design, tests-first implementation plan, ordered task graph, no-parallel-lanes decision, risks, dependencies, and non-goals, authorizing R1-T1 to enter RED.
 - **RED evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 1 with 14 tests: seven expected policy failures and seven passes (the six pre-existing foundation checks plus the transition-safe R1 amendment guard). The failures prove that the binding contract still lacks concurrent admission, branch/worktree isolation, ordered feature/closeout completion, role/shared-file/feature-design-skill authority, durable coordination records, conflict recovery, and explicit escalation/scope governance.
+- **GREEN evidence (2026-07-15):** `npm.cmd test -- tests/foundation-contract.test.ts` exited 0 with all 14 foundation-contract tests passing.
 - **Implementation plan:** [R1 Concurrent Roadmap Delivery Contract Implementation Plan](./R1-IMPLEMENTATION-PLAN.md). It is separate because the exact RED assertions, binding replacement text, verification commands, PR sequence, and closeout sequence would make this roadmap item unreadable inline.
 - **Applicable UX DNA IDs:** None. R1 changes contributor and agent workflow, not an end-user interface.
 - **Working branch:** `codex/r1-roadmap-coordinator-contract`, created from dependency-complete `main`. R1 remains the sole active item under the existing single-item contract until this amendment is merged and closed. Its root checkout is the explicit transition exception because the isolated-worktree rule does not become binding until R1 is closed; every later roadmap item uses the new worktree contract.

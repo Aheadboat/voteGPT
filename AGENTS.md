@@ -13,44 +13,93 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 
 ## Source of truth
 
-- `ROADMAP.md` owns scope, order, acceptance criteria, gates, and progress.
-- Work only on the single roadmap item marked active.
-- Do not begin a later feature, create speculative scaffolding, or widen scope without roadmap approval.
-- Parallel work is allowed only inside the active feature.
+- `ROADMAP.md` owns scope, order, acceptance criteria, gates, progress, and concurrency records.
+- Work only on roadmap items that the user explicitly authorized and that `ROADMAP.md` marks active.
+- At most two roadmap items may be active after each candidate pair receives a recorded concurrency admission.
+- Do not begin an unauthorized or dependent item, create speculative scaffolding, or widen scope without roadmap approval.
+- Concurrent cross-item work requires the isolation, ownership, and merge-order rules below; otherwise parallelize only inside one active item.
 
 ## Roadmap item protocol
 
-Roadmap items move through `TODO → explicit authorization → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → Human Gate B → DONE`.
+Roadmap items move through `TODO → explicit authorization → feature branch/worktree → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
-- Only explicit user authorization moves a `TODO` item to `IN PROGRESS`.
-- At most one item may be `IN PROGRESS`; zero active items is valid between authorizations.
-- Never activate the next item automatically.
+- Only explicit user authorization starts an item.
+- The coordinator creates the item branch and worktree from dependency-complete `main` before recording the item active.
+- At most two roadmap items may be active; zero or one remains valid.
+- Never activate a dependent or replacement item automatically.
+- An item is `DONE` only when its closeout merge places that status on `main`.
 
 ### Discover, design, and plan
 
 - Confirm the user outcome, dependencies, applicable domain DNA, risks, non-goals, and unresolved decisions.
+- Record phase, branch, base and integrated-main commits, concurrency admission, assigned feature lead, ownership, merge order, PR/CI state, blockers, evidence, and next Human Gate.
 - Prefer vertical, independently testable user outcomes over frontend/backend layer splits.
 - Build a task graph. Each implementation task records its outcome, expected RED failure, files or interfaces, dependencies, and done criteria. Non-implementation tasks record a falsifiable check and expected result.
-- Mark parallel lanes only after their dependencies and interfaces are settled.
-- Keep the plan in the active `ROADMAP.md` item while it remains readable. If it cannot stay concise, create a single linked plan file. Do not create a plan directory in advance.
+- Mark parallel lanes only after dependencies and interfaces are settled and mutable files or external state are disjoint or exclusively owned.
+- Keep the plan in the active `ROADMAP.md` item while it remains readable. If it cannot stay concise, create one linked plan file. Do not create a plan directory in advance.
+
+### Branch and worktree isolation
+
+- Every roadmap item activated after R1 closes uses `codex/<roadmap-id>-<slug>` in a separate ignored `.worktrees/<roadmap-id>-<slug>` checkout, created from the latest dependency-complete `main`. R1 is the sole documented transition exception because its branch predates this binding rule.
+- Record both the original base commit and the latest integrated-main commit.
+- A branch is current only if the current dependency-complete `main` commit is an ancestor of the feature head, checked with `git merge-base --is-ancestor <current-main> <feature-head>`.
+- If that check fails, integrate current `main` into the feature branch and rerun focused and full verification before review or merge.
+- Never let one feature lead edit another item's worktree.
 
 ### Human Gate A
 
-Before RED or production work, present the overall design, tests-first implementation plan, task graph, proposed parallel lanes, risks, dependencies, and non-goals. Continue only after explicit user approval.
+Before RED or production work for an item, present its overall design, tests-first implementation plan, task graph, proposed parallel lanes, risks, dependencies, and non-goals. Continue that item only after explicit user approval.
 
 ### Task graph and delegation
 
-- Main agent owns integration, roadmap state, and final verification.
-- Parallelize only independent tasks with settled interfaces and no overlapping files or mutable state; otherwise work sequentially.
+- The coordinator owns dependency and concurrency audits, branch/worktree creation, task briefs, `AGENTS.md`, `ROADMAP.md`, `README.md`, roadmap status, Human Gates, review orchestration, CI/PR monitoring, merge decisions, post-merge checks, closeout PRs, and blocker reports; it does not implement feature production code.
+- One feature lead owns one roadmap item from discovery through `VERIFIED` and may coordinate bounded implementation subtasks. It cannot change roadmap status, merge, edit another worktree, or modify coordinator-owned authoritative files.
 - Give each subagent one bounded task with the roadmap/task ID, outcome, allowed files, applicable DNA IDs, dependencies and interfaces, expected RED failure, focused test command, and stop condition.
-- Subagents do not change roadmap status or mark work complete. The main agent inspects their changes and reruns their tests.
-- Independent review agents stay read-only unless a separately approved fix task is assigned.
+- Every feature-design dispatch copies this exact portable line: `Required skills: invoke ponytail full, then caveman full, before exploration.` This applies to every dispatch that includes `DISCOVER/DESIGN/PLAN`, including the feature lead. Resolve both skills by name from the agent's available skill catalog; never hardcode a machine path.
+- Ponytail governs design scope but cannot simplify away explicit requirements, trust-boundary validation, data-loss prevention, privacy, security, accessibility, or required tests.
+- Caveman governs communication but cannot omit outcome, dependencies, interfaces, decisions, rejected alternatives, risks, non-goals, expected RED, evidence, Human Gates, or blockers. Use full prose whenever compression would create ambiguity.
+- Subagents do not change roadmap status or mark work complete. The coordinator inspects their diffs and reruns their tests.
+- Independent review agents remain read-only unless the coordinator assigns a separately approved fix task.
+
+### Concurrency admission and shared ownership
+
+Before concurrent dispatch, record one result for the candidate pair:
+
+- `PASS` requires: Every dependency must be `DONE` on `main`; interfaces must be settled; mutable files and external state must be disjoint; tests must be independent; and separate worktrees plus a merge order must be recorded.
+- `CONDITIONAL` requires useful isolated lanes plus exactly one active branch that owns each shared file, schema, migration sequence, generated artifact, or external resource; record every deferred surface, serialized integration point, and merge order before work begins.
+- `FAIL` applies when dependencies, interfaces, mutable state, ownership, migrations, tests, or integration order remain coupled; run those items sequentially.
+
+Completion or blockage never fills an open slot automatically. A blocked item does not stop another item whose recorded admission remains valid.
+
+### Review, merge, and closeout
+
+- A feature PR is merge-eligible only when its branch contains current dependency-complete `main`, focused and full verification pass, independent review has no unresolved Critical or Important finding, hosted CI succeeds, GitHub reports it mergeable, and Human Gate B is approved.
+- When those conditions remain true and there is no conflict, the coordinator merges the feature PR directly to `main` in the recorded merge order.
+- After each feature merge, the coordinator verifies reachability from `main` and reruns the required post-merge checks.
+- The coordinator then creates `codex/<roadmap-id>-closeout` from the latest `main` in the recorded merge order. Its closeout PR changes only `ROADMAP.md` and `README.md`, passes hosted CI, and is merged before the next concurrent feature may reach Gate B.
+- The roadmap slot remains active until the closeout merge places `DONE` on `main`. Git history and the linked PR provide the final closeout-merge proof.
 
 ### Human Gate B
 
-After VERIFIED, present delivered behavior, the final overall design, design deviations and tradeoffs, test evidence, applicable DNA evidence, manual accessibility or visual checks when relevant, and remaining risks or non-goals. Only explicit user approval marks the item DONE. If changes are requested, return to the appropriate earlier stage and reverify.
+After `VERIFIED`, successful feature PR CI, mergeability, and independent review, present delivered behavior, the final overall design, deviations and tradeoffs, test evidence, applicable DNA evidence, manual accessibility or visual checks when relevant, and remaining risks or non-goals.
 
-After approval, record it, mark only the current item `DONE`, and leave every later item `TODO` until separately authorized.
+Gate B authorizes merge; it does not mark the item `DONE`. Continue only after explicit user approval. If changes are requested, return to the appropriate earlier phase and reverify.
+
+### Durable coordination record
+
+For each active item, `ROADMAP.md` records phase, branch, base commit, integrated-main commit, admission result, assigned feature lead, exclusive/shared file or external-state ownership, merge order, feature PR/CI, blockers, feature merge, post-merge evidence, closeout PR/CI/merge, and next Human Gate. Conversation state and agent reports alone never advance status.
+
+### Conflict recovery and escalation
+
+- Feature or closeout PR conflicts go to a dedicated conflict agent on that item branch. It integrates current `main`, resolves only the conflicting surface, runs focused and full verification, and returns the branch for renewed independent review and CI.
+- Material behavior or architecture changes invalidate the prior Gate B approval and return the item to the appropriate earlier phase.
+- The coordinator autonomously repairs missing agent context, escalates reasoning, splits tasks, triages technically attributable failures, addresses in-scope review findings, retries transient CI, and coordinates merge-conflict work.
+- Interrupt the user only for Human Gates; product, privacy, editorial, legal, vendor, spending, credential, scope, or material design decisions; launch-scope removal; or a blocker that remains after context repair, stronger reasoning, and task decomposition.
+- Every escalation packet identifies the item, branch, PR, evidence, attempts, downstream impact, recommendation, and exact decision needed.
+
+### Scope governance
+
+The coordinator may investigate and propose a new roadmap item only for a demonstrated launch, safety, compliance, operability, or dependency gap not covered by existing items. Adding, ordering, activating, deferring, or removing an item requires explicit user approval. No agent may silently widen scope.
 
 ## Domain contracts
 
@@ -92,7 +141,7 @@ Within an authorized roadmap item, code changes follow `RED → GREEN → REFACT
 4. Write minimum production code required to pass.
 5. Refactor only proven code while tests stay green.
 6. Run focused tests, then full verification.
-7. Record evidence, present Human Gate B, and stop. Mark the feature done only after explicit user approval.
+7. Record evidence, complete feature PR CI/review, present Human Gate B, and stop. After approval, merge, verify `main`, and complete the closeout PR/CI/merge before recording `DONE`.
 
 Rules:
 
@@ -123,4 +172,4 @@ Rules:
 
 ## Checkpoint rule
 
-Finish the active feature end to end, verify it, update durable artifacts, present Human Gate B, and stop. After approval, mark it done without rolling into the next feature.
+Finish each active item through `VERIFIED`, complete its feature PR CI/review, present Human Gate B, and wait for explicit approval. After approval, merge in recorded order, verify `main`, merge the status-only closeout PR, confirm `DONE` on `main`, and leave every unauthorized or dependent item inactive.
