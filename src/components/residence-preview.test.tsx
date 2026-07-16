@@ -19,6 +19,8 @@ import { ResidencePreview } from "./residence-preview";
 
 const address = "742 Evergreen Terrace, Springfield";
 const savedAddress = "123 Main Street, Springfield";
+const savedEndpoint = "/api/v1/residence";
+const resolveEndpoint = "/api/v1/location/resolve";
 const consentCopy =
   "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
 const coordinateInput = {
@@ -36,19 +38,19 @@ const savedResidence = {
   },
   consent: {
     version: "saved-residence-v1",
-    acceptedAt: "2026-07-14T19:56:00.000Z",
+    acceptedAt: "2026-07-14T20:01:00.000Z",
   },
-  createdAt: "2026-07-14T19:56:00.000Z",
-  updatedAt: "2026-07-14T19:56:00.000Z",
+  createdAt: "2026-07-14T20:01:00.000Z",
+  updatedAt: "2026-07-14T20:01:00.000Z",
 } as const satisfies SavedResidenceView;
 const replacementSavedResidence = {
   ...savedResidence,
   address,
   consent: {
     version: "saved-residence-v1",
-    acceptedAt: "2026-07-14T20:06:00.000Z",
+    acceptedAt: "2026-07-14T20:05:00.000Z",
   },
-  updatedAt: "2026-07-14T20:06:00.000Z",
+  updatedAt: "2026-07-14T20:05:00.000Z",
 } as const satisfies SavedResidenceView;
 const originalGeolocation = Object.getOwnPropertyDescriptor(
   navigator,
@@ -117,10 +119,47 @@ function geolocationError(code: 1 | 2 | 3): GeolocationPositionError {
 
 function deferredResponse() {
   let resolve!: (response: Response) => void;
-  const promise = new Promise<Response>((fulfill) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<Response>((fulfill, fail) => {
     resolve = fulfill;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
+}
+
+type FetchRouteHandler = (init: RequestInit | undefined) =>
+  | Response
+  | Promise<Response>;
+
+function installResidenceFetch(
+  routes: {
+    savedGet?: FetchRouteHandler;
+    resolve?: FetchRouteHandler;
+    save?: FetchRouteHandler;
+    remove?: FetchRouteHandler;
+  } = {},
+) {
+  const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+
+    if (url === savedEndpoint && method === "GET") {
+      return (routes.savedGet ??
+        (() => jsonResponse({ status: "empty" })))(init);
+    }
+    if (url === resolveEndpoint && method === "POST" && routes.resolve) {
+      return routes.resolve(init);
+    }
+    if (url === savedEndpoint && method === "POST" && routes.save) {
+      return routes.save(init);
+    }
+    if (url === savedEndpoint && method === "DELETE" && routes.remove) {
+      return routes.remove(init);
+    }
+    throw new Error(`Unexpected test request: ${method} ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 describe("residence preview", () => {
@@ -142,11 +181,8 @@ describe("residence preview", () => {
 
   it("keeps manual entry primary, loads saved home, and never resolves location on mount or a timer", () => {
     vi.useFakeTimers();
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ status: "empty" }));
+    const fetchMock = installResidenceFetch();
     const getCurrentPosition = installGeolocation();
-    vi.stubGlobal("fetch", fetchMock);
 
     render(<ResidencePreview />);
 
@@ -205,19 +241,16 @@ describe("residence preview", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
     let resolutionCount = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
-      if (String(input) === "/api/v1/residence") {
-        return jsonResponse({ status: "empty" });
-      }
-
-      resolutionCount += 1;
-      return jsonResponse(
-        resolutionCount === 1
-          ? matchedResidenceResponse
-          : partialResidenceResponse,
-      );
+    installResidenceFetch({
+      resolve: () => {
+        resolutionCount += 1;
+        return jsonResponse(
+          resolutionCount === 1
+            ? matchedResidenceResponse
+            : partialResidenceResponse,
+        );
+      },
     });
-    vi.stubGlobal("fetch", fetchMock);
     installGeolocation((success) => {
       success(
         geolocationPosition(
@@ -228,7 +261,7 @@ describe("residence preview", () => {
     });
 
     render(<ResidencePreview />);
-    await act(async () => {});
+    await screen.findByText(/No residence (?:is )?saved/i);
     enterAddress();
 
     const consent = await screen.findByRole("checkbox", {
@@ -252,14 +285,22 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Save residence" }),
     ).toBeNull();
+
+    enterAddress();
+    const partialConsent = await screen.findByRole("checkbox", {
+      name: consentCopy,
+    });
+    expect(partialConsent).not.toBeChecked();
   });
 
-  it("loads saved-home state before the preview and then renders empty", async () => {
+  it("withholds a completed manual candidate until saved-home loading settles", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
     const savedRequest = deferredResponse();
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockReturnValue(savedRequest.promise);
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = installResidenceFetch({
+      savedGet: () => savedRequest.promise,
+      resolve: () => jsonResponse(matchedResidenceResponse),
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -279,22 +320,27 @@ describe("residence preview", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/residence");
     expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
 
+    enterAddress();
+    await screen.findByRole("region", { name: "Residence match" });
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+
     await act(async () => {
       savedRequest.resolve(jsonResponse({ status: "empty" }));
     });
     expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Delete saved residence" }),
-    ).toBeNull();
+      await screen.findByRole("checkbox", { name: consentCopy }),
+    ).not.toBeChecked();
   });
 
   it("renders the owner saved address with provenance, freshness, coverage, and consent time", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
+    installResidenceFetch({
+      savedGet: () =>
         jsonResponse({ status: "saved", residence: savedResidence }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -320,7 +366,7 @@ describe("residence preview", () => {
       within(saved).getByText("Local divisions may be unavailable."),
     ).toBeVisible();
     expect(
-      saved.querySelector('time[datetime="2026-07-14T19:56:00.000Z"]'),
+      saved.querySelector('time[datetime="2026-07-14T20:01:00.000Z"]'),
     ).toBeInTheDocument();
     expect(
       saved.compareDocumentPosition(
@@ -331,30 +377,80 @@ describe("residence preview", () => {
     ).toBeTruthy();
   });
 
+  it.each(["network", "unavailable", "unauthenticated"] as const)(
+    "recovers saved-home GET %s without implying data changed",
+    async (failure) => {
+      const savedRequest = deferredResponse();
+      installResidenceFetch({ savedGet: () => savedRequest.promise });
+      installGeolocation();
+
+      render(<ResidencePreview />);
+      expect(screen.getByText(/Loading saved residence/i)).toBeVisible();
+
+      await act(async () => {
+        if (failure === "network") {
+          savedRequest.reject(new Error("SENTINEL_PRIVATE_GET_DETAIL"));
+          return;
+        }
+        savedRequest.resolve(
+          jsonResponse(
+            failure === "unauthenticated"
+              ? {
+                  status: "unauthenticated",
+                  message: "Sign in again before managing a saved residence.",
+                }
+              : {
+                  status: "unavailable",
+                  message:
+                    "Saved residence is temporarily unavailable. Try again later.",
+                },
+            failure === "unauthenticated" ? 401 : 503,
+          ),
+        );
+      });
+
+      expect(
+        await screen.findByText(
+          failure === "network"
+            ? /could not (?:load|reach).*saved residence/i
+            : failure === "unauthenticated"
+              ? /Sign in again before managing a saved residence/i
+              : /Saved residence is temporarily unavailable/i,
+        ),
+      ).toBeVisible();
+      expect(document.body).toHaveTextContent(
+        /No saved residence data (?:was )?(?:changed|modified)/i,
+      );
+      expect(screen.queryByText(savedAddress)).toBeNull();
+      expect(document.body).not.toHaveTextContent("SENTINEL_PRIVATE_GET_DETAIL");
+
+      if (failure === "unauthenticated") {
+        expect(
+          screen.getByRole("link", { name: /Sign in/i }),
+        ).toHaveAttribute("href", "/sign-in");
+      } else {
+        expect(
+          screen.getByRole("button", { name: /Retry.*saved residence/i }),
+        ).toBeEnabled();
+      }
+    },
+  );
+
   it("posts the exact consented candidate, warns on replacement, and renders the returned home", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
-    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/v1/residence" && method === "GET") {
-        return jsonResponse({ status: "saved", residence: savedResidence });
-      }
-      if (url === "/api/v1/location/resolve" && method === "POST") {
-        return jsonResponse(matchedResidenceResponse);
-      }
-      if (url === "/api/v1/residence" && method === "POST") {
-        return jsonResponse({
-          status: "saved",
-          residence: replacementSavedResidence,
-          replaced: true,
-        });
-      }
-      throw new Error(`Unexpected test request: ${method} ${url}`);
+    const saveRequest = deferredResponse();
+    const fetchMock = installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      resolve: () => jsonResponse(matchedResidenceResponse),
+      save: () => saveRequest.promise,
     });
-    vi.stubGlobal("fetch", fetchMock);
     installGeolocation();
+    const pushState = vi.spyOn(window.history, "pushState");
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const localStorageWrite = vi.spyOn(window.localStorage, "setItem");
+    const sessionStorageWrite = vi.spyOn(window.sessionStorage, "setItem");
 
     render(<ResidencePreview />);
     await screen.findByText(savedAddress);
@@ -377,7 +473,50 @@ describe("residence preview", () => {
     ).toHaveLength(0);
 
     fireEvent.click(consent);
-    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+    const saveButton = screen.getByRole("button", { name: "Save residence" });
+    fireEvent.click(saveButton);
+
+    const saveCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input) === savedEndpoint && init?.method === "POST",
+    );
+    expect(saveCalls).toHaveLength(1);
+    const saveCall = saveCalls[0];
+    expect(saveCall[0]).toBe(savedEndpoint);
+    expect(saveCall[1]?.method).toBe("POST");
+    expect(new Headers(saveCall[1]?.headers).get("content-type")).toBe(
+      "application/json",
+    );
+    expect(new Headers(saveCall[1]?.headers).has("origin")).toBe(false);
+    expect(JSON.parse(String(saveCall[1]?.body))).toEqual({
+      address,
+      resolutionToken: matchedResidenceResponse.resolutionToken,
+      consent: {
+        accepted: true,
+        version: "saved-residence-v1",
+      },
+    });
+    expect(saveButton).toBeDisabled();
+    expect(consent).toBeDisabled();
+    const saving = screen.getByText(/Saving (?:saved )?residence/i);
+    expect(saving.closest('[role="status"], [aria-live]')).not.toBeNull();
+    fireEvent.click(saveButton);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "POST",
+      ),
+    ).toHaveLength(1);
+
+    await act(async () => {
+      saveRequest.resolve(
+        jsonResponse({
+          status: "saved",
+          residence: replacementSavedResidence,
+          replaced: true,
+        }),
+      );
+    });
 
     const saved = await screen.findByRole("region", {
       name: "Saved residence",
@@ -388,57 +527,77 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Save residence" }),
     ).toBeNull();
-
-    const saveCall = fetchMock.mock.calls.find(
-      ([input, init]) =>
-        String(input) === "/api/v1/residence" && init?.method === "POST",
+    const replaced = await screen.findByText(
+      /Saved residence (?:was )?replaced|Replaced saved residence/i,
     );
-    expect(saveCall).toBeDefined();
-    expect(JSON.parse(String(saveCall?.[1]?.body))).toEqual({
-      address,
-      resolutionToken: matchedResidenceResponse.resolutionToken,
-      consent: {
-        accepted: true,
-        version: "saved-residence-v1",
-      },
-    });
-    expect(new Headers(saveCall?.[1]?.headers).has("origin")).toBe(false);
+    expect(replaced.closest('[role="status"], [aria-live]')).not.toBeNull();
+
+    const browserWrites = JSON.stringify([
+      ...pushState.mock.calls,
+      ...replaceState.mock.calls,
+      ...localStorageWrite.mock.calls,
+      ...sessionStorageWrite.mock.calls,
+    ]);
+    for (const secret of [address, matchedResidenceResponse.resolutionToken]) {
+      expect(browserWrites).not.toContain(secret);
+      expect(decodeURIComponent(window.location.href)).not.toContain(secret);
+    }
   });
 
-  it("clears consent on edits, new checks, device use, expiry, and a rejected token", async () => {
+  it("clears the same candidate as soon as its address is edited", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
-    let manualResolution = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
+    installResidenceFetch({
+      resolve: () => jsonResponse(matchedResidenceResponse),
+    });
+    installGeolocation();
 
-      if (url === "/api/v1/residence" && method === "GET") {
-        return jsonResponse({ status: "empty" });
-      }
-      if (url === "/api/v1/location/resolve" && method === "POST") {
+    render(<ResidencePreview />);
+    await screen.findByText(/No residence (?:is )?saved/i);
+    enterAddress();
+    const consent = await screen.findByRole("checkbox", { name: consentCopy });
+    fireEvent.click(consent);
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+      { target: { value: `${address} Apt 2` } },
+    );
+
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+  });
+
+  it("clears consent on new checks, device use, expiry, and a rejected token", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    const replacementPreview = deferredResponse();
+    let manualResolution = 0;
+    const fetchMock = installResidenceFetch({
+      resolve: (init) => {
         const body = JSON.parse(String(init?.body)) as { kind: string };
         if (body.kind === "coordinates") {
           return jsonResponse(partialResidenceResponse);
         }
         manualResolution += 1;
+        if (manualResolution === 2) {
+          return replacementPreview.promise;
+        }
         return jsonResponse({
           ...matchedResidenceResponse,
           resolutionToken: `fixture-resolution-token-${manualResolution}`,
         });
-      }
-      if (url === "/api/v1/residence" && method === "POST") {
-        return jsonResponse(
+      },
+      save: () =>
+        jsonResponse(
           {
             status: "invalid_token",
             message: "Preview your voting residence again before saving.",
           },
           422,
-        );
-      }
-      throw new Error(`Unexpected test request: ${method} ${url}`);
+        ),
     });
-    vi.stubGlobal("fetch", fetchMock);
     installGeolocation((success) => {
       success(
         geolocationPosition(
@@ -457,16 +616,16 @@ describe("residence preview", () => {
 
     let consent = await manualCandidate();
     fireEvent.click(consent);
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Voting residence address" }),
-      { target: { value: `${address} Apt 2` } },
-    );
-    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-
-    consent = await manualCandidate();
-    fireEvent.click(consent);
     enterAddress(`${address} Apt 3`);
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    await act(async () => {
+      replacementPreview.resolve(
+        jsonResponse({
+          ...matchedResidenceResponse,
+          resolutionToken: "fixture-resolution-token-2",
+        }),
+      );
+    });
     consent = await screen.findByRole("checkbox", { name: consentCopy });
     expect(consent).not.toBeChecked();
 
@@ -512,17 +671,11 @@ describe("residence preview", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
     let saveAttempt = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/v1/residence" && method === "GET") {
-        return jsonResponse({ status: "saved", residence: savedResidence });
-      }
-      if (url === "/api/v1/location/resolve" && method === "POST") {
-        return jsonResponse(matchedResidenceResponse);
-      }
-      if (url === "/api/v1/residence" && method === "POST") {
+    const fetchMock = installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      resolve: () => jsonResponse(matchedResidenceResponse),
+      save: () => {
         saveAttempt += 1;
         if (saveAttempt === 1) {
           throw new Error("SENTINEL_PRIVATE_NETWORK_DETAIL");
@@ -534,10 +687,8 @@ describe("residence preview", () => {
           },
           503,
         );
-      }
-      throw new Error(`Unexpected test request: ${method} ${url}`);
+      },
     });
-    vi.stubGlobal("fetch", fetchMock);
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -574,15 +725,15 @@ describe("residence preview", () => {
   });
 
   it("confirms deletion, preserves failures, and focuses manual entry after success", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
     let deleteAttempt = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-
-      if (url === "/api/v1/residence" && method === "GET") {
-        return jsonResponse({ status: "saved", residence: savedResidence });
-      }
-      if (url === "/api/v1/residence" && method === "DELETE") {
+    const deleteRequest = deferredResponse();
+    const fetchMock = installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      resolve: () => jsonResponse(matchedResidenceResponse),
+      remove: () => {
         deleteAttempt += 1;
         return deleteAttempt === 1
           ? jsonResponse(
@@ -593,17 +744,22 @@ describe("residence preview", () => {
               },
               503,
             )
-          : jsonResponse({ status: "deleted" });
-      }
-      throw new Error(`Unexpected test request: ${method} ${url}`);
+          : deleteRequest.promise;
+      },
     });
-    vi.stubGlobal("fetch", fetchMock);
     installGeolocation();
+    const pushState = vi.spyOn(window.history, "pushState");
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const localStorageWrite = vi.spyOn(window.localStorage, "setItem");
+    const sessionStorageWrite = vi.spyOn(window.sessionStorage, "setItem");
 
     render(<ResidencePreview />);
     const saved = await screen.findByRole("region", {
       name: "Saved residence",
     });
+    enterAddress();
+    const consent = await screen.findByRole("checkbox", { name: consentCopy });
+    fireEvent.click(consent);
     fireEvent.click(
       within(saved).getByRole("button", { name: "Delete saved residence" }),
     );
@@ -621,34 +777,87 @@ describe("residence preview", () => {
     );
     expect(screen.getByText(savedAddress)).toBeVisible();
     expect(confirm).toBeEnabled();
+    expect(consent).toBeChecked();
 
-    fireEvent.click(confirm);
-    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
-    expect(screen.queryByText(savedAddress)).toBeNull();
-    expect(
-      screen.getByRole("textbox", { name: "Voting residence address" }),
-    ).toHaveFocus();
-
+    const retryConfirm = screen.getByRole("button", {
+      name: "Confirm deletion",
+    });
+    fireEvent.click(retryConfirm);
     const deleteCalls = fetchMock.mock.calls.filter(
       ([input, init]) =>
-        String(input) === "/api/v1/residence" && init?.method === "DELETE",
+        String(input) === savedEndpoint && init?.method === "DELETE",
     );
     expect(deleteCalls).toHaveLength(2);
-    for (const [, init] of deleteCalls) {
+    expect(retryConfirm).toBeDisabled();
+    expect(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    ).toBeDisabled();
+    const deleting = screen.getByText(/Deleting saved residence/i);
+    expect(deleting.closest('[role="status"], [aria-live]')).not.toBeNull();
+    fireEvent.click(retryConfirm);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "DELETE",
+      ),
+    ).toHaveLength(2);
+
+    for (const [requestUrl, init] of deleteCalls) {
+      expect(requestUrl).toBe(savedEndpoint);
+      expect(init?.method).toBe("DELETE");
+      expect(new Headers(init?.headers).get("content-type")).toBe(
+        "application/json",
+      );
+      expect(new Headers(init?.headers).has("origin")).toBe(false);
       expect(JSON.parse(String(init?.body))).toEqual({
         confirmation: "DELETE_SAVED_RESIDENCE",
       });
-      expect(new Headers(init?.headers).has("origin")).toBe(false);
+    }
+
+    await act(async () => {
+      deleteRequest.resolve(jsonResponse({ status: "deleted" }));
+    });
+    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(screen.queryByText(savedAddress)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+    ).toHaveFocus();
+    const deleted = await screen.findByText(
+      /Saved residence (?:was )?(?:deleted|removed)/i,
+    );
+    expect(deleted.closest('[role="status"], [aria-live]')).not.toBeNull();
+
+    const browserWrites = JSON.stringify([
+      ...pushState.mock.calls,
+      ...replaceState.mock.calls,
+      ...localStorageWrite.mock.calls,
+      ...sessionStorageWrite.mock.calls,
+    ]);
+    for (const secret of [
+      address,
+      savedAddress,
+      matchedResidenceResponse.resolutionToken,
+    ]) {
+      expect(browserWrites).not.toContain(secret);
+      expect(decodeURIComponent(window.location.href)).not.toContain(secret);
     }
   });
 
   it("posts an exact address once while pending, clears success, and starts a fresh explicit check", async () => {
     const firstRequest = deferredResponse();
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockReturnValueOnce(firstRequest.promise)
-      .mockResolvedValueOnce(jsonResponse(matchedResidenceResponse));
-    vi.stubGlobal("fetch", fetchMock);
+    let resolutionCount = 0;
+    const fetchMock = installResidenceFetch({
+      resolve: () => {
+        resolutionCount += 1;
+        return resolutionCount === 1
+          ? firstRequest.promise
+          : jsonResponse(matchedResidenceResponse);
+      },
+    });
     installGeolocation();
 
     const pushState = vi.spyOn(window.history, "pushState");
@@ -659,9 +868,14 @@ describe("residence preview", () => {
     render(<ResidencePreview />);
     const input = enterAddress();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/v1/location/resolve");
+    const resolverCalls = () =>
+      fetchMock.mock.calls.filter(
+        ([requestUrl, requestInit]) =>
+          String(requestUrl) === resolveEndpoint && requestInit?.method === "POST",
+      );
+    expect(resolverCalls()).toHaveLength(1);
+    const [url, init] = resolverCalls()[0];
+    expect(url).toBe(resolveEndpoint);
     expect(init).toMatchObject({
       headers: { "content-type": "application/json" },
       method: "POST",
@@ -672,24 +886,28 @@ describe("residence preview", () => {
     expect(
       screen.getByRole("button", { name: "Use this device once" }),
     ).toBeDisabled();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Checking residence…",
-    );
+    expect(
+      screen.getByText(/Checking residence/i).closest(
+        '[role="status"], [aria-live]',
+      ),
+    ).not.toBeNull();
     fireEvent.submit(input.closest("form")!);
     fireEvent.click(
       screen.getByRole("button", { name: "Use this device once" }),
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(resolverCalls()).toHaveLength(1);
 
-    firstRequest.resolve(jsonResponse(matchedResidenceResponse));
+    await act(async () => {
+      firstRequest.resolve(jsonResponse(matchedResidenceResponse));
+    });
     await waitFor(() => expect(input).toHaveValue(""));
     expect(screen.getByRole("region", { name: "Residence match" })).toBeVisible();
     expect(document.body).not.toHaveTextContent(address);
 
     fireEvent.change(input, { target: { value: address } });
     fireEvent.submit(input.closest("form")!);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+    await waitFor(() => expect(resolverCalls()).toHaveLength(2));
+    expect(JSON.parse(String(resolverCalls()[1][1]?.body))).toEqual({
       kind: "address",
       address,
     });
@@ -702,10 +920,9 @@ describe("residence preview", () => {
   });
 
   it("renders a matched result with adjacent source, freshness, and coverage limits", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(matchedResidenceResponse)),
-    );
+    installResidenceFetch({
+      resolve: () => jsonResponse(matchedResidenceResponse),
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -756,10 +973,9 @@ describe("residence preview", () => {
   });
 
   it("labels Census output partial and shows benchmark, vintage, and missing coverage", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(partialResidenceResponse)),
-    );
+    installResidenceFetch({
+      resolve: () => jsonResponse(partialResidenceResponse),
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -805,10 +1021,9 @@ describe("residence preview", () => {
         },
       ],
     } satisfies ResolutionResponse;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(overlappingResponse)),
-    );
+    installResidenceFetch({
+      resolve: () => jsonResponse(overlappingResponse),
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
@@ -829,18 +1044,16 @@ describe("residence preview", () => {
   ] as const)(
     "preserves the editable address and announces the %s recovery state",
     async (body, status) => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(body, status)),
-      );
+      installResidenceFetch({
+        resolve: () => jsonResponse(body, status),
+      });
       installGeolocation();
 
       render(<ResidencePreview />);
       const input = enterAddress();
 
-      await waitFor(() =>
-        expect(screen.getByRole("status")).toHaveTextContent(body.message),
-      );
+      const message = await screen.findByText(body.message);
+      expect(message.closest('[role="status"], [aria-live]')).not.toBeNull();
       expect(input).toHaveValue(address);
       expect(input).toBeEnabled();
       expect(input).toHaveFocus();
@@ -849,20 +1062,18 @@ describe("residence preview", () => {
   );
 
   it("preserves the address and announces network recovery without provider prose", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockRejectedValue(new Error("SECRET PROVIDER PROSE")),
-    );
+    installResidenceFetch({
+      resolve: () => Promise.reject(new Error("SECRET PROVIDER PROSE")),
+    });
     installGeolocation();
 
     render(<ResidencePreview />);
     const input = enterAddress();
 
-    await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "We could not reach the server. Your residence was not checked. Try again.",
-      ),
+    const message = await screen.findByText(
+      "We could not reach the server. Your residence was not checked. Try again.",
     );
+    expect(message.closest('[role="status"], [aria-live]')).not.toBeNull();
     expect(input).toHaveValue(address);
     expect(input).toBeEnabled();
     expect(input).toHaveFocus();
@@ -870,10 +1081,9 @@ describe("residence preview", () => {
   });
 
   it("requests one device position per explicit action and posts only exact coordinates", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse(partialResidenceResponse));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = installResidenceFetch({
+      resolve: () => jsonResponse(partialResidenceResponse),
+    });
     const getCurrentPosition = installGeolocation((success) => {
       success(
         geolocationPosition(
@@ -895,17 +1105,22 @@ describe("residence preview", () => {
       maximumAge: 0,
       timeout: 10_000,
     });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/location/resolve");
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual(
+    const resolverCalls = () =>
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === resolveEndpoint && init?.method === "POST",
+      );
+    await waitFor(() => expect(resolverCalls()).toHaveLength(1));
+    expect(resolverCalls()[0][0]).toBe(resolveEndpoint);
+    expect(JSON.parse(String(resolverCalls()[0][1]?.body))).toEqual(
       coordinateInput,
     );
 
     await waitFor(() => expect(deviceButton).toBeEnabled());
     fireEvent.click(deviceButton);
     expect(getCurrentPosition).toHaveBeenCalledTimes(2);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual(
+    await waitFor(() => expect(resolverCalls()).toHaveLength(2));
+    expect(JSON.parse(String(resolverCalls()[1][1]?.body))).toEqual(
       coordinateInput,
     );
   });
@@ -917,8 +1132,7 @@ describe("residence preview", () => {
   ] as const)(
     "keeps device error %i client-side and returns focus to manual entry",
     async (code, message) => {
-      const fetchMock = vi.fn<typeof fetch>();
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = installResidenceFetch();
       installGeolocation((_success, error) => {
         setTimeout(() => error?.(geolocationError(code)), 0);
       });
@@ -931,18 +1145,20 @@ describe("residence preview", () => {
         screen.getByRole("button", { name: "Use this device once" }),
       );
 
-      await waitFor(() =>
-        expect(screen.getByRole("status")).toHaveTextContent(message),
-      );
-      expect(fetchMock).not.toHaveBeenCalled();
+      const recovery = await screen.findByText(message);
+      expect(recovery.closest('[role="status"], [aria-live]')).not.toBeNull();
+      expect(
+        fetchMock.mock.calls.filter(
+          ([input]) => String(input) === resolveEndpoint,
+        ),
+      ).toHaveLength(0);
       expect(input).toBeEnabled();
       expect(input).toHaveFocus();
     },
   );
 
   it("recovers to focused manual entry when geolocation is unsupported", async () => {
-    const fetchMock = vi.fn<typeof fetch>();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = installResidenceFetch();
     Reflect.deleteProperty(navigator, "geolocation");
 
     render(<ResidencePreview />);
@@ -953,12 +1169,15 @@ describe("residence preview", () => {
       screen.getByRole("button", { name: "Use this device once" }),
     );
 
-    await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "Device location is not available. Enter your voting residence instead.",
-      ),
+    const recovery = await screen.findByText(
+      "Device location is not available. Enter your voting residence instead.",
     );
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(recovery.closest('[role="status"], [aria-live]')).not.toBeNull();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input]) => String(input) === resolveEndpoint,
+      ),
+    ).toHaveLength(0);
     expect(input).toHaveFocus();
   });
 });
