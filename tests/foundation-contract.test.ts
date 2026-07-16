@@ -650,6 +650,9 @@ describe("concurrent roadmap delivery contract", () => {
       expect(batch).toContain("record the blocker")
       expect(batch).toContain("continue every independent admitted lane")
       expect(batch).toContain("defer the exact decision to final human review")
+      expect(batch).toContain(
+        "when the autonomous window ends or remaining work is human-blocked",
+      )
       expect(batch).toContain("final human review")
       expect(batch).toContain("must not merge")
     }
