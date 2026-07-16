@@ -381,7 +381,16 @@ describe("residence preview", () => {
     "recovers saved-home GET %s without implying data changed",
     async (failure) => {
       const savedRequest = deferredResponse();
-      installResidenceFetch({ savedGet: () => savedRequest.promise });
+      const retryRequest = deferredResponse();
+      let getAttempt = 0;
+      const fetchMock = installResidenceFetch({
+        savedGet: () => {
+          getAttempt += 1;
+          return getAttempt === 1
+            ? savedRequest.promise
+            : retryRequest.promise;
+        },
+      });
       installGeolocation();
 
       render(<ResidencePreview />);
@@ -409,15 +418,13 @@ describe("residence preview", () => {
         );
       });
 
-      expect(
-        await screen.findByText(
-          failure === "network"
-            ? /could not (?:load|reach).*saved residence/i
-            : failure === "unauthenticated"
-              ? /Sign in again before managing a saved residence/i
-              : /Saved residence is temporarily unavailable/i,
-        ),
-      ).toBeVisible();
+      const failureMessage =
+        failure === "network"
+          ? /could not (?:load|reach).*saved residence/i
+          : failure === "unauthenticated"
+            ? /Sign in again before managing a saved residence/i
+            : /Saved residence is temporarily unavailable/i;
+      expect(await screen.findByText(failureMessage)).toBeVisible();
       expect(document.body).toHaveTextContent(
         /No saved residence data (?:was )?(?:changed|modified)/i,
       );
@@ -429,9 +436,46 @@ describe("residence preview", () => {
           screen.getByRole("link", { name: /Sign in/i }),
         ).toHaveAttribute("href", "/sign-in");
       } else {
-        expect(
-          screen.getByRole("button", { name: /Retry.*saved residence/i }),
-        ).toBeEnabled();
+        const retry = screen.getByRole("button", {
+          name: /Retry.*saved residence/i,
+        });
+        expect(retry).toBeEnabled();
+        fireEvent.click(retry);
+
+        const savedGetCalls = () =>
+          fetchMock.mock.calls.filter(
+            ([input, init]) =>
+              String(input) === savedEndpoint &&
+              (init?.method ?? "GET") === "GET",
+          );
+        await waitFor(() => expect(savedGetCalls()).toHaveLength(2));
+        for (const [requestUrl, init] of savedGetCalls()) {
+          expect(requestUrl).toBe(savedEndpoint);
+          expect(init?.method ?? "GET").toBe("GET");
+        }
+
+        await act(async () => {
+          retryRequest.resolve(
+            jsonResponse(
+              failure === "network"
+                ? { status: "empty" }
+                : { status: "saved", residence: savedResidence },
+            ),
+          );
+        });
+
+        if (failure === "network") {
+          expect(
+            await screen.findByText(/No residence (?:is )?saved/i),
+          ).toBeVisible();
+          expect(screen.queryByText(savedAddress)).toBeNull();
+        } else {
+          const saved = await screen.findByRole("region", {
+            name: "Saved residence",
+          });
+          expect(within(saved).getByText(savedAddress)).toBeVisible();
+        }
+        expect(screen.queryByText(failureMessage)).toBeNull();
       }
     },
   );
@@ -845,6 +889,31 @@ describe("residence preview", () => {
       expect(browserWrites).not.toContain(secret);
       expect(decodeURIComponent(window.location.href)).not.toContain(secret);
     }
+  });
+
+  it("treats an already-empty DELETE response as safe deletion recovery", async () => {
+    installResidenceFetch({
+      savedGet: () =>
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      remove: () => jsonResponse({ status: "empty" }),
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm deletion" }));
+
+    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Saved residence" })).toBeNull();
+    expect(screen.queryByText(savedAddress)).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+    ).toHaveFocus();
   });
 
   it("posts an exact address once while pending, clears success, and starts a fresh explicit check", async () => {
