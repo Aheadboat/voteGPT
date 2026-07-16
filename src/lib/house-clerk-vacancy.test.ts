@@ -23,6 +23,14 @@ const fixture = readFileSync(
 );
 const now = new Date("2026-07-16T12:00:00.000Z");
 const listUrl = "https://clerk.house.gov/Members/ViewVacancies";
+const minimalFixture = `<!doctype html>
+<div class="container members-profile">
+  <h1>Vacancies of the 119th Congress</h1>
+  <h2>First Session</h2>
+  <li class="vacancy_release">
+    <a href="/members/GA13/vacancy">Current vacancy</a>
+  </li>
+</div>`;
 
 afterEach(() => {
   vi.useRealTimers();
@@ -229,6 +237,17 @@ describe("House Clerk current-vacancy adapter", () => {
     ]);
   });
 
+  it("ignores profile and election links around one active seat in a shared list item", async () => {
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(fixture))),
+    );
+
+    expect(available.vacancies.map(({ stateCode, district }) => ({
+      stateCode,
+      district,
+    }))).toEqual([{ stateCode: "GA", district: 13 }]);
+  });
+
   it("does not qualify a canonical-looking link in a later sibling section", async () => {
     const laterSibling = fixture.replace(
       "</body>",
@@ -273,6 +292,83 @@ describe("House Clerk current-vacancy adapter", () => {
       lookup(vi.fn(async () => htmlResponse(html))),
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
+
+  it("does not treat a prefixed div tag as the validated owner", async () => {
+    const prefixedOwner = minimalFixture
+      .replace("<div ", "<div-x ")
+      .replace("</div>", "</div-x>");
+
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(prefixedOwner))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("does not treat a prefixed anchor tag as vacancy evidence", async () => {
+    const prefixedAnchor = minimalFixture
+      .replace("<a ", "<a-x ")
+      .replace("</a>", "</a-x>");
+
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(prefixedAnchor))),
+    );
+
+    expect(available.vacancies).toEqual([]);
+  });
+
+  it("does not treat a prefixed self-closing li tag as malformed li markup", async () => {
+    const prefixedListItem = minimalFixture.replace(
+      '<li class="vacancy_release">',
+      '<li-x/><li class="vacancy_release">',
+    );
+
+    const available = expectAvailable(
+      await lookup(vi.fn(async () => htmlResponse(prefixedListItem))),
+    );
+
+    expect(available.vacancies).toHaveLength(1);
+  });
+
+  it.each(["\u00a0", "\u000b"])(
+    "does not split owner classes on non-HTML whitespace %j",
+    async (separator) => {
+      const nonHtmlClassSpace = minimalFixture.replace(
+        "container members-profile",
+        `container${separator}members-profile`,
+      );
+
+      await expect(
+        lookup(vi.fn(async () => htmlResponse(nonHtmlClassSpace))),
+      ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+    },
+  );
+
+  it.each(["\u00a0", "\u000b"])(
+    "does not split tag attributes on non-HTML whitespace %j",
+    async (separator) => {
+      const nonHtmlAttributeSpace = minimalFixture.replace(
+        "<div class=",
+        `<div${separator}class=`,
+      );
+
+      await expect(
+        lookup(vi.fn(async () => htmlResponse(nonHtmlAttributeSpace))),
+      ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+    },
+  );
+
+  it.each(["script", "style", "textarea", "template"])(
+    "fails closed before %s content can synthesize vacancy tags",
+    async (rawTextTag) => {
+      const rawTextFixture = minimalFixture.replace(
+        '<a href="/members/GA13/vacancy">Current vacancy</a>',
+        `<${rawTextTag}>"<a href='/members/TX01/vacancy'>fake</a>"</${rawTextTag}>`,
+      );
+
+      await expect(
+        lookup(vi.fn(async () => htmlResponse(rawTextFixture))),
+      ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+    },
+  );
 
   it.each([
     [302, "provider_error"],

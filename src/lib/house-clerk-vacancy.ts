@@ -8,6 +8,7 @@ const clerkOrigin = "https://clerk.house.gov";
 const vacancyListUrl = `${clerkOrigin}/Members/ViewVacancies`;
 const timeoutMilliseconds = 5_000;
 const maximumBodyBytes = 1024 * 1024;
+const rawTextNames = new Set(["script", "style", "textarea", "template"]);
 const jurisdictionCodes = new Set([
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
   "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
@@ -213,32 +214,31 @@ function parseVacancies(html: string, currentCongress: number) {
     return null;
   }
   const currentHeading = currentHeadings[0];
-  const entries = elements.filter(
+  const links = elements.filter(
     (element) =>
-      element.name === "li" &&
+      element.name === "a" &&
       element.start >= currentHeading.end &&
-      containedBy(element, owner) &&
-      hasClasses(element.attributes.get("class"), "vacancy_release"),
+      containedBy(element, owner),
   );
 
   const vacancies: Array<{ stateCode: string; district: number; url: string }> = [];
   const seenSeats = new Set<string>();
-  for (const entry of entries) {
-    const links = elements.filter(
-      (element) => element.name === "a" && containedBy(element, entry),
-    );
-    if (links.length === 0) {
+  for (const link of links) {
+    const href = link.attributes.get("href");
+    if (href === undefined || href === null) {
+      if (anchorWithoutHrefLooksVacant(link)) {
+        return null;
+      }
       continue;
     }
-    if (links.length !== 1) {
-      return null;
+    const parsed = vacancyLink(href);
+    if (parsed.status === "unrelated") {
+      continue;
     }
-    const href = links[0].attributes.get("href");
-    if (href === undefined || href === null) {
-      return null;
-    }
-    const parsed = canonicalVacancyLink(href);
-    if (parsed === null || seenSeats.has(`${parsed.stateCode}:${parsed.district}`)) {
+    if (
+      parsed.status === "invalid" ||
+      seenSeats.has(`${parsed.stateCode}:${parsed.district}`)
+    ) {
       return null;
     }
     seenSeats.add(`${parsed.stateCode}:${parsed.district}`);
@@ -301,10 +301,9 @@ function relevantTokens(html: string): TagToken[] | null {
     if (closing) {
       nameStart += 1;
     }
-    const nameMatch = /^[A-Za-z][A-Za-z0-9]*/.exec(html.slice(nameStart));
-    if (!nameMatch) {
-      const declarationEnd = findTagEnd(html, start + 1);
+    if (!/[A-Za-z]/.test(html[nameStart] ?? "")) {
       if (html[nameStart] === "!" || html[nameStart] === "?") {
+        const declarationEnd = findTagEnd(html, start + 1);
         if (declarationEnd === null) {
           return null;
         }
@@ -315,16 +314,27 @@ function relevantTokens(html: string): TagToken[] | null {
       continue;
     }
 
-    const end = findTagEnd(html, nameStart + nameMatch[0].length);
+    const end = findTagEnd(html, nameStart);
     if (end === null) {
       return null;
     }
-    const rawName = nameMatch[0].toLowerCase();
+    let nameEnd = nameStart;
+    while (
+      nameEnd < end &&
+      !isHtmlWhitespace(html[nameEnd]) &&
+      html[nameEnd] !== "/"
+    ) {
+      nameEnd += 1;
+    }
+    const rawName = html.slice(nameStart, nameEnd).toLowerCase();
+    if (rawTextNames.has(rawName)) {
+      return null;
+    }
     const relevantName = relevantNameFrom(rawName);
     if (relevantName !== null) {
-      const remainder = html.slice(nameStart + nameMatch[0].length, end);
+      const remainder = html.slice(nameEnd, end);
       if (closing) {
-        if (remainder.trim() !== "") {
+        if (![...remainder].every(isHtmlWhitespace)) {
           return null;
         }
         tokens.push({
@@ -335,7 +345,7 @@ function relevantTokens(html: string): TagToken[] | null {
           attributes: new Map(),
         });
       } else {
-        if (/\/\s*$/.test(remainder)) {
+        if (/\/[\t\n\f\r ]*$/.test(remainder)) {
           return null;
         }
         const attributes = parseAttributes(remainder);
@@ -377,7 +387,7 @@ function parseAttributes(source: string): Map<string, string | null> | null {
   const attributes = new Map<string, string | null>();
   let cursor = 0;
   while (cursor < source.length) {
-    while (/\s/.test(source[cursor] ?? "")) {
+    while (isHtmlWhitespace(source[cursor])) {
       cursor += 1;
     }
     if (cursor === source.length) {
@@ -387,7 +397,8 @@ function parseAttributes(source: string): Map<string, string | null> | null {
     const nameStart = cursor;
     while (
       cursor < source.length &&
-      !/[\s"'<>\/=]/.test(source[cursor])
+      !isHtmlWhitespace(source[cursor]) &&
+      !/["'<>\/=]/.test(source[cursor])
     ) {
       cursor += 1;
     }
@@ -398,14 +409,14 @@ function parseAttributes(source: string): Map<string, string | null> | null {
     if (attributes.has(name)) {
       return null;
     }
-    while (/\s/.test(source[cursor] ?? "")) {
+    while (isHtmlWhitespace(source[cursor])) {
       cursor += 1;
     }
 
     let value: string | null = null;
     if (source[cursor] === "=") {
       cursor += 1;
-      while (/\s/.test(source[cursor] ?? "")) {
+      while (isHtmlWhitespace(source[cursor])) {
         cursor += 1;
       }
       if (cursor === source.length) {
@@ -421,14 +432,14 @@ function parseAttributes(source: string): Map<string, string | null> | null {
         }
         value = source.slice(valueStart, valueEnd);
         cursor = valueEnd + 1;
-        if (cursor < source.length && !/\s/.test(source[cursor])) {
+        if (cursor < source.length && !isHtmlWhitespace(source[cursor])) {
           return null;
         }
       } else {
         const valueStart = cursor;
         while (
           cursor < source.length &&
-          !/\s/.test(source[cursor])
+          !isHtmlWhitespace(source[cursor])
         ) {
           if (/["'<=`>]/.test(source[cursor])) {
             return null;
@@ -460,16 +471,35 @@ function hasClasses(value: string | null | undefined, ...required: string[]) {
   if (value === null || value === undefined) {
     return false;
   }
-  const classes = new Set(value.split(/\s+/).filter(Boolean));
+  const classes = new Set(value.split(/[\t\n\f\r ]+/).filter(Boolean));
   return required.every((name) => classes.has(name));
 }
 
-function canonicalVacancyLink(href: string) {
+function anchorWithoutHrefLooksVacant(element: RelevantElement) {
+  return (
+    /\bvacancy\b/i.test(plainText(element.content)) ||
+    [...element.attributes.values()].some(
+      (value) => value !== null && /\/vacancy\b/i.test(value),
+    )
+  );
+}
+
+function vacancyLink(
+  href: string,
+):
+  | { status: "unrelated" }
+  | { status: "invalid" }
+  | { status: "valid"; stateCode: string; district: number; url: string } {
   let url: URL;
   try {
     url = new URL(href, clerkOrigin);
   } catch {
-    return null;
+    return /vacancy/i.test(href)
+      ? { status: "invalid" }
+      : { status: "unrelated" };
+  }
+  if (!/\/vacancy\/?$/i.test(url.pathname)) {
+    return { status: "unrelated" };
   }
   const match = /^\/members\/([A-Z]{2})(00|0[1-9]|[1-9][0-9])\/vacancy$/.exec(
     url.pathname,
@@ -485,13 +515,18 @@ function canonicalVacancyLink(href: string) {
     url.hash !== "" ||
     href !== canonicalHref
   ) {
-    return null;
+    return { status: "invalid" };
   }
   return {
+    status: "valid",
     stateCode: match[1],
     district: match[2] === "00" ? 0 : Number(match[2]),
     url: url.toString(),
   };
+}
+
+function isHtmlWhitespace(value: string | undefined) {
+  return value === "\t" || value === "\n" || value === "\f" || value === "\r" || value === " ";
 }
 
 function plainText(html: string) {
