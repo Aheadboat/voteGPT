@@ -1,11 +1,34 @@
 // @vitest-environment node
 
-import { mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { PGlite } from "@electric-sql/pglite";
+import { describe, expect, it, vi } from "vitest";
 import { user } from "./schema";
 import { createDatabase } from ".";
+
+const migrationControl = vi.hoisted(() => ({
+  calls: 0,
+  failure: undefined as Error | undefined,
+}));
+
+vi.mock("drizzle-orm/pglite/migrator", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("drizzle-orm/pglite/migrator")>();
+  return {
+    ...actual,
+    migrate: async (...args: Parameters<typeof actual.migrate>) => {
+      migrationControl.calls += 1;
+      const failure = migrationControl.failure;
+      migrationControl.failure = undefined;
+      if (failure) {
+        throw failure;
+      }
+      return actual.migrate(...args);
+    },
+  };
+});
 
 describe("local database", () => {
   it("boots the migrated auth schema in PGlite", async () => {
@@ -51,21 +74,34 @@ describe("local database", () => {
   });
 
   it(
-    "evicts a failed file-backed initialization so retry can recover",
+    "closes a file-backed client after migration failure so retry can recover",
     async () => {
       const root = await mkdtemp(join(tmpdir(), "votegpt-retry-db-"));
       const dataDirectory = join(root, "database");
       const connectionString = pgliteConnection(dataDirectory);
-      await writeFile(dataDirectory, "not a database directory");
+      const migrationFailure = new Error("migration failed after client open");
+      const close = vi.spyOn(PGlite.prototype, "close");
+      migrationControl.calls = 0;
+      migrationControl.failure = migrationFailure;
+      let recovered:
+        | Awaited<ReturnType<typeof createDatabase>>
+        | undefined;
 
       try {
-        await expect(createDatabase(connectionString)).rejects.toThrow();
-        await unlink(dataDirectory);
+        await expect(createDatabase(connectionString)).rejects.toBe(
+          migrationFailure,
+        );
+        expect(migrationControl.calls).toBe(1);
+        expect(close).toHaveBeenCalled();
 
-        const recovered = await createDatabase(connectionString);
+        recovered = await createDatabase(connectionString);
         expect(await recovered.select().from(user)).toEqual([]);
-        await closeDatabase(recovered);
       } finally {
+        migrationControl.failure = undefined;
+        if (recovered) {
+          await closeDatabase(recovered);
+        }
+        close.mockRestore();
         await rm(root, { force: true, recursive: true });
       }
     },

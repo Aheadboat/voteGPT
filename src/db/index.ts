@@ -38,13 +38,16 @@ async function initializeDatabase(connectionString: string) {
     const dataDirectory = connectionString.slice("pglite://".length);
     const client =
       dataDirectory === "memory" ? new PGlite() : new PGlite(dataDirectory);
-    const database = drizzle(client, { schema: databaseSchema });
-
-    await migrate(database, {
-      migrationsFolder: resolve(process.cwd(), "drizzle"),
-    });
-
-    return database;
+    try {
+      const database = drizzle(client, { schema: databaseSchema });
+      await migrate(database, {
+        migrationsFolder: resolve(process.cwd(), "drizzle"),
+      });
+      return database;
+    } catch (error) {
+      await client.close().catch(() => undefined);
+      throw error;
+    }
   }
 
   return drizzleNodePostgres(new Pool({ connectionString }), {
