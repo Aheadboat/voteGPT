@@ -569,7 +569,7 @@ function residenceRequest(
 
 function validSaveBody(
   resolutionToken = signedToken(userId, now),
-  address = savedResidenceView.address,
+  address: string = savedResidenceView.address,
 ) {
   return {
     address,
