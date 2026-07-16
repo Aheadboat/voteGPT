@@ -230,6 +230,8 @@ describe("federal official cache service", () => {
       jurisdiction,
       expect.objectContaining({ apiKey: API_KEY }),
     );
+    expect(harness.fetchCongressRoster).toHaveBeenCalledTimes(1);
+    expect(harness.fetchCurrentHouseVacancies).toHaveBeenCalledTimes(1);
     expect(cache.replacements).toHaveLength(1);
     const replacement = cache.replacements[0];
     expect(replacement.roster.cacheKey).toBe("roster:v1:GA:13");
@@ -341,6 +343,17 @@ describe("federal official cache service", () => {
       }),
     ],
     [
+      "valid-format wrong binding key",
+      (valid: FederalOfficialCacheRecord) => ({
+        ...valid,
+        cacheKey: "roster:v1:GA:12",
+      }),
+    ],
+    [
+      "null roster payload",
+      (valid: FederalOfficialCacheRecord) => ({ ...valid, payload: null }),
+    ],
+    [
       "schema-invalid roster",
       (valid: FederalOfficialCacheRecord) => ({
         ...valid,
@@ -349,6 +362,14 @@ describe("federal official cache service", () => {
           jurisdiction: { ...jurisdiction, stateCode: "CA" },
         },
       }),
+    ],
+    [
+      "deep private extra field",
+      (valid: FederalOfficialCacheRecord) =>
+        mutateCachedHouse(valid, (house) => ({
+          ...house,
+          person: { ...house.person, address: "private-address-sentinel" },
+        })),
     ],
     [
       "term and person mismatch",
@@ -550,6 +571,24 @@ describe("federal official cache service", () => {
       [
         "lowercase profile cache key",
         { ...fresh.record, cacheKey: "profile:v2:h000001" },
+      ],
+      [
+        "valid-format wrong key and person binding",
+        { ...fresh.record, cacheKey: "profile:v2:X000001" },
+      ],
+      [
+        "term and person mismatch",
+        profileRecord(fresh, {
+          ...fresh.payload,
+          term: { ...fresh.payload.term, personId: "bioguide:X000001" },
+        }),
+      ],
+      [
+        "term and office mismatch",
+        profileRecord(fresh, {
+          ...fresh.payload,
+          term: { ...fresh.payload.term, officeId: "federal:house:GA:12" },
+        }),
       ],
     ] satisfies ReadonlyArray<readonly [string, FederalOfficialCacheRecord]>;
     for (const [label, record] of invalidRecords) {
