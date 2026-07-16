@@ -3,7 +3,7 @@ import {
   createDecipheriv,
   randomBytes,
 } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, asc, count, eq, gt, ne } from "drizzle-orm";
 import { createDatabase } from "@/db";
 import {
   savedResidence,
@@ -126,6 +126,7 @@ const keyringError =
 const encryptedAddressError =
   "Saved residence encrypted address is invalid.";
 const savedResidenceRecordError = "Saved residence record is invalid.";
+const savedResidenceRotationError = "Saved residence key rotation failed.";
 const divisionTypes = new Set<SavedResidenceDivision["type"]>([
   "country",
   "state",
@@ -347,14 +348,129 @@ export async function deleteSavedResidence(userId: string): Promise<boolean> {
   return (await productionRepository()).delete(userId);
 }
 
-export declare function rotateSavedResidenceKeys(): Promise<{
+export async function rotateSavedResidenceKeys(): Promise<{
   rotated: number;
   skipped: number;
   remaining: number;
-}>;
+}> {
+  const repository = await productionRepository();
+  const keyring = loadResidenceEncryptionKeyring();
+  return repository.rotateKeys(keyring, { batchSize: 100 });
+}
 
 export function createSavedResidenceRepository(database: Database) {
   return {
+    async rotateKeys(
+      keyring: ResidenceEncryptionKeyring,
+      options: {
+        batchSize: number;
+        beforeUpdate?: () => Promise<void> | void;
+      },
+    ): Promise<{ rotated: number; skipped: number; remaining: number }> {
+      try {
+        if (
+          !Number.isSafeInteger(options.batchSize) ||
+          options.batchSize < 1 ||
+          !keyring.keys.has(keyring.activeVersion)
+        ) {
+          throw new Error(savedResidenceRotationError);
+        }
+
+        const referencedVersions = await database
+          .selectDistinct({ keyVersion: savedResidence.keyVersion })
+          .from(savedResidence)
+          .orderBy(asc(savedResidence.keyVersion));
+        for (const { keyVersion } of referencedVersions) {
+          if (!keyring.keys.has(keyVersion)) {
+            throw new Error(savedResidenceRotationError);
+          }
+        }
+
+        let lastUserId: string | null = null;
+        let rotated = 0;
+        let skipped = 0;
+        while (true) {
+          const rows = await database
+            .select({
+              ciphertext: savedResidence.ciphertext,
+              envelopeVersion: savedResidence.envelopeVersion,
+              iv: savedResidence.iv,
+              keyVersion: savedResidence.keyVersion,
+              tag: savedResidence.tag,
+              userId: savedResidence.userId,
+            })
+            .from(savedResidence)
+            .where(
+              lastUserId === null
+                ? ne(savedResidence.keyVersion, keyring.activeVersion)
+                : and(
+                    ne(savedResidence.keyVersion, keyring.activeVersion),
+                    gt(savedResidence.userId, lastUserId),
+                  ),
+            )
+            .orderBy(asc(savedResidence.userId))
+            .limit(options.batchSize);
+          if (rows.length === 0) {
+            break;
+          }
+
+          for (const row of rows) {
+            lastUserId = row.userId;
+            const address = decryptSavedResidenceAddress(
+              {
+                ciphertext: row.ciphertext,
+                iv: row.iv,
+                keyVersion: row.keyVersion,
+                tag: row.tag,
+                version: row.envelopeVersion,
+              },
+              row.userId,
+              keyring,
+            );
+            const envelope = encryptSavedResidenceAddress(
+              address,
+              row.userId,
+              keyring,
+            );
+            await options.beforeUpdate?.();
+            const updated = await database
+              .update(savedResidence)
+              .set({
+                ciphertext: envelope.ciphertext,
+                envelopeVersion: envelope.version,
+                iv: envelope.iv,
+                keyVersion: envelope.keyVersion,
+                tag: envelope.tag,
+              })
+              .where(
+                and(
+                  eq(savedResidence.userId, row.userId),
+                  eq(savedResidence.envelopeVersion, row.envelopeVersion),
+                  eq(savedResidence.keyVersion, row.keyVersion),
+                  eq(savedResidence.iv, row.iv),
+                  eq(savedResidence.ciphertext, row.ciphertext),
+                  eq(savedResidence.tag, row.tag),
+                ),
+              )
+              .returning();
+            if (updated.length === 0) {
+              skipped += 1;
+            } else {
+              rotated += 1;
+            }
+          }
+        }
+
+        const [{ remaining }] = await database
+          .select({ remaining: count() })
+          .from(savedResidence)
+          .where(ne(savedResidence.keyVersion, keyring.activeVersion));
+        return { rotated, skipped, remaining };
+      } catch {
+        throw new Error(savedResidenceRotationError);
+      }
+    },
+
     async save(
       userId: string,
       request: SaveResidenceRequest,

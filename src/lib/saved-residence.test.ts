@@ -4,7 +4,7 @@ import { createCipheriv, createDecipheriv } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createDatabase } from "@/db";
 import {
@@ -23,6 +23,7 @@ import {
   getSavedResidenceDivisions,
   loadResidenceEncryptionKeyring,
   parseSaveResidenceRequest,
+  rotateSavedResidenceKeys,
   type DeleteSavedResidenceResponse,
   type GetSavedResidenceResponse,
   type SaveResidenceRequest,
@@ -501,6 +502,402 @@ describe("saved residence authenticated encryption", () => {
   });
 });
 
+describe("saved residence key rotation", () => {
+  it("preflights every referenced key version for presence before writing", async () => {
+    const { db, repository } = await rotationFixture(["alpha", "bravo"]);
+    const entries = [
+      { version: "2025-01", key: encodedKey(3) },
+      { version: "2026-01", key: encodedKey(1) },
+      { version: "2026-07", key: encodedKey(2) },
+    ];
+    const firstKeyring = loadResidenceEncryptionKeyring(
+      environmentWithEntries(entries, "2025-01"),
+    );
+    const secondKeyring = loadResidenceEncryptionKeyring(
+      environmentWithEntries(entries, "2026-01"),
+    );
+    let attemptedWrites = 0;
+
+    try {
+      await saveRotationResidence(
+        repository,
+        "user_alpha",
+        "101 Alpha Avenue",
+        firstKeyring,
+      );
+      await saveRotationResidence(
+        repository,
+        "user_bravo",
+        "202 Bravo Boulevard",
+        secondKeyring,
+      );
+      const before = await encryptedRows(db);
+
+      await expect(
+        repository.rotateKeys(
+          {
+            activeVersion: "2026-07",
+            keys: new Map([
+              ["2025-01", encodedKey(3)],
+              ["2026-07", encodedKey(2)],
+            ]),
+          },
+          {
+            batchSize: 1,
+            beforeUpdate: () => {
+              attemptedWrites += 1;
+            },
+          },
+        ),
+      ).rejects.toThrow("Saved residence key rotation failed.");
+
+      expect(attemptedWrites).toBe(0);
+      expect(await encryptedRows(db)).toEqual(before);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("discovers a present wrong key at its row, keeps earlier commits, and resumes with the corrected key", async () => {
+    const { db, repository } = await rotationFixture(["alpha", "bravo"]);
+    const entries = [
+      { version: "2025-01", key: encodedKey(3) },
+      { version: "2026-01", key: encodedKey(1) },
+      { version: "2026-07", key: encodedKey(2) },
+    ];
+    const firstKeyring = loadResidenceEncryptionKeyring(
+      environmentWithEntries(entries, "2025-01"),
+    );
+    const secondKeyring = loadResidenceEncryptionKeyring(
+      environmentWithEntries(entries, "2026-01"),
+    );
+    const correctedKeyring = loadResidenceEncryptionKeyring(
+      environmentWithEntries(entries),
+    );
+
+    try {
+      await saveRotationResidence(
+        repository,
+        "user_alpha",
+        "101 Alpha Avenue",
+        firstKeyring,
+      );
+      await saveRotationResidence(
+        repository,
+        "user_bravo",
+        "202 Bravo Boulevard",
+        secondKeyring,
+      );
+
+      await expect(
+        repository.rotateKeys(
+          {
+            activeVersion: "2026-07",
+            keys: new Map([
+              ["2025-01", encodedKey(3)],
+              ["2026-01", encodedKey(9)],
+              ["2026-07", encodedKey(2)],
+            ]),
+          },
+          { batchSize: 1 },
+        ),
+      ).rejects.toThrow("Saved residence key rotation failed.");
+      const afterFailure = await encryptedRows(db);
+      expect(afterFailure.map(({ keyVersion }) => keyVersion)).toEqual([
+        correctedKeyring.activeVersion,
+        secondKeyring.activeVersion,
+      ]);
+      const committedAlpha = afterFailure[0];
+
+      expect(
+        await repository.rotateKeys(correctedKeyring, { batchSize: 1 }),
+      ).toEqual({ rotated: 1, skipped: 0, remaining: 0 });
+      expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("rotates stable ascending batches with fresh envelopes, leaves active rows untouched, and returns counts only", async () => {
+    const { db, legacyKeyring, repository, rotationKeyring } =
+      await rotationFixture(["charlie", "alpha", "zulu", "bravo"]);
+    const addresses = new Map([
+      ["user_alpha", "101 Alpha Avenue"],
+      ["user_bravo", "202 Bravo Boulevard"],
+      ["user_charlie", "303 Charlie Court"],
+    ]);
+
+    try {
+      for (const [userId, address] of addresses) {
+        await saveRotationResidence(repository, userId, address, legacyKeyring);
+      }
+      await saveRotationResidence(
+        repository,
+        "user_zulu",
+        "404 Zulu Way",
+        rotationKeyring,
+      );
+      const before = await encryptedRows(db);
+      const activeSnapshots: string[][] = [];
+
+      const result = await repository.rotateKeys(rotationKeyring, {
+        batchSize: 2,
+        beforeUpdate: async () => {
+          activeSnapshots.push(
+            (
+              await db
+                .select({ userId: savedResidence.userId })
+                .from(savedResidence)
+                .where(
+                  eq(
+                    savedResidence.keyVersion,
+                    rotationKeyring.activeVersion,
+                  ),
+                )
+                .orderBy(savedResidence.userId)
+            ).map(({ userId }) => userId),
+          );
+        },
+      });
+
+      expect(result).toEqual({ rotated: 3, skipped: 0, remaining: 0 });
+      expect(Object.keys(result).sort()).toEqual([
+        "remaining",
+        "rotated",
+        "skipped",
+      ]);
+      expect(activeSnapshots).toEqual([
+        ["user_zulu"],
+        ["user_alpha", "user_zulu"],
+        ["user_alpha", "user_bravo", "user_zulu"],
+      ]);
+
+      const after = await encryptedRows(db);
+      for (const row of after) {
+        const previous = before.find(({ userId }) => userId === row.userId);
+        expect(previous).toBeDefined();
+        if (row.userId === "user_zulu") {
+          expect(row).toEqual(previous);
+          continue;
+        }
+        expect(row.keyVersion).toBe(rotationKeyring.activeVersion);
+        expect(row.iv).not.toBe(previous?.iv);
+        expect(row.ciphertext).not.toBe(previous?.ciphertext);
+        expect(row.tag).not.toBe(previous?.tag);
+        expect(
+          decryptSavedResidenceAddress(
+            {
+              ciphertext: row.ciphertext,
+              iv: row.iv,
+              keyVersion: row.keyVersion,
+              tag: row.tag,
+              version: row.envelopeVersion,
+            },
+            row.userId,
+            rotationKeyring,
+          ),
+        ).toBe(addresses.get(row.userId));
+      }
+      expect(
+        await db
+          .select({
+            keyVersion: savedResidence.keyVersion,
+            residences: count(),
+          })
+          .from(savedResidence)
+          .groupBy(savedResidence.keyVersion),
+      ).toEqual([
+        { keyVersion: rotationKeyring.activeVersion, residences: 4 },
+      ]);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it.each([
+    ["envelope_version", "v2"],
+    ["key_version", "concurrent-key"],
+    ["iv", Buffer.alloc(12, 7).toString("base64url")],
+    ["ciphertext", Buffer.from("concurrent replacement").toString("base64url")],
+    ["tag", Buffer.alloc(16, 7).toString("base64url")],
+  ] as const)(
+    "uses %s in full-envelope CAS and skips a concurrent replacement",
+    async (column, replacement) => {
+      const { db, legacyKeyring, repository, rotationKeyring } =
+        await rotationFixture(["one"]);
+
+      try {
+        await saveRotationResidence(
+          repository,
+          "user_one",
+          "101 Alpha Avenue",
+          legacyKeyring,
+        );
+        if (column === "envelope_version") {
+          await rawDatabaseClient(db).query(
+            'alter table "saved_residence" drop constraint "saved_residence_envelope_version_check"',
+          );
+        }
+
+        const result = await repository.rotateKeys(rotationKeyring, {
+          batchSize: 1,
+          beforeUpdate: async () => {
+            await rawDatabaseClient(db).query(
+              `update "saved_residence" set "${column}" = $1 where "user_id" = $2`,
+              [replacement, "user_one"],
+            );
+          },
+        });
+        const stored = await rawDatabaseClient(db).query<{ value: string }>(
+          `select "${column}" as value from "saved_residence" where "user_id" = $1`,
+          ["user_one"],
+        );
+
+        expect(result).toEqual({ rotated: 0, skipped: 1, remaining: 1 });
+        expect(stored.rows[0]?.value).toBe(replacement);
+      } finally {
+        await closeDatabase(db);
+      }
+    },
+  );
+
+  it("includes user ID in CAS, keeps earlier commits after later tampering, and resumes without rerotating", async () => {
+    const { db, legacyKeyring, repository, rotationKeyring } =
+      await rotationFixture(["alpha", "bravo"]);
+
+    try {
+      await saveRotationResidence(
+        repository,
+        "user_alpha",
+        "101 Alpha Avenue",
+        legacyKeyring,
+      );
+      await saveRotationResidence(
+        repository,
+        "user_bravo",
+        "202 Bravo Boulevard",
+        legacyKeyring,
+      );
+      const [alpha] = await db
+        .select({
+          ciphertext: savedResidence.ciphertext,
+          envelopeVersion: savedResidence.envelopeVersion,
+          iv: savedResidence.iv,
+          keyVersion: savedResidence.keyVersion,
+          tag: savedResidence.tag,
+        })
+        .from(savedResidence)
+        .where(eq(savedResidence.userId, "user_alpha"));
+      expect(alpha).toBeDefined();
+      await db
+        .update(savedResidence)
+        .set(alpha)
+        .where(eq(savedResidence.userId, "user_bravo"));
+
+      await expect(
+        repository.rotateKeys(rotationKeyring, { batchSize: 1 }),
+      ).rejects.toThrow("Saved residence key rotation failed.");
+      const afterFailure = await encryptedRows(db);
+      expect(
+        afterFailure.map(({ keyVersion }) => keyVersion),
+      ).toEqual([rotationKeyring.activeVersion, legacyKeyring.activeVersion]);
+      const committedAlpha = afterFailure[0];
+
+      await saveRotationResidence(
+        repository,
+        "user_bravo",
+        "202 Bravo Boulevard",
+        legacyKeyring,
+      );
+      expect(
+        await repository.rotateKeys(rotationKeyring, { batchSize: 1 }),
+      ).toEqual({ rotated: 1, skipped: 0, remaining: 0 });
+      expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("keeps earlier row commits after a later database failure and resumes", async () => {
+    const { db, legacyKeyring, repository, rotationKeyring } =
+      await rotationFixture(["charlie", "alpha", "bravo"]);
+    let attemptedRows = 0;
+
+    try {
+      for (const [userId, address] of [
+        ["user_charlie", "303 Charlie Court"],
+        ["user_alpha", "101 Alpha Avenue"],
+        ["user_bravo", "202 Bravo Boulevard"],
+      ] as const) {
+        await saveRotationResidence(repository, userId, address, legacyKeyring);
+      }
+
+      await expect(
+        repository.rotateKeys(rotationKeyring, {
+          batchSize: 2,
+          beforeUpdate: async () => {
+            attemptedRows += 1;
+            if (attemptedRows === 2) {
+              await rawDatabaseClient(db).query(
+                "select * from missing_rotation_relation",
+              );
+            }
+          },
+        }),
+      ).rejects.toThrow("Saved residence key rotation failed.");
+      const afterFailure = await encryptedRows(db);
+      expect(
+        afterFailure.map(({ keyVersion }) => keyVersion),
+      ).toEqual([
+        rotationKeyring.activeVersion,
+        legacyKeyring.activeVersion,
+        legacyKeyring.activeVersion,
+      ]);
+      const committedAlpha = afterFailure[0];
+
+      expect(
+        await repository.rotateKeys(rotationKeyring, { batchSize: 2 }),
+      ).toEqual({ rotated: 2, skipped: 0, remaining: 0 });
+      expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("uses process database and dedicated keyring through the top-level rotation entry point", async () => {
+    const root = await mkdtemp(join(tmpdir(), "votegpt-residence-rotation-"));
+    const connectionString = pgliteConnection(join(root, "database"));
+    const previousEnvironment = residenceEnvironment();
+    process.env.DATABASE_URL = connectionString;
+    Object.assign(process.env, validEnvironment());
+    const db = await createDatabase(connectionString);
+    const repository = createSavedResidenceRepository(db);
+    const legacyKeyring = loadResidenceEncryptionKeyring(
+      validEnvironment({ activeVersion: "2026-01" }),
+    );
+
+    try {
+      await db.insert(user).values(testUser("one"));
+      await saveRotationResidence(
+        repository,
+        "user_one",
+        "101 Alpha Avenue",
+        legacyKeyring,
+      );
+
+      expect(await rotateSavedResidenceKeys()).toEqual({
+        rotated: 1,
+        skipped: 0,
+        remaining: 0,
+      });
+    } finally {
+      restoreResidenceEnvironment(previousEnvironment);
+      await closeDatabase(db);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("saved residence persistence", () => {
   it("migrates only encrypted residence and normalized division columns with required constraints", async () => {
     const db = await createDatabase("pglite://memory");
@@ -790,6 +1187,50 @@ async function persistenceFixture() {
   };
 }
 
+async function rotationFixture(suffixes: readonly string[]) {
+  const db = await createDatabase("pglite://memory");
+  await db.insert(user).values(suffixes.map(testUser));
+  return {
+    db,
+    legacyKeyring: loadResidenceEncryptionKeyring(
+      validEnvironment({ activeVersion: "2026-01" }),
+    ),
+    repository: createSavedResidenceRepository(db),
+    rotationKeyring: loadResidenceEncryptionKeyring(validEnvironment()),
+  };
+}
+
+async function saveRotationResidence(
+  repository: ReturnType<typeof createSavedResidenceRepository>,
+  userId: string,
+  address: string,
+  keyring: ReturnType<typeof loadResidenceEncryptionKeyring>,
+) {
+  return repository.save(
+    userId,
+    saveRequest(address, "unused-by-persistence"),
+    resolution,
+    new Date("2026-07-16T18:00:00.000Z"),
+    keyring,
+  );
+}
+
+function encryptedRows(
+  db: Awaited<ReturnType<typeof createDatabase>>,
+) {
+  return db
+    .select({
+      ciphertext: savedResidence.ciphertext,
+      envelopeVersion: savedResidence.envelopeVersion,
+      iv: savedResidence.iv,
+      keyVersion: savedResidence.keyVersion,
+      tag: savedResidence.tag,
+      userId: savedResidence.userId,
+    })
+    .from(savedResidence)
+    .orderBy(savedResidence.userId);
+}
+
 function saveRequest(address: string, resolutionToken: string) {
   return {
     address,
@@ -839,6 +1280,17 @@ async function closeDatabase(
     close?: () => Promise<void>;
   };
   await client.close?.();
+}
+
+function rawDatabaseClient(
+  database: Awaited<ReturnType<typeof createDatabase>>,
+) {
+  return database.$client as unknown as {
+    query<Row extends Record<string, unknown> = Record<string, unknown>>(
+      query: string,
+      params?: unknown[],
+    ): Promise<{ rows: Row[] }>;
+  };
 }
 
 function encodedKey(fill: number) {
