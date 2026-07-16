@@ -81,8 +81,7 @@ const conflictView: FederalOfficialsView = {
   coverage: { ...view.coverage, house: "partial" },
 };
 
-const missingSenatorCopy =
-  "Current Senate officeholder is unknown. No qualifying source is available for this position.";
+const missingSenatorCopy = /Current Senate officeholder is unknown\./;
 
 describe("FederalOfficials", () => {
   it("renders equal House-then-Senate cards with adjacent source and freshness evidence", () => {
@@ -318,6 +317,12 @@ describe("FederalOfficials", () => {
       "U.S. Senator: officeholder unknown",
     ]);
     expect(screen.getAllByText(missingSenatorCopy)).toHaveLength(2);
+    expect(
+      cards.slice(1).map(
+        (card) =>
+          within(card).queryAllByText(/No qualifying source is available/).length,
+      ),
+    ).toEqual([1, 1]);
     for (const card of cards.slice(1)) {
       expect(within(card).queryByRole("link")).toBeNull();
     }

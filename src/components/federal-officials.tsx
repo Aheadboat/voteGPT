@@ -92,8 +92,7 @@ function UnknownSenateCard({ freshness }: { freshness: Freshness }) {
     >
       <h3>U.S. Senator</h3>
       <p className={styles.fact}>
-        Current Senate officeholder is unknown. No qualifying source is available
-        for this position.
+        Current Senate officeholder is unknown.
       </p>
       <p className={styles.freshness}>
         Checked {" "}
