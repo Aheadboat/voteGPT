@@ -14,14 +14,42 @@ import type {
   ResolutionErrorResponse,
   ResolutionResponse,
 } from "@/lib/residence";
+import type { SavedResidenceView } from "@/lib/saved-residence";
 import { ResidencePreview } from "./residence-preview";
 
 const address = "742 Evergreen Terrace, Springfield";
+const savedAddress = "123 Main Street, Springfield";
+const consentCopy =
+  "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
 const coordinateInput = {
   kind: "coordinates",
   latitude: 38.8977,
   longitude: -77.0365,
 };
+const savedResidence = {
+  address: savedAddress,
+  resolution: {
+    status: matchedResidenceResponse.status,
+    divisions: matchedResidenceResponse.divisions,
+    source: matchedResidenceResponse.source,
+    coverageNotes: matchedResidenceResponse.coverageNotes,
+  },
+  consent: {
+    version: "saved-residence-v1",
+    acceptedAt: "2026-07-14T19:56:00.000Z",
+  },
+  createdAt: "2026-07-14T19:56:00.000Z",
+  updatedAt: "2026-07-14T19:56:00.000Z",
+} as const satisfies SavedResidenceView;
+const replacementSavedResidence = {
+  ...savedResidence,
+  address,
+  consent: {
+    version: "saved-residence-v1",
+    acceptedAt: "2026-07-14T20:06:00.000Z",
+  },
+  updatedAt: "2026-07-14T20:06:00.000Z",
+} as const satisfies SavedResidenceView;
 const originalGeolocation = Object.getOwnPropertyDescriptor(
   navigator,
   "geolocation",
@@ -204,7 +232,7 @@ describe("residence preview", () => {
     enterAddress();
 
     const consent = await screen.findByRole("checkbox", {
-      name: "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.",
+      name: consentCopy,
     });
     expect(consent).not.toBeChecked();
     const saveButton = screen.getByRole("button", { name: "Save residence" });
@@ -224,6 +252,394 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("button", { name: "Save residence" }),
     ).toBeNull();
+  });
+
+  it("loads saved-home state before the preview and then renders empty", async () => {
+    const savedRequest = deferredResponse();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockReturnValue(savedRequest.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation();
+
+    render(<ResidencePreview />);
+
+    const savedHeading = screen.getByRole("heading", {
+      name: "Saved residence",
+    });
+    const previewHeading = screen.getByRole("heading", {
+      name: "Preview your voting residence",
+    });
+    expect(
+      savedHeading.compareDocumentPosition(previewHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText(/Loading saved residence/i)).toBeVisible();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/residence");
+    expect(fetchMock.mock.calls[0][1]?.method ?? "GET").toBe("GET");
+
+    await act(async () => {
+      savedRequest.resolve(jsonResponse({ status: "empty" }));
+    });
+    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Delete saved residence" }),
+    ).toBeNull();
+  });
+
+  it("renders the owner saved address with provenance, freshness, coverage, and consent time", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation();
+
+    render(<ResidencePreview />);
+
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    expect(within(saved).getByText(savedAddress)).toBeVisible();
+    expect(
+      within(saved).getByText("Example Congressional District 1"),
+    ).toBeVisible();
+    expect(
+      within(saved).getByRole("link", { name: "Google Civic Information API" }),
+    ).toHaveAttribute(
+      "href",
+      "https://developers.google.com/civic-information",
+    );
+    expect(
+      saved.querySelector('time[datetime="2026-07-14T20:00:00.000Z"]'),
+    ).toBeInTheDocument();
+    expect(within(saved).getByText("Effective date unavailable.")).toBeVisible();
+    expect(
+      within(saved).getByText("Local divisions may be unavailable."),
+    ).toBeVisible();
+    expect(
+      saved.querySelector('time[datetime="2026-07-14T19:56:00.000Z"]'),
+    ).toBeInTheDocument();
+    expect(
+      saved.compareDocumentPosition(
+        screen.getByRole("heading", {
+          name: "Preview your voting residence",
+        }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("posts the exact consented candidate, warns on replacement, and renders the returned home", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/v1/residence" && method === "GET") {
+        return jsonResponse({ status: "saved", residence: savedResidence });
+      }
+      if (url === "/api/v1/location/resolve" && method === "POST") {
+        return jsonResponse(matchedResidenceResponse);
+      }
+      if (url === "/api/v1/residence" && method === "POST") {
+        return jsonResponse({
+          status: "saved",
+          residence: replacementSavedResidence,
+          replaced: true,
+        });
+      }
+      throw new Error(`Unexpected test request: ${method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    await screen.findByText(savedAddress);
+    enterAddress();
+
+    const consent = await screen.findByRole("checkbox", {
+      name: consentCopy,
+    });
+    expect(document.body).toHaveTextContent(
+      /replac(?:e|es|ing).*existing.*(?:residence|home)/i,
+    );
+    expect(document.body).toHaveTextContent(
+      /no (?:prior|previous) residence history (?:is|will be) (?:kept|retained)/i,
+    );
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === "/api/v1/residence" && init?.method === "POST",
+      ),
+    ).toHaveLength(0);
+
+    fireEvent.click(consent);
+    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    expect(await within(saved).findByText(address)).toBeVisible();
+    expect(within(saved).queryByText(savedAddress)).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+
+    const saveCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === "/api/v1/residence" && init?.method === "POST",
+    );
+    expect(saveCall).toBeDefined();
+    expect(JSON.parse(String(saveCall?.[1]?.body))).toEqual({
+      address,
+      resolutionToken: matchedResidenceResponse.resolutionToken,
+      consent: {
+        accepted: true,
+        version: "saved-residence-v1",
+      },
+    });
+    expect(new Headers(saveCall?.[1]?.headers).has("origin")).toBe(false);
+  });
+
+  it("clears consent on edits, new checks, device use, expiry, and a rejected token", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    let manualResolution = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/v1/residence" && method === "GET") {
+        return jsonResponse({ status: "empty" });
+      }
+      if (url === "/api/v1/location/resolve" && method === "POST") {
+        const body = JSON.parse(String(init?.body)) as { kind: string };
+        if (body.kind === "coordinates") {
+          return jsonResponse(partialResidenceResponse);
+        }
+        manualResolution += 1;
+        return jsonResponse({
+          ...matchedResidenceResponse,
+          resolutionToken: `fixture-resolution-token-${manualResolution}`,
+        });
+      }
+      if (url === "/api/v1/residence" && method === "POST") {
+        return jsonResponse(
+          {
+            status: "invalid_token",
+            message: "Preview your voting residence again before saving.",
+          },
+          422,
+        );
+      }
+      throw new Error(`Unexpected test request: ${method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation((success) => {
+      success(
+        geolocationPosition(
+          coordinateInput.latitude,
+          coordinateInput.longitude,
+        ),
+      );
+    });
+
+    render(<ResidencePreview />);
+    await screen.findByText(/No residence (?:is )?saved/i);
+    const manualCandidate = async (value = address) => {
+      enterAddress(value);
+      return screen.findByRole("checkbox", { name: consentCopy });
+    };
+
+    let consent = await manualCandidate();
+    fireEvent.click(consent);
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+      { target: { value: `${address} Apt 2` } },
+    );
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+
+    consent = await manualCandidate();
+    fireEvent.click(consent);
+    enterAddress(`${address} Apt 3`);
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    consent = await screen.findByRole("checkbox", { name: consentCopy });
+    expect(consent).not.toBeChecked();
+
+    fireEvent.click(consent);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use this device once" }),
+    );
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    await screen.findByRole("heading", {
+      name: "Partial political divisions",
+    });
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+
+    consent = await manualCandidate();
+    fireEvent.click(consent);
+    vi.setSystemTime(new Date("2026-07-14T20:11:00.000Z"));
+    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+    expect(await screen.findByText(/preview.*expired|expired.*preview/i)).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === "/api/v1/residence" && init?.method === "POST",
+      ),
+    ).toHaveLength(0);
+
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    consent = await manualCandidate();
+    fireEvent.click(consent);
+    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+    expect(
+      await screen.findByText(
+        "Preview your voting residence again before saving.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Save residence" }),
+    ).toBeNull();
+  });
+
+  it("preserves the old home and retryable candidate across network and server save failures", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    let saveAttempt = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/v1/residence" && method === "GET") {
+        return jsonResponse({ status: "saved", residence: savedResidence });
+      }
+      if (url === "/api/v1/location/resolve" && method === "POST") {
+        return jsonResponse(matchedResidenceResponse);
+      }
+      if (url === "/api/v1/residence" && method === "POST") {
+        saveAttempt += 1;
+        if (saveAttempt === 1) {
+          throw new Error("SENTINEL_PRIVATE_NETWORK_DETAIL");
+        }
+        return jsonResponse(
+          {
+            status: "unavailable",
+            message: "Saved residence is temporarily unavailable. Try again later.",
+          },
+          503,
+        );
+      }
+      throw new Error(`Unexpected test request: ${method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    await screen.findByText(savedAddress);
+    enterAddress();
+    const consent = await screen.findByRole("checkbox", {
+      name: consentCopy,
+    });
+    fireEvent.click(consent);
+    const saveButton = screen.getByRole("button", { name: "Save residence" });
+
+    fireEvent.click(saveButton);
+    expect(
+      await screen.findByText(/could not (?:save|reach)/i),
+    ).toBeVisible();
+    expect(document.body).toHaveTextContent(
+      /(?:prior|previous|saved) residence.*(?:unchanged|not changed)/i,
+    );
+    expect(screen.getByText(savedAddress)).toBeVisible();
+    expect(consent).toBeChecked();
+    expect(saveButton).toBeEnabled();
+    expect(document.body).not.toHaveTextContent("SENTINEL_PRIVATE_NETWORK_DETAIL");
+
+    fireEvent.click(saveButton);
+    expect(
+      await screen.findByText(/Saved residence is temporarily unavailable/i),
+    ).toBeVisible();
+    expect(document.body).toHaveTextContent(
+      /(?:prior|previous|saved) residence.*(?:unchanged|not changed)/i,
+    );
+    expect(screen.getByText(savedAddress)).toBeVisible();
+    expect(consent).toBeChecked();
+    expect(saveButton).toBeEnabled();
+  });
+
+  it("confirms deletion, preserves failures, and focuses manual entry after success", async () => {
+    let deleteAttempt = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (url === "/api/v1/residence" && method === "GET") {
+        return jsonResponse({ status: "saved", residence: savedResidence });
+      }
+      if (url === "/api/v1/residence" && method === "DELETE") {
+        deleteAttempt += 1;
+        return deleteAttempt === 1
+          ? jsonResponse(
+              {
+                status: "unavailable",
+                message:
+                  "Saved residence is temporarily unavailable. Try again later.",
+              },
+              503,
+            )
+          : jsonResponse({ status: "deleted" });
+      }
+      throw new Error(`Unexpected test request: ${method} ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    expect(document.body).toHaveTextContent(
+      /delete.*address.*(?:political )?divisions.*account.*remain/i,
+    );
+    const confirm = screen.getByRole("button", { name: "Confirm deletion" });
+
+    fireEvent.click(confirm);
+    expect(
+      await screen.findByText(/Saved residence is temporarily unavailable/i),
+    ).toBeVisible();
+    expect(document.body).toHaveTextContent(
+      /(?:prior|previous|saved) residence.*(?:unchanged|not changed)/i,
+    );
+    expect(screen.getByText(savedAddress)).toBeVisible();
+    expect(confirm).toBeEnabled();
+
+    fireEvent.click(confirm);
+    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(screen.queryByText(savedAddress)).toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+    ).toHaveFocus();
+
+    const deleteCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input) === "/api/v1/residence" && init?.method === "DELETE",
+    );
+    expect(deleteCalls).toHaveLength(2);
+    for (const [, init] of deleteCalls) {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        confirmation: "DELETE_SAVED_RESIDENCE",
+      });
+      expect(new Headers(init?.headers).has("origin")).toBe(false);
+    }
   });
 
   it("posts an exact address once while pending, clears success, and starts a fresh explicit check", async () => {
