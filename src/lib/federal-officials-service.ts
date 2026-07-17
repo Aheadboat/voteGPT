@@ -1061,7 +1061,7 @@ function validateSource(
   const effectiveAt = nullableCanonicalTime(value.effectiveAt);
   if (
     retrievedAt === null ||
-    retrievedAt > maxTime ||
+    retrievedAt !== maxTime ||
     recordUpdatedAt === false ||
     effectiveAt === false ||
     (typeof recordUpdatedAt === "number" && recordUpdatedAt > retrievedAt) ||
@@ -1073,6 +1073,8 @@ function validateSource(
     if (
       value.publisher !== "Congress.gov" ||
       bioguideId === null ||
+      typeof recordUpdatedAt !== "number" ||
+      effectiveAt !== null ||
       value.url !==
         `https://api.congress.gov/v3/member/${bioguideId}?format=json`
     ) {
@@ -1082,6 +1084,8 @@ function validateSource(
     if (
       value.publisher !==
         "Office of the Clerk, U.S. House of Representatives" ||
+      recordUpdatedAt !== null ||
+      effectiveAt !== null ||
       !validClerkUrl(value.url, office)
     ) {
       return null;
@@ -1119,7 +1123,7 @@ function validateCoverage(value: unknown, house: FederalSeat, senateCount: numbe
     senateCount === 2
       ? value.senate === "verified"
       : senateCount === 1
-        ? value.senate === "partial" || value.senate === "unknown"
+        ? value.senate === "partial"
         : value.senate === "unknown";
   return validHouse && validSenate
     ? (value as FederalOfficialsRoster["coverage"])
