@@ -40,7 +40,7 @@ export function FederalProfile({ result }: { result: FederalProfileResult }) {
     <article aria-label={label} className={styles.profile}>
       <header className={styles.header}>
         <p className={styles.eyebrow}>Verified federal profile</p>
-        <h2>{profile.person.name}</h2>
+        <h1>{profile.person.name}</h1>
       </header>
 
       {profile.freshness.state === "stale" ? (
@@ -80,12 +80,12 @@ export function FederalProfile({ result }: { result: FederalProfileResult }) {
       </p>
 
       <section aria-label="Profile sources" className={styles.sources}>
-        <h3>Sources and retrieval times</h3>
+        <h2>Sources and retrieval times</h2>
         <ul>
           {profile.sources.map((source) => (
             <li key={`${source.url}:${source.retrievedAt}`}>
               <a className={styles.sourceLink} href={source.url}>
-                {source.publisher} {source.sourceType} source
+                {sourceLinkName(source)}
               </a>
               <span>
                 Retrieved {" "}
@@ -114,7 +114,7 @@ function ProfileRecovery({
 }) {
   return (
     <section aria-label="Federal official profile" className={styles.profile}>
-      <h2>Federal official profile</h2>
+      <h1>Federal official profile</h1>
       <p className={styles.status} role="status">
         {message}
       </p>
@@ -147,6 +147,18 @@ function isCurrentProfile(profile: CurrentProfile) {
           `https://api.congress.gov/v3/member/${profile.person.bioguideId}?format=json`,
     )
   );
+}
+
+function sourceLinkName(source: SourceRef) {
+  if (
+    source.publisher === "Office of the Clerk, U.S. House of Representatives"
+  ) {
+    const record = source.url === "https://clerk.house.gov/Members/ViewVacancies"
+      ? "current vacancies list"
+      : "district vacancy record";
+    return `${source.publisher} ${record} source`;
+  }
+  return `${source.publisher} ${source.sourceType} source`;
 }
 
 function officeLocation(office: Office) {

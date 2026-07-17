@@ -14,16 +14,28 @@ export type FederalOfficialsResult =
   | Readonly<{ status: "unsupported"; code: UnsupportedCode }>
   | Readonly<{ status: "unavailable" }>;
 
-export function FederalOfficials({ result }: { result: FederalOfficialsResult }) {
+export function FederalOfficials({
+  heading = "Federal officials",
+  result,
+}: {
+  heading?: string | null;
+  result: FederalOfficialsResult;
+}) {
   if (result.status === "unsupported") {
     return (
       <RecoveryState
+        heading={heading}
         message={`Federal roster coverage is not supported for ${result.code}.`}
       />
     );
   }
   if (result.status === "unavailable") {
-    return <RecoveryState message="Federal roster information is unavailable." />;
+    return (
+      <RecoveryState
+        heading={heading}
+        message="Federal roster information is unavailable."
+      />
+    );
   }
 
   const { view } = result;
@@ -32,6 +44,7 @@ export function FederalOfficials({ result }: { result: FederalOfficialsResult })
     return (
       <RecoveryState
         checkedAt={view.freshness.checkedAt}
+        heading={heading}
         label={`Federal officials for ${jurisdiction}`}
         message="Federal roster data has expired. Refresh before relying on current officeholders."
       />
@@ -47,7 +60,7 @@ export function FederalOfficials({ result }: { result: FederalOfficialsResult })
     >
       <header className={styles.header}>
         <p className={styles.eyebrow}>Federal roster</p>
-        <h2>Federal officials</h2>
+        {heading ? <h2>{heading}</h2> : null}
         <p className={styles.intro}>
           House and Senate offices use the same factual presentation.
         </p>
@@ -181,7 +194,7 @@ function SourceEvidence({
           {sources.map((source) => (
             <li key={`${source.url}:${source.retrievedAt}`}>
               <a className={styles.sourceLink} href={source.url}>
-                {source.publisher} {source.sourceType} source
+                {sourceLinkName(source)}
               </a>
               <span>
                 Retrieved {" "}
@@ -205,16 +218,18 @@ function SourceEvidence({
 
 function RecoveryState({
   checkedAt,
+  heading,
   label = "Federal officials",
   message,
 }: {
   checkedAt?: string;
+  heading: string | null;
   label?: string;
   message: string;
 }) {
   return (
     <section aria-label={label} className={styles.shell}>
-      <h2>Federal officials</h2>
+      {heading ? <h2>{heading}</h2> : null}
       <p className={styles.status} role="status">
         {message}
       </p>
@@ -238,6 +253,18 @@ function jurisdictionLabel(view: FederalOfficialsView) {
   return district === 0
     ? `${stateCode} at-large`
     : `${stateCode} District ${district}`;
+}
+
+function sourceLinkName(source: SourceRef) {
+  if (
+    source.publisher === "Office of the Clerk, U.S. House of Representatives"
+  ) {
+    const record = source.url === "https://clerk.house.gov/Members/ViewVacancies"
+      ? "current vacancies list"
+      : "district vacancy record";
+    return `${source.publisher} ${record} source`;
+  }
+  return `${source.publisher} ${source.sourceType} source`;
 }
 
 function officeHeading(seat: FederalSeat) {
@@ -266,7 +293,11 @@ function cardLabel(seat: FederalSeat) {
 function coverageNotesFor(view: FederalOfficialsView) {
   const notes: string[] = [];
   if (view.coverage.house === "partial") {
-    notes.push("House coverage is partial. Some current-seat evidence is unavailable.");
+    notes.push(
+      view.house.status === "conflict"
+        ? "House coverage is partial because Congress.gov and Clerk evidence conflict."
+        : "House coverage is partial. Some current-seat evidence is unavailable.",
+    );
   } else if (view.coverage.house === "unknown") {
     notes.push("House coverage is unknown. No current officeholder is verified.");
   }

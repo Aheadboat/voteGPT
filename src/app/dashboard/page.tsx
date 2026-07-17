@@ -97,5 +97,5 @@ async function federalOfficialsFor(userId: string) {
     now: () => new Date(),
   });
   const result = await service.getOfficials(jurisdiction.jurisdiction);
-  return <FederalOfficials result={result} />;
+  return <FederalOfficials heading={null} result={result} />;
 }

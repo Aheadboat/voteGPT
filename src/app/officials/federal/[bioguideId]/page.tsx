@@ -19,9 +19,13 @@ export default async function FederalOfficialProfilePage({
     notFound();
   }
 
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) {
-    notFound();
+    return (
+      <main id="main-content">
+        <FederalProfile result={{ status: "unavailable" }} />
+      </main>
+    );
   }
   const cache = createFederalOfficialCacheRepository(
     await createDatabase(connectionString),
@@ -37,7 +41,7 @@ export default async function FederalOfficialProfilePage({
     now: () => new Date(),
   });
   const result = await service.getProfile(bioguideId);
-  if (result.status === "unavailable") {
+  if (result.status === "missing") {
     notFound();
   }
 
