@@ -1,4 +1,6 @@
-import { and, eq, lte, sql } from "drizzle-orm";
+import { isDeepStrictEqual } from "node:util";
+
+import { and, eq, like, lte, ne, sql } from "drizzle-orm";
 
 import { createDatabase } from "@/db";
 import { federalOfficialCache } from "@/db/schema";
@@ -37,6 +39,14 @@ const supportedStateFips = new Map<string, string>([
   ["SD", "46"], ["TN", "47"], ["TX", "48"], ["UT", "49"],
   ["VT", "50"], ["VA", "51"], ["WA", "53"], ["WV", "54"],
   ["WI", "55"], ["WY", "56"],
+]);
+const knownNonLaunchJurisdictions = new Set([
+  "AS",
+  "DC",
+  "GU",
+  "MP",
+  "PR",
+  "VI",
 ]);
 
 export type FederalOfficialCacheKey =
@@ -87,6 +97,7 @@ export type FederalOfficialProfileResult =
       status: "available";
       profile: FederalProfileCachePayload & Readonly<{ freshness: Freshness }>;
     }>
+  | Readonly<{ status: "missing" }>
   | Readonly<{ status: "unavailable" }>;
 
 type Database = Awaited<ReturnType<typeof createDatabase>>;
@@ -133,14 +144,7 @@ export function createFederalOfficialCacheRepository(
           .limit(1)
           .for("update");
 
-        if (
-          existing &&
-          existing.retrievedAt.getTime() > validated.roster.retrievedAt.getTime()
-        ) {
-          return { status: "ignored", reason: "older_generation" } as const;
-        }
-
-        let previousProfileIds: readonly string[] = [];
+        let previousProfiles: readonly FederalProfileCachePayload[] = [];
         if (existing) {
           const prior = validateRosterRecord(
             existing,
@@ -150,13 +154,149 @@ export function createFederalOfficialCacheRepository(
           if (prior === null) {
             throw new Error("Invalid stored federal official roster");
           }
-          previousProfileIds = servingProfileIds(prior.payload);
+          previousProfiles = servingProfiles(prior.payload);
+          if (
+            existing.retrievedAt.getTime() >=
+            validated.roster.retrievedAt.getTime()
+          ) {
+            return { status: "ignored", reason: "older_generation" } as const;
+          }
         }
+
+        const siblingRows = await transaction
+          .select({
+            cacheKey: federalOfficialCache.cacheKey,
+            payload: federalOfficialCache.payload,
+            refreshAfter: federalOfficialCache.refreshAfter,
+            retrievedAt: federalOfficialCache.retrievedAt,
+            staleAfter: federalOfficialCache.staleAfter,
+          })
+          .from(federalOfficialCache)
+          .where(
+            and(
+              like(
+                federalOfficialCache.cacheKey,
+                `roster:v1:${validated.jurisdiction.stateCode}:%`,
+              ),
+              ne(
+                federalOfficialCache.cacheKey,
+                validated.roster.cacheKey,
+              ),
+            ),
+          );
+        const siblings = siblingRows.map((sibling) => {
+          const parsedKey = parseRosterKey(sibling.cacheKey);
+          const jurisdiction = validateJurisdiction(
+            isRecord(sibling.payload) ? sibling.payload.jurisdiction : null,
+          );
+          if (
+            parsedKey === null ||
+            jurisdiction === null ||
+            parsedKey.stateCode !== validated.jurisdiction.stateCode ||
+            jurisdiction.stateCode !== parsedKey.stateCode ||
+            jurisdiction.district !== parsedKey.district
+          ) {
+            throw new Error("Invalid stored federal official roster");
+          }
+          const roster = validateRosterRecord(
+            sibling,
+            sibling.cacheKey as FederalOfficialCacheKey,
+            jurisdiction,
+          );
+          if (roster === null) {
+            throw new Error("Invalid stored federal official roster");
+          }
+          return roster;
+        });
+        const incomingSenateSnapshot = senateSnapshot(validated.roster.payload);
+        const conflictingSiblings = siblings.filter(
+          ({ payload }) => senateSnapshot(payload) !== incomingSenateSnapshot,
+        );
+
+        const storedProfileRows = await transaction
+          .select({
+            cacheKey: federalOfficialCache.cacheKey,
+            payload: federalOfficialCache.payload,
+            refreshAfter: federalOfficialCache.refreshAfter,
+            retrievedAt: federalOfficialCache.retrievedAt,
+            staleAfter: federalOfficialCache.staleAfter,
+          })
+          .from(federalOfficialCache)
+          .where(like(federalOfficialCache.cacheKey, "profile:v2:%"));
+        const sameOfficeHouseProfiles = storedProfileRows.flatMap((profile) => {
+          if (!isSameHouseOffice(profile.payload, validated.jurisdiction)) {
+            return [];
+          }
+          const match = /^profile:v2:([A-Z][0-9]{6})$/.exec(profile.cacheKey);
+          const stored = match?.[1]
+            ? validateProfileRecord(
+                profile,
+                profile.cacheKey as FederalOfficialCacheKey,
+                match[1],
+              )
+            : null;
+          if (
+            stored === null ||
+            stored.payload.office.chamber !== "house" ||
+            stored.payload.office.stateCode !==
+              validated.jurisdiction.stateCode ||
+            stored.payload.office.district !== validated.jurisdiction.district
+          ) {
+            throw new Error("Invalid stored federal official profile");
+          }
+          return [stored];
+        });
+
         const currentProfileIds = servingProfileIds(validated.roster.payload);
         const currentSet = new Set(currentProfileIds);
-        const displacedKeys = previousProfileIds
-          .filter((id) => !currentSet.has(id))
-          .map((id) => profileKey(id));
+        const incomingHouseProfile = validated.profiles.find(
+          ({ payload }) => payload.office.chamber === "house",
+        );
+        const contraryHouseProfiles = sameOfficeHouseProfiles.filter(
+          ({ payload }) =>
+            payload.person.bioguideId !==
+            incomingHouseProfile?.payload.person.bioguideId,
+        );
+        const incomingTime = validated.roster.retrievedAt.getTime();
+        if (
+          conflictingSiblings.some(
+            ({ record }) => record.retrievedAt.getTime() >= incomingTime,
+          ) ||
+          contraryHouseProfiles.some(
+            ({ record }) => record.retrievedAt.getTime() >= incomingTime,
+          )
+        ) {
+          return { status: "ignored", reason: "older_generation" } as const;
+        }
+
+        for (const { record } of conflictingSiblings) {
+          await transaction
+            .delete(federalOfficialCache)
+            .where(eq(federalOfficialCache.cacheKey, record.cacheKey));
+        }
+
+        const displacedProfiles = previousProfiles.filter(
+          ({ person }) => !currentSet.has(person.bioguideId),
+        );
+        const displacedSiblingSenators = conflictingSiblings.flatMap(
+          ({ payload }) =>
+            servingProfiles(payload).filter(
+              ({ office, person }) =>
+                office.chamber === "senate" &&
+                !currentSet.has(person.bioguideId),
+            ),
+        );
+        const displacedKeys = [
+          ...displacedProfiles.map(({ person }) =>
+            profileKey(person.bioguideId),
+          ),
+          ...displacedSiblingSenators.map(({ person }) =>
+            profileKey(person.bioguideId),
+          ),
+          ...contraryHouseProfiles.map(({ record }) =>
+            record.cacheKey as FederalOfficialCacheKey,
+          ),
+        ];
         const profilesByKey = new Map(
           validated.profiles.map((profile) => [profile.cacheKey, profile]),
         );
@@ -247,9 +387,14 @@ export function createFederalOfficialsService(options: {
         return unavailable();
       }
       const cacheKey = profileKey(bioguideId);
-      const cached = await safeRead(options.cache, cacheKey);
-      if (!cached) {
+      let cached: FederalOfficialCacheRecord | null;
+      try {
+        cached = await options.cache.read(cacheKey);
+      } catch {
         return unavailable();
+      }
+      if (cached === null) {
+        return { status: "missing" };
       }
       const valid = validateProfileRecord(
         cached,
@@ -257,16 +402,15 @@ export function createFederalOfficialsService(options: {
         bioguideId,
         currentTime,
       );
-      if (
-        valid === null ||
-        currentTime.getTime() >= valid.record.staleAfter.getTime()
-      ) {
+      if (valid === null) {
         return unavailable();
       }
       const state =
         currentTime.getTime() < valid.record.refreshAfter.getTime()
           ? "fresh"
-          : "stale";
+          : currentTime.getTime() < valid.record.staleAfter.getTime()
+            ? "stale"
+            : "expired";
       return {
         status: "available",
         profile: { ...valid.payload, freshness: freshness(valid.record, state) },
@@ -399,7 +543,15 @@ function validateReplacement(replacement: FederalRosterReplacement) {
     return null;
   }
   const expectedIds = servingProfileIds(roster.payload).sort();
-  const validatedProfiles: FederalOfficialCacheRecord[] = [];
+  const expectedProfiles = new Map(
+    servingProfiles(roster.payload).map((profile) => [
+      profileKey(profile.person.bioguideId),
+      profile,
+    ]),
+  );
+  const validatedProfiles: Array<
+    FederalOfficialCacheRecord & { payload: FederalProfileCachePayload }
+  > = [];
   for (const profile of replacement.profiles) {
     const match = /^profile:v2:([A-Z][0-9]{6})$/.exec(profile.cacheKey);
     const validated = match?.[1]
@@ -409,10 +561,16 @@ function validateReplacement(replacement: FederalRosterReplacement) {
           match[1],
         )
       : null;
-    if (validated === null || !sameTimes(profile, replacement.roster)) {
+    const expectedProfile = expectedProfiles.get(profile.cacheKey);
+    if (
+      validated === null ||
+      expectedProfile === undefined ||
+      !sameTimes(profile, replacement.roster) ||
+      !isDeepStrictEqual(validated.payload, expectedProfile)
+    ) {
       return null;
     }
-    validatedProfiles.push(profile);
+    validatedProfiles.push({ ...profile, payload: validated.payload });
   }
   const actualIds = validatedProfiles
     .map(({ cacheKey }) => cacheKey.slice("profile:v2:".length))
@@ -541,6 +699,7 @@ function validateProfilePayload(
   if (
     (chamber !== "house" && chamber !== "senate") ||
     typeof stateCode !== "string" ||
+    !supportedStateFips.has(stateCode) ||
     (chamber === "house" && !isDistrict(district)) ||
     (chamber === "senate" && district !== null)
   ) {
@@ -1013,7 +1172,8 @@ function validateClerkOutcome(
     if (
       !isExactRecord(vacancy, ["stateCode", "district", "source"]) ||
       typeof vacancy.stateCode !== "string" ||
-      !supportedStateFips.has(vacancy.stateCode) ||
+      (!supportedStateFips.has(vacancy.stateCode) &&
+        !knownNonLaunchJurisdictions.has(vacancy.stateCode)) ||
       !isDistrict(vacancy.district)
     ) {
       return null;
@@ -1102,6 +1262,31 @@ function servingProfileIds(roster: FederalOfficialsRoster) {
   return servingProfiles(roster).map(({ person }) => person.bioguideId);
 }
 
+function senateSnapshot(roster: FederalOfficialsRoster) {
+  const seats = roster.senate
+    .map((seat) =>
+      seat.status === "serving"
+        ? `${seat.status}:${seat.person.bioguideId}`
+        : seat.status,
+    )
+    .sort();
+  return `${roster.coverage.senate}:${seats.join(",")}`;
+}
+
+function isSameHouseOffice(
+  value: unknown,
+  jurisdiction: FederalJurisdiction,
+) {
+  const office = isRecord(value) && isRecord(value.office)
+    ? value.office
+    : null;
+  return (
+    office?.chamber === "house" &&
+    office.stateCode === jurisdiction.stateCode &&
+    office.district === jurisdiction.district
+  );
+}
+
 function record(
   cacheKey: FederalOfficialCacheKey,
   payload: unknown,
@@ -1131,7 +1316,7 @@ function availableRoster(
 
 function freshness(
   cacheRecord: FederalOfficialCacheRecord,
-  state: "fresh" | "stale",
+  state: "fresh" | "stale" | "expired",
 ): Freshness {
   return {
     checkedAt: cacheRecord.retrievedAt.toISOString(),
