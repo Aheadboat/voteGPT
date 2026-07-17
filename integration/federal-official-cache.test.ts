@@ -7,6 +7,7 @@ import { databaseSchema, federalOfficialCache } from "@/db/schema";
 import {
   createFederalOfficialCacheRepository,
   type FederalOfficialCacheRecord,
+  type FederalProfileCachePayload,
   type FederalRosterReplacement,
 } from "@/lib/federal-officials-service";
 import type {
@@ -384,6 +385,93 @@ describe("PostgreSQL federal official cache", () => {
     }
   }, 15_000);
 
+  it("does not resurrect a shared senator when an older other-district publication finishes after newer displacement", async () => {
+    await repository.replaceRoster(
+      replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001", "S000002"],
+        hoursBefore(2),
+      ),
+    );
+    const olderPool = new Pool({ connectionString, max: 1 });
+    const olderDatabase = drizzle(olderPool, { schema: databaseSchema });
+    const olderStarted = Promise.withResolvers<void>();
+    const releaseOlder = Promise.withResolvers<void>();
+    const olderRepository = createFederalOfficialCacheRepository(
+      gateTransactions(olderDatabase, olderStarted, releaseOlder.promise),
+    );
+    const olderWrite = olderRepository.replaceRoster(
+      replacementForDistrict(
+        12,
+        "H000012",
+        ["S000001", "S000002"],
+        hoursBefore(1),
+      ),
+    );
+
+    try {
+      await within(olderStarted.promise, 5_000, "older district publication start");
+      await repository.replaceRoster(
+        replacementForDistrict(13, "H000013", ["S000002"], NOW),
+      );
+      releaseOlder.resolve();
+      await within(olderWrite, 5_000, "older district publication completion");
+
+      const afterOlderCompletion = await storedRows();
+      expect(
+        profileBioguideId(
+          afterOlderCompletion.find(
+            ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+          ),
+        ),
+      ).toBeNull();
+
+      const reappearedAt = new Date(NOW.getTime() + HOUR);
+      await repository.replaceRoster(
+        replacementForDistrict(
+          13,
+          "H000013",
+          ["S000001", "S000002"],
+          reappearedAt,
+        ),
+      );
+      const afterNewerReappearance = await storedRows();
+      const reappeared = afterNewerReappearance.find(
+        ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+      );
+      expect(profileBioguideId(reappeared)).toBe("S000001");
+      expect(reappeared?.retrievedAt).toEqual(reappearedAt);
+    } finally {
+      releaseOlder.resolve();
+      await Promise.allSettled([olderWrite]);
+      await olderPool.end();
+    }
+  }, 15_000);
+
+  it.each(profileMismatchCases())(
+    "rejects a separately valid profile whose %s differs from its serving roster seat",
+    async (_label, mutate) => {
+      const valid = replacement("H000001", ["S000001", "S000002"], NOW);
+      const [target, ...remaining] = valid.profiles;
+      if (!target) {
+        throw new Error("test fixture requires a serving profile");
+      }
+      const invalid: FederalRosterReplacement = {
+        ...valid,
+        profiles: [
+          { ...target, payload: mutate(profilePayload(target)) },
+          ...remaining,
+        ],
+      };
+
+      await expect(repository.replaceRoster(invalid)).rejects.toThrow(
+        "Invalid federal official cache replacement",
+      );
+      expect(await storedRows()).toEqual([]);
+    },
+  );
+
   it("rejects wrong-key, private, and invalid-time snapshots before persistence", async () => {
     const valid = replacement("H000001", ["S000001", "S000002"], NOW);
     const wrongKey: FederalRosterReplacement = {
@@ -539,6 +627,81 @@ function profileFor(seat: Extract<FederalSeat, { status: "serving" }>) {
     term: seat.term,
     sources: seat.sources,
   };
+}
+
+function profilePayload(
+  record: FederalOfficialCacheRecord,
+): FederalProfileCachePayload {
+  return record.payload as FederalProfileCachePayload;
+}
+
+function profileMismatchCases(): ReadonlyArray<
+  readonly [
+    string,
+    (payload: FederalProfileCachePayload) => FederalProfileCachePayload,
+  ]
+> {
+  return [
+    [
+      "person name",
+      (payload) => ({
+        ...payload,
+        person: { ...payload.person, name: "Conflicting profile name" },
+      }),
+    ],
+    [
+      "office",
+      (payload) => {
+        const office = {
+          ...payload.office,
+          id: "federal:house:CA:12",
+          stateCode: "CA",
+          district: 12,
+        };
+        return {
+          ...payload,
+          office,
+          term: { ...payload.term, officeId: office.id },
+        };
+      },
+    ],
+    [
+      "term",
+      (payload) => ({
+        ...payload,
+        term: {
+          ...payload.term,
+          congress: 118,
+          startYear: 2023,
+          endYear: 2025,
+        },
+      }),
+    ],
+    [
+      "source",
+      (payload) => ({
+        ...payload,
+        sources: payload.sources.map((source, index) =>
+          index === 0
+            ? { ...source, recordUpdatedAt: hoursBefore(1).toISOString() }
+            : source,
+        ),
+      }),
+    ],
+  ];
+}
+
+function profileBioguideId(
+  record: FederalOfficialCacheRecord | undefined,
+): string | null {
+  if (!record?.payload || typeof record.payload !== "object") {
+    return null;
+  }
+  const person = "person" in record.payload ? record.payload.person : null;
+  return person && typeof person === "object" && "bioguideId" in person &&
+    typeof person.bioguideId === "string"
+    ? person.bioguideId
+    : null;
 }
 
 function memberSource(bioguideId: string, retrievedAt: Date): SourceRef {

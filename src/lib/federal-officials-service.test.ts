@@ -246,6 +246,82 @@ describe("federal official cache service", () => {
     );
   });
 
+  it("ignores known unsupported-jurisdiction Clerk vacancies during a supported-state refresh", async () => {
+    const house = servingSeat("house", "H000001", 13, jurisdiction);
+    const senators = [
+      servingSeat("senate", "S000001", null, jurisdiction),
+      servingSeat("senate", "S000002", null, jurisdiction),
+    ];
+    const congress = availableCongress([house], senators);
+    const clerk = availableClerk(
+      (["AS", "DC", "GU", "MP", "PR", "VI"] as const).map(
+        (stateCode) => ({
+          stateCode,
+          district: 0,
+          source: {
+            ...clerkSource,
+            url: `https://clerk.house.gov/members/${stateCode}00/vacancy`,
+          },
+        }),
+      ),
+    );
+    const expectedRoster = reconcileFederalOfficials(
+      jurisdiction,
+      congress,
+      clerk,
+    );
+    const cache = memoryCache();
+    const harness = serviceHarness(cache.repository, { clerk, congress });
+
+    expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+      status: "available",
+      view: {
+        ...expectedRoster,
+        freshness: {
+          checkedAt: NOW.toISOString(),
+          refreshAfter: "2026-07-17T12:00:00.000Z",
+          staleAfter: "2026-07-19T12:00:00.000Z",
+          state: "fresh",
+        },
+      },
+    });
+    expect(expectedRoster.coverage).toEqual({
+      house: "verified",
+      senate: "verified",
+    });
+    expect(cache.replacements).toHaveLength(1);
+    expect(harness.fetchCongressRoster).toHaveBeenCalledTimes(1);
+    expect(harness.fetchCurrentHouseVacancies).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when Clerk vacancy evidence contains an unknown jurisdiction", async () => {
+    const house = servingSeat("house", "H000001", 13, jurisdiction);
+    const senators = [
+      servingSeat("senate", "S000001", null, jurisdiction),
+      servingSeat("senate", "S000002", null, jurisdiction),
+    ];
+    const congress = availableCongress([house], senators);
+    const clerk = availableClerk([
+      {
+        stateCode: "ZZ",
+        district: 0,
+        source: {
+          ...clerkSource,
+          url: "https://clerk.house.gov/members/ZZ00/vacancy",
+        },
+      },
+    ]);
+    const cache = memoryCache();
+    const harness = serviceHarness(cache.repository, { clerk, congress });
+
+    expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+      status: "unavailable",
+    });
+    expect(cache.replacements).toEqual([]);
+    expect(harness.fetchCongressRoster).toHaveBeenCalledTimes(1);
+    expect(harness.fetchCurrentHouseVacancies).toHaveBeenCalledTimes(1);
+  });
+
   it("rereads the newer roster after an older refresh loses the write race", async () => {
     const expiredAt = new Date(NOW.getTime() - 72 * HOUR);
     const newerAt = new Date(NOW.getTime() + HOUR);
@@ -601,113 +677,87 @@ describe("federal official cache service", () => {
     },
   );
 
-  it("validates profile misses, freshness, shape, binding, sources, and times without providers", async () => {
-    const assertCase = async (
-      label: string,
-      record: FederalOfficialCacheRecord | null,
-      expected?: { payload: FederalProfileCachePayload; state: "fresh" | "stale" },
-    ) => {
-      const cache = memoryCache();
-      if (record) {
-        cache.records.set("profile:v2:H000001", record);
-      }
-      const harness = serviceHarness(cache.repository);
-      const result = await harness.service.getProfile("H000001");
+  it("returns missing for an absent profile row without provider work", async () => {
+    const cache = memoryCache();
+    const harness = serviceHarness(cache.repository);
 
-      if (expected && record) {
-        expect(result, label).toEqual({
-          status: "available",
-          profile: {
-            ...expected.payload,
-            freshness: freshnessFor(record, expected.state),
-          },
-        });
-      } else {
-        expect(result, label).toEqual({ status: "unavailable" });
-      }
-      expect(cache.reads, label).toEqual(["profile:v2:H000001"]);
-      expect(harness.fetchCongressRoster, label).not.toHaveBeenCalled();
-      expect(harness.fetchCurrentHouseVacancies, label).not.toHaveBeenCalled();
-    };
-    const fresh = profileFixture("H000001", HOUR);
-    const stale = profileFixture("H000001", 24 * HOUR);
-    const expired = profileFixture("H000001", 72 * HOUR);
-
-    await assertCase("miss", null);
-    await assertCase("fresh", fresh.record, {
-      payload: fresh.payload,
-      state: "fresh",
+    expect(await harness.service.getProfile("H000001")).toEqual({
+      status: "missing",
     });
-    await assertCase("exactly 24h stale", stale.record, {
-      payload: stale.payload,
-      state: "stale",
-    });
-    await assertCase("exactly 72h expired", expired.record);
-
-    const invalidRecords = [
-      [
-        "private extra field",
-        profileRecord(fresh, {
-          ...fresh.payload,
-          person: { ...fresh.payload.person, address: "private-address-sentinel" },
-        }),
-      ],
-      ["corrupt payload", { ...fresh.record, payload: null }],
-      [
-        "member link mismatch",
-        profileRecord(fresh, {
-          ...fresh.payload,
-          sources: [
-            {
-              ...fresh.payload.sources[0],
-              url: "https://api.congress.gov/v3/member/X000001?format=json",
-            },
-          ],
-        }),
-      ],
-      [
-        "source contract mismatch",
-        profileRecord(fresh, { ...fresh.payload, sources: [clerkSource] }),
-      ],
-      [
-        "source time after cache retrieval",
-        profileRecord(fresh, {
-          ...fresh.payload,
-          sources: [
-            {
-              ...fresh.payload.sources[0],
-              retrievedAt: new Date(NOW.getTime() + 1).toISOString(),
-            },
-          ],
-        }),
-      ],
-      [
-        "lowercase profile cache key",
-        { ...fresh.record, cacheKey: "profile:v2:h000001" },
-      ],
-      [
-        "valid-format wrong key and person binding",
-        { ...fresh.record, cacheKey: "profile:v2:X000001" },
-      ],
-      [
-        "term and person mismatch",
-        profileRecord(fresh, {
-          ...fresh.payload,
-          term: { ...fresh.payload.term, personId: "bioguide:X000001" },
-        }),
-      ],
-      [
-        "term and office mismatch",
-        profileRecord(fresh, {
-          ...fresh.payload,
-          term: { ...fresh.payload.term, officeId: "federal:house:GA:12" },
-        }),
-      ],
-    ] satisfies ReadonlyArray<readonly [string, FederalOfficialCacheRecord]>;
-    for (const [label, record] of invalidRecords) {
-      await assertCase(label, record);
-    }
+    expect(cache.reads).toEqual(["profile:v2:H000001"]);
+    expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+    expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
   });
+
+  it("returns unavailable when profile cache access fails without provider work", async () => {
+    const repository: FederalOfficialCacheRepository = {
+      read: vi.fn(async () => {
+        throw new Error("synthetic profile cache outage");
+      }),
+      replaceRoster: vi.fn(async () => ({ status: "written" }) as const),
+    };
+    const harness = serviceHarness(repository);
+
+    expect(await harness.service.getProfile("H000001")).toEqual({
+      status: "unavailable",
+    });
+    expect(repository.read).toHaveBeenCalledWith("profile:v2:H000001");
+    expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+    expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+  });
+
+  it("returns unavailable for an invalid profile ID before cache or provider work", async () => {
+    const cache = memoryCache();
+    const harness = serviceHarness(cache.repository);
+
+    expect(await harness.service.getProfile("h000001")).toEqual({
+      status: "unavailable",
+    });
+    expect(cache.reads).toEqual([]);
+    expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+    expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [HOUR, "fresh"],
+    [24 * HOUR, "stale"],
+    [72 * HOUR, "expired"],
+    [73 * HOUR, "expired"],
+  ] as const)(
+    "serves a runtime-valid profile at age %i with %s freshness and zero providers",
+    async (age, state) => {
+      const fixture = profileFixture("H000001", age);
+      const cache = memoryCache([fixture.record]);
+      const harness = serviceHarness(cache.repository);
+
+      expect(await harness.service.getProfile("H000001")).toEqual({
+        status: "available",
+        profile: {
+          ...fixture.payload,
+          freshness: freshnessFor(fixture.record, state),
+        },
+      });
+      expect(cache.reads).toEqual(["profile:v2:H000001"]);
+      expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+      expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(invalidProfileCases())(
+    "returns unavailable for %s profile cache data without provider work",
+    async (_label, record) => {
+      const cache = memoryCache();
+      cache.records.set("profile:v2:H000001", record);
+      const harness = serviceHarness(cache.repository);
+
+      expect(await harness.service.getProfile("H000001")).toEqual({
+        status: "unavailable",
+      });
+      expect(cache.reads).toEqual(["profile:v2:H000001"]);
+      expect(harness.fetchCongressRoster).not.toHaveBeenCalled();
+      expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function serviceHarness(
@@ -958,9 +1008,86 @@ function profileRecord(
   return { ...fixture.record, payload };
 }
 
+function invalidProfileCases() {
+  const fresh = profileFixture("H000001", HOUR);
+  const unsupportedOffice = {
+    ...fresh.payload.office,
+    id: "federal:house:ZZ:13",
+    stateCode: "ZZ",
+  };
+  return [
+    [
+      "private extra field",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        person: { ...fresh.payload.person, address: "private-address-sentinel" },
+      }),
+    ],
+    ["corrupt payload", { ...fresh.record, payload: null }],
+    [
+      "member link mismatch",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [
+          {
+            ...fresh.payload.sources[0],
+            url: "https://api.congress.gov/v3/member/X000001?format=json",
+          },
+        ],
+      }),
+    ],
+    [
+      "source contract mismatch",
+      profileRecord(fresh, { ...fresh.payload, sources: [clerkSource] }),
+    ],
+    [
+      "source time after cache retrieval",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [
+          {
+            ...fresh.payload.sources[0],
+            retrievedAt: new Date(NOW.getTime() + 1).toISOString(),
+          },
+        ],
+      }),
+    ],
+    [
+      "lowercase profile cache key",
+      { ...fresh.record, cacheKey: "profile:v2:h000001" },
+    ],
+    [
+      "valid-format wrong key and person binding",
+      { ...fresh.record, cacheKey: "profile:v2:X000001" },
+    ],
+    [
+      "term and person mismatch",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        term: { ...fresh.payload.term, personId: "bioguide:X000001" },
+      }),
+    ],
+    [
+      "term and office mismatch",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        term: { ...fresh.payload.term, officeId: "federal:house:GA:12" },
+      }),
+    ],
+    [
+      "internally matching but unsupported state",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        office: unsupportedOffice,
+        term: { ...fresh.payload.term, officeId: unsupportedOffice.id },
+      }),
+    ],
+  ] satisfies ReadonlyArray<readonly [string, FederalOfficialCacheRecord]>;
+}
+
 function freshnessFor(
   record: FederalOfficialCacheRecord,
-  state: "fresh" | "stale",
+  state: "fresh" | "stale" | "expired",
 ) {
   return {
     checkedAt: record.retrievedAt.toISOString(),
