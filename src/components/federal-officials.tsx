@@ -7,6 +7,8 @@ import type {
 
 import styles from "./federal-officials.module.css";
 
+const clerkListUrl = "https://clerk.house.gov/Members/ViewVacancies";
+
 type UnsupportedCode = "DC" | "AS" | "GU" | "MP" | "PR" | "VI";
 
 export type FederalOfficialsResult =
@@ -148,12 +150,16 @@ function SeatFact({ seat }: { seat: FederalSeat }) {
     return (
       <div className={styles.fact}>
         <strong>
-          <a
-            className={styles.profileLink}
-            href={`/officials/federal/${seat.person.bioguideId}`}
-          >
-            {seat.person.name}
-          </a>
+          {hasProfileEvidence(seat) ? (
+            <a
+              className={styles.profileLink}
+              href={`/officials/federal/${seat.person.bioguideId}`}
+            >
+              {seat.person.name}
+            </a>
+          ) : (
+            seat.person.name
+          )}
         </strong>
         <span>Verified current officeholder</span>
       </div>
@@ -177,6 +183,28 @@ function SeatFact({ seat }: { seat: FederalSeat }) {
       Clerk vacancy evidence disagrees.
     </p>
   );
+}
+
+function hasProfileEvidence(
+  seat: Extract<FederalSeat, { status: "serving" }>,
+) {
+  const isMemberSource = (source: SourceRef) =>
+    source.publisher === "Congress.gov" && source.sourceType === "member";
+  const isClerkListSource = (source: SourceRef) =>
+    source.publisher ===
+      "Office of the Clerk, U.S. House of Representatives" &&
+    source.sourceType === "vacancy" &&
+    source.url === clerkListUrl;
+
+  if (!seat.sources.some(isMemberSource)) {
+    return false;
+  }
+  return seat.office.chamber === "senate"
+    ? seat.sources.every(isMemberSource)
+    : seat.sources.some(isClerkListSource) &&
+        seat.sources.every(
+          (source) => isMemberSource(source) || isClerkListSource(source),
+        );
 }
 
 function SourceEvidence({
