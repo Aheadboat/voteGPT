@@ -366,8 +366,8 @@ function termFor(office, personId, status) {
     officeId: office.id,
     personId,
     congress: 119,
-    startYear: 2025,
-    endYear: 2027,
+    startYear: status === "vacant" ? null : 2025,
+    endYear: status === "vacant" ? null : 2027,
     status,
   };
 }
