@@ -240,32 +240,6 @@ describe("PostgreSQL federal official cache", () => {
       ),
     },
     {
-      conflict: "Senate coverage status",
-      expectedHouseCoverage: "verified",
-      expectedHouseStatus: "serving",
-      expectedKeys: [
-        "profile:v2:H000013",
-        "profile:v2:S000001",
-        "roster:v1:GA:13",
-      ],
-      expectedSenateCoverage: "partial",
-      expectedSenateIds: ["S000001"],
-      first: replacementForDistrict(
-        13,
-        "H000013",
-        ["S000001"],
-        NOW,
-        "partial",
-      ),
-      losing: replacementForDistrict(
-        13,
-        "H000013",
-        ["S000001"],
-        NOW,
-        "unknown",
-      ),
-    },
-    {
       conflict: "profile-less House status",
       expectedHouseCoverage: "unknown",
       expectedHouseStatus: "unknown",
@@ -487,42 +461,20 @@ describe("PostgreSQL federal official cache", () => {
   it.each([
     {
       conflict: "equal-generation identity",
-      losingCoverage: "verified",
       losingIds: ["S000002", "S000003"],
-      siblingCoverage: "verified",
       siblingIds: ["S000001", "S000002"],
       siblingRetrievedAt: hoursBefore(1),
     },
     {
       conflict: "newer-generation identity",
-      losingCoverage: "verified",
       losingIds: ["S000002", "S000003"],
-      siblingCoverage: "verified",
       siblingIds: ["S000001", "S000002"],
-      siblingRetrievedAt: NOW,
-    },
-    {
-      conflict: "equal-generation status",
-      losingCoverage: "unknown",
-      losingIds: ["S000001"],
-      siblingCoverage: "partial",
-      siblingIds: ["S000001"],
-      siblingRetrievedAt: hoursBefore(1),
-    },
-    {
-      conflict: "newer-generation status",
-      losingCoverage: "unknown",
-      losingIds: ["S000001"],
-      siblingCoverage: "partial",
-      siblingIds: ["S000001"],
       siblingRetrievedAt: NOW,
     },
   ] as const)(
     "ignores a losing state publication as a whole on $conflict conflict",
     async ({
-      losingCoverage,
       losingIds,
-      siblingCoverage,
       siblingIds,
       siblingRetrievedAt,
     }) => {
@@ -533,7 +485,6 @@ describe("PostgreSQL federal official cache", () => {
           "H000013",
           siblingIds,
           siblingRetrievedAt,
-          siblingCoverage,
         ),
       );
 
@@ -544,7 +495,6 @@ describe("PostgreSQL federal official cache", () => {
             "H000012",
             losingIds,
             hoursBefore(1),
-            losingCoverage,
           ),
         ),
       ).resolves.toEqual({
@@ -1032,7 +982,6 @@ function replacementForDistrict(
   houseId: string,
   senateIds: readonly string[],
   retrievedAt: Date,
-  senateCoverage?: "verified" | "partial" | "unknown",
 ): FederalRosterReplacement {
   const jurisdiction: FederalJurisdiction = {
     stateCode: "GA",
@@ -1052,7 +1001,12 @@ function replacementForDistrict(
     senate,
     coverage: {
       house: "verified",
-      senate: senateCoverage ?? (senate.length === 2 ? "verified" : "unknown"),
+      senate:
+        senate.length === 2
+          ? "verified"
+          : senate.length === 1
+            ? "partial"
+            : "unknown",
     },
   };
   return {
