@@ -83,6 +83,38 @@ describe("public federal official profile page", () => {
     expectNoProviderOrAuthWork();
   });
 
+  it("renders unavailable recovery without infrastructure work when DATABASE_URL is blank", async () => {
+    vi.stubEnv("DATABASE_URL", "");
+
+    render(await loadPage("H000001"));
+
+    expect(notFound).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Federal official profile",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Federal profile information is unavailable.",
+    );
+    expect(
+      screen.getByRole("link", { name: "Check Congress.gov" }),
+    ).toHaveAttribute("href", "https://www.congress.gov/members");
+    expect(screen.queryByText("Alex House")).toBeNull();
+    expect(screen.queryByText("U.S. Representative")).toBeNull();
+    expect(screen.queryByText("GA District 13")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Congress.gov member source" }),
+    ).toBeNull();
+    expect(createDatabase).not.toHaveBeenCalled();
+    expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
+    expect(createFederalOfficialsService).not.toHaveBeenCalled();
+    expect(cacheRead).not.toHaveBeenCalled();
+    expect(cacheReplace).not.toHaveBeenCalled();
+    expectNoProviderOrAuthWork();
+  });
+
   it("server-renders a verified current cached profile without authentication or JavaScript", async () => {
     const record = profileRecord(1);
     cacheRead.mockResolvedValueOnce(record);
