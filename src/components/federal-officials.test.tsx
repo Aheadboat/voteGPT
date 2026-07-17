@@ -26,6 +26,10 @@ const clerkSource: SourceRef = {
   recordUpdatedAt: null,
   effectiveAt: null,
 };
+const clerkDistrictSource: SourceRef = {
+  ...clerkSource,
+  url: "https://clerk.house.gov/members/GA13/vacancy",
+};
 
 const house = servingSeat("house", "Alex House", "H000001", 13);
 const firstSenator = servingSeat("senate", "Bailey Senate", "S000001", null);
@@ -56,7 +60,7 @@ const vacantView: FederalOfficialsView = {
       personId: null,
       status: "vacant",
     },
-    sources: [clerkSource],
+    sources: [clerkSource, clerkDistrictSource],
   },
   coverage: { ...view.coverage, house: "vacant" },
 };
@@ -76,7 +80,7 @@ const conflictView: FederalOfficialsView = {
   house: {
     ...house,
     status: "conflict",
-    sources: [...house.sources, clerkSource],
+    sources: [...house.sources, clerkSource, clerkDistrictSource],
   },
   coverage: { ...view.coverage, house: "partial" },
 };
@@ -157,6 +161,34 @@ describe("FederalOfficials", () => {
     ).not.toMatch(/<script|onClick=/i);
   });
 
+  it("uses an external context heading without duplicating the dashboard h2", () => {
+    render(
+      <section aria-labelledby="in-office-heading">
+        <h2 id="in-office-heading">In office</h2>
+        <FederalOfficials
+          heading={null}
+          result={{ status: "available", view }}
+        />
+      </section>,
+    );
+
+    expect(
+      screen.getAllByRole("heading", { level: 2, name: "In office" }),
+    ).toHaveLength(1);
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Federal officials" }),
+    ).toBeNull();
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map(({ textContent }) =>
+        textContent,
+      ),
+    ).toEqual([
+      "U.S. Representative — District 13",
+      "U.S. Senator",
+      "U.S. Senator",
+    ]);
+  });
+
   it("labels an at-large House office without inventing District 0", () => {
     const atLargeHouse = servingSeat("house", "Avery Atlarge", "A000001", 0);
     render(
@@ -223,6 +255,16 @@ describe("FederalOfficials", () => {
     );
     expect(screen.getByText("This seat is verified vacant.")).toBeInTheDocument();
     expect(screen.queryByText("Alex House")).toBeNull();
+    expect(
+      screen.getByRole("link", {
+        name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+      }),
+    ).toHaveAttribute("href", clerkSource.url);
+    expect(
+      screen.getByRole("link", {
+        name: "Office of the Clerk, U.S. House of Representatives district vacancy record source",
+      }),
+    ).toHaveAttribute("href", clerkDistrictSource.url);
 
     rerender(<FederalOfficials result={{ status: "available", view: states[1] }} />);
     expect(
@@ -238,6 +280,16 @@ describe("FederalOfficials", () => {
         "Sources conflict on current House seat status. Congress.gov lists Alex House; Clerk vacancy evidence disagrees.",
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "House coverage is partial because Congress.gov and Clerk evidence conflict.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "House coverage is partial. Some current-seat evidence is unavailable.",
+      ),
+    ).toBeNull();
     expect(
       within(
         screen.getByText(/Sources conflict on current House seat status/).closest("article")!,

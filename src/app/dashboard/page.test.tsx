@@ -165,8 +165,12 @@ describe("signed-in dashboard", () => {
     expect(redirect).not.toHaveBeenCalled();
     const main = screen.getByRole("main");
     expect(
-      within(main).getByRole("heading", { name: "Your dashboard" }),
+      within(main).getByRole("heading", {
+        level: 1,
+        name: "Your dashboard",
+      }),
     ).toBeInTheDocument();
+    expect(within(main).getAllByRole("heading", { level: 1 })).toHaveLength(1);
     const savedResidenceHeading = within(main).getByRole("heading", {
       name: "Saved residence",
     });
@@ -278,7 +282,26 @@ describe("signed-in dashboard", () => {
 
     const main = screen.getByRole("main");
     expect(
-      within(main).getByRole("heading", { name: "In office" }),
+      within(main).getByRole("heading", {
+        level: 1,
+        name: "Your dashboard",
+      }),
+    ).toBeVisible();
+    expect(within(main).getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(
+      within(main).getAllByRole("heading", {
+        level: 2,
+        name: "In office",
+      }),
+    ).toHaveLength(1);
+    expect(
+      within(main).queryByRole("heading", {
+        level: 2,
+        name: "Federal officials",
+      }),
+    ).toBeNull();
+    expect(
+      within(main).getByRole("heading", { level: 2, name: "In office" }),
     ).toBeVisible();
     const roster = within(main).getByRole("region", {
       name: "Federal officials for GA District 13",
@@ -288,19 +311,19 @@ describe("signed-in dashboard", () => {
         article: /U\.S\. Representative.*Alex House/i,
         heading: /U\.S\. Representative.*District 13/i,
         sources: [
-          /Congress\.gov member source/i,
-          /Office of the Clerk.*vacancy source/i,
+          "Congress.gov member source",
+          "Office of the Clerk, U.S. House of Representatives current vacancies list source",
         ],
       },
       {
         article: /U\.S\. Senator.*Bailey Senate/i,
         heading: "U.S. Senator",
-        sources: [/Congress\.gov member source/i],
+        sources: ["Congress.gov member source"],
       },
       {
         article: /U\.S\. Senator.*Casey Senate/i,
         heading: "U.S. Senator",
-        sources: [/Congress\.gov member source/i],
+        sources: ["Congress.gov member source"],
       },
     ] as const;
 

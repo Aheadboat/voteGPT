@@ -95,8 +95,9 @@ describe("public federal official profile page", () => {
       name: /Alex House.*U\.S\. Representative/,
     });
     expect(
-      within(article).getByRole("heading", { level: 2, name: "Alex House" }),
+      within(article).getByRole("heading", { level: 1, name: "Alex House" }),
     ).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(within(article).getByText("U.S. Representative")).toBeInTheDocument();
     expect(within(article).getByText("GA District 13")).toBeInTheDocument();
     expect(within(article).getByText("119th Congress")).toBeInTheDocument();
@@ -111,10 +112,24 @@ describe("public federal official profile page", () => {
       "https://api.congress.gov/v3/member/H000001?format=json",
     );
     expect(
+      within(article).getByRole("link", {
+        name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://clerk.house.gov/Members/ViewVacancies",
+    );
+    expect(
+      within(article).getByRole("heading", {
+        level: 2,
+        name: "Sources and retrieval times",
+      }),
+    ).toBeInTheDocument();
+    expect(
       article.querySelectorAll(
         `time[datetime="${record.retrievedAt.toISOString()}"]`,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(markup).not.toMatch(/<script|onClick=/i);
     expect(markup).not.toMatch(
       /address|latitude|longitude|userId|session|credential|party|\bAI\b/i,
@@ -142,7 +157,9 @@ describe("public federal official profile page", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "This profile is stale but not expired. Verify it with the linked official source.",
     );
-    expect(screen.getByRole("heading", { name: "Alex House" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alex House" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Congress.gov member source" }),
     ).toBeInTheDocument();
@@ -151,19 +168,8 @@ describe("public federal official profile page", () => {
     expectNoProviderOrAuthWork();
   });
 
-  it.each([
-    ["cache miss", "miss"],
-    ["expired cache row", "expired"],
-    ["unavailable cache", "unavailable"],
-  ] as const)("returns not-found for a valid ID with %s", async (_label, state) => {
-    if (state === "miss") {
-      cacheRead.mockResolvedValueOnce(null);
-    } else if (state === "expired") {
-      cacheRead.mockResolvedValueOnce(profileRecord(72));
-    } else {
-      cacheRead.mockRejectedValueOnce(new Error("cache unavailable"));
-    }
-
+  it("returns not-found for a valid ID with a true cache miss", async () => {
+    cacheRead.mockResolvedValueOnce(null);
     await expect(loadPage("H000001")).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(notFound).toHaveBeenCalledTimes(1);
@@ -172,6 +178,70 @@ describe("public federal official profile page", () => {
     expect(cacheReplace).not.toHaveBeenCalled();
     expectNoProviderOrAuthWork();
   });
+
+  it("renders explicit expired recovery with checked time and no person facts", async () => {
+    const record = profileRecord(72);
+    cacheRead.mockResolvedValueOnce(record);
+
+    render(await loadPage("H000001"));
+
+    expect(notFound).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Federal official profile",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Federal profile data has expired. Refresh before relying on this officeholder.",
+    );
+    expect(screen.getByText(record.retrievedAt.toISOString()).closest("time"))
+      .toHaveAttribute("dateTime", record.retrievedAt.toISOString());
+    expect(
+      screen.getByRole("link", { name: "Check Congress.gov" }),
+    ).toHaveAttribute("href", "https://www.congress.gov/members");
+    expect(screen.queryByText("Alex House")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Congress.gov member source" }),
+    ).toBeNull();
+    expect(cacheRead).toHaveBeenCalledWith("profile:v2:H000001");
+    expectNoProviderOrAuthWork();
+  });
+
+  it.each(["cache read error", "malformed cache row"] as const)(
+    "renders explicit unavailable recovery for a %s",
+    async (state) => {
+      if (state === "cache read error") {
+        cacheRead.mockRejectedValueOnce(new Error("cache unavailable"));
+      } else {
+        const malformed = profileRecord(1);
+        cacheRead.mockResolvedValueOnce({
+          ...malformed,
+          payload: null,
+        });
+      }
+
+      render(await loadPage("H000001"));
+
+      expect(notFound).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("heading", {
+          level: 1,
+          name: "Federal official profile",
+        }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Federal profile information is unavailable.",
+      );
+      expect(
+        screen.getByRole("link", { name: "Check Congress.gov" }),
+      ).toHaveAttribute("href", "https://www.congress.gov/members");
+      expect(screen.queryByText("Alex House")).toBeNull();
+      expect(cacheRead).toHaveBeenCalledWith("profile:v2:H000001");
+      expect(cacheReplace).not.toHaveBeenCalled();
+      expectNoProviderOrAuthWork();
+    },
+  );
 });
 
 function loadPage(bioguideId: string) {
@@ -215,6 +285,15 @@ function profileRecord(ageHours: number): FederalOfficialCacheRecord {
           retrievedAt.getTime() - HOUR,
         ).toISOString(),
         effectiveAt: "2025-01-03T00:00:00.000Z",
+      },
+      {
+        publisher:
+          "Office of the Clerk, U.S. House of Representatives" as const,
+        sourceType: "vacancy" as const,
+        url: "https://clerk.house.gov/Members/ViewVacancies",
+        retrievedAt: retrievedAt.toISOString(),
+        recordUpdatedAt: null,
+        effectiveAt: null,
       },
     ],
   } satisfies FederalProfileCachePayload;

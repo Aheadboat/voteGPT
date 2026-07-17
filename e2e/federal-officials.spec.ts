@@ -26,15 +26,24 @@ test("serves a sourced federal profile anonymously from SSR", async ({
     name: /Georgia Representative.*U\.S\. Representative/,
   });
   await expect(profile).toBeVisible();
-  await expect(profile.getByRole("heading", { name: "Georgia Representative" })).toBeVisible();
+  await expect(
+    profile.getByRole("heading", { level: 1, name: "Georgia Representative" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   await expect(profile.getByText("Fresh at last check.")).toBeVisible();
 
   const sources = profile.getByRole("region", { name: "Profile sources" });
+  await expect(
+    sources.getByRole("heading", {
+      level: 2,
+      name: "Sources and retrieval times",
+    }),
+  ).toBeVisible();
   const congress = sources.getByRole("link", {
     name: "Congress.gov member source",
   });
   const clerk = sources.getByRole("link", {
-    name: /Office of the Clerk.*vacancy source/,
+    name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
   });
   await expect(congress).toHaveAttribute(
     "href",
@@ -61,7 +70,10 @@ test("keeps the public federal profile usable without JavaScript", async ({
     const response = await page.goto("/officials/federal/H000001");
     expect(response?.status()).toBe(200);
     await expect(
-      page.getByRole("heading", { name: "Georgia Representative" }),
+      page.getByRole("heading", {
+        level: 1,
+        name: "Georgia Representative",
+      }),
     ).toBeVisible();
     await expect(
       page.getByRole("region", { name: "Profile sources" }),
@@ -72,7 +84,7 @@ test("keeps the public federal profile usable without JavaScript", async ({
   }
 });
 
-test("fails closed for malformed, missing, and expired profiles", async ({
+test("returns not-found only for malformed and missing profiles", async ({
   page,
 }) => {
   const requests = auditRequests(page);
@@ -80,7 +92,6 @@ test("fails closed for malformed, missing, and expired profiles", async ({
   for (const path of [
     "/officials/federal/not-a-bioguide",
     "/officials/federal/M000001",
-    "/officials/federal/T000001",
   ]) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(404);
@@ -88,6 +99,36 @@ test("fails closed for malformed, missing, and expired profiles", async ({
     await expect(page.getByRole("link", { name: /source/i })).toHaveCount(0);
     await assertSafeSurface(page, requests);
   }
+});
+
+test("renders explicit recovery for an expired profile", async ({ page }) => {
+  const requests = auditRequests(page);
+  const response = await page.goto("/officials/federal/T000001");
+
+  expect(response?.status()).toBe(200);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Federal official profile",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText(
+    "Federal profile data has expired. Refresh before relying on this officeholder.",
+  );
+  const lastChecked = page.getByText(/^Last checked /);
+  await expect(lastChecked).toBeVisible();
+  await expect(lastChecked.locator("time")).toHaveAttribute(
+    "datetime",
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+  );
+  await expect(
+    page.getByRole("link", { name: "Check Congress.gov" }),
+  ).toHaveAttribute("href", "https://www.congress.gov/members");
+  await expect(page.getByText("Texas Representative")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Congress.gov member source" }),
+  ).toHaveCount(0);
+  await assertSafeSurface(page, requests);
 });
 
 test("labels below-72-hour profiles and rosters as stale", async ({
@@ -98,6 +139,12 @@ test("labels below-72-hour profiles and rosters as stale", async ({
   const response = await page.goto("/officials/federal/C000001");
 
   expect(response?.status()).toBe(200);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "California Representative",
+    }),
+  ).toBeVisible();
   await expect(
     page.getByRole("status"),
   ).toHaveText(
@@ -143,7 +190,7 @@ test("labels below-72-hour profiles and rosters as stale", async ({
   }
   await expect(
     cards.nth(0).getByRole("link", {
-      name: /Office of the Clerk.*vacancy source/,
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
     }),
   ).toHaveAttribute(
     "href",
@@ -160,7 +207,16 @@ test("prompts an authenticated voter without a saved home", async ({
   const requests = auditRequests(page);
   await page.goto("/dashboard");
 
-  await expect(page.getByRole("heading", { name: "In office" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Your dashboard" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "In office" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Federal officials" }),
+  ).toHaveCount(0);
   await expect(
     page.getByText("Save a voting residence to see federal officials", {
       exact: true,
@@ -178,7 +234,16 @@ test("renders the GA-13 House and Senate roster equally and deterministically", 
   const requests = auditRequests(page);
   await page.goto("/dashboard");
 
-  await expect(page.getByRole("heading", { name: "In office" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Your dashboard" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "In office" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Federal officials" }),
+  ).toHaveCount(0);
   const roster = page.getByRole("region", {
     name: "Federal officials for GA District 13",
   });
@@ -223,7 +288,9 @@ test("renders the GA-13 House and Senate roster equally and deterministically", 
     house.getByRole("link", { name: "Congress.gov member source" }),
   ).toBeVisible();
   await expect(
-    house.getByRole("link", { name: /Office of the Clerk.*vacancy source/ }),
+    house.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+    }),
   ).toHaveAttribute(
     "href",
     "https://clerk.house.gov/Members/ViewVacancies",
@@ -266,17 +333,22 @@ test("renders at-large and verified-vacancy House seats honestly", async ({
     name: /U\.S\. Representative.*District 14: vacant/,
   });
   await expect(vacancy.getByText("This seat is verified vacant.")).toBeVisible();
-  const vacancySources = vacancy.getByRole("link", {
-    name: /Office of the Clerk.*vacancy source/,
-  });
-  expect(
-    await vacancySources.evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("href")),
-    ),
-  ).toEqual([
+  await expect(
+    vacancy.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+    }),
+  ).toHaveAttribute(
+    "href",
     "https://clerk.house.gov/Members/ViewVacancies",
+  );
+  await expect(
+    vacancy.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives district vacancy record source",
+    }),
+  ).toHaveAttribute(
+    "href",
     "https://clerk.house.gov/members/GA14/vacancy",
-  ]);
+  );
   await assertSafeSurface(page, requests);
 });
 

@@ -43,13 +43,27 @@ const source: SourceRef = {
   recordUpdatedAt: "2026-07-15T00:00:00.000Z",
   effectiveAt: "2025-01-03T00:00:00.000Z",
 };
+const clerkListSource: SourceRef = {
+  publisher: "Office of the Clerk, U.S. House of Representatives",
+  sourceType: "vacancy",
+  url: "https://clerk.house.gov/Members/ViewVacancies",
+  retrievedAt: checkedAt,
+  recordUpdatedAt: null,
+  effectiveAt: null,
+};
 const freshness: Freshness = {
   checkedAt,
   refreshAfter: "2026-07-16T18:00:00.000Z",
   staleAfter: "2026-07-18T12:00:00.000Z",
   state: "fresh",
 };
-const profile: ProfileFixture = { person, office, term, sources: [source], freshness };
+const profile: ProfileFixture = {
+  person,
+  office,
+  term,
+  sources: [source, clerkListSource],
+  freshness,
+};
 
 const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
   [
@@ -111,7 +125,7 @@ describe("FederalProfile", () => {
       name: "Alex House — U.S. Representative",
     });
     expect(
-      within(article).getByRole("heading", { level: 2, name: "Alex House" }),
+      within(article).getByRole("heading", { level: 1, name: "Alex House" }),
     ).toBeInTheDocument();
     expect(within(article).getByText("U.S. Representative")).toBeInTheDocument();
     expect(within(article).getByText("GA District 13")).toBeInTheDocument();
@@ -123,6 +137,17 @@ describe("FederalProfile", () => {
     });
     expect(link).toHaveAttribute("href", source.url);
     expect(link.tabIndex).toBe(0);
+    expect(
+      within(article).getByRole("link", {
+        name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+      }),
+    ).toHaveAttribute("href", clerkListSource.url);
+    expect(
+      within(article).getByRole("heading", {
+        level: 2,
+        name: "Sources and retrieval times",
+      }),
+    ).toBeInTheDocument();
     expect(link.closest("li")?.querySelector("time")).toHaveAttribute(
       "dateTime",
       checkedAt,
@@ -152,7 +177,9 @@ describe("FederalProfile", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "This profile is stale but not expired. Verify it with the linked official source.",
     );
-    expect(screen.getByRole("heading", { name: "Alex House" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Alex House" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Congress.gov member source" })).toBeVisible();
   });
 
@@ -172,6 +199,12 @@ describe("FederalProfile", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Federal profile data has expired. Refresh before relying on this officeholder.",
     );
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Federal official profile",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByText(checkedAt).closest("time")).toHaveAttribute(
       "dateTime",
       checkedAt,
@@ -207,6 +240,12 @@ describe("FederalProfile", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Federal profile information is unavailable.",
     );
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Federal official profile",
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Check Congress.gov" })).toHaveAttribute(
       "href",
       "https://www.congress.gov/members",
