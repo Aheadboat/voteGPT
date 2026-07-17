@@ -312,6 +312,176 @@ describe("Congress.gov current roster adapter", () => {
     });
   });
 
+  it("cancels a streaming JSON body after its bytes exceed one MiB", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.current.congress.name = "é".repeat(524_289);
+    const json = JSON.stringify(fixtures.current);
+    const bytes = new TextEncoder().encode(json);
+    expect(json.length).toBeLessThan(1024 * 1024);
+    expect(bytes.byteLength).toBeGreaterThan(1024 * 1024);
+
+    const chunks = [
+      bytes.slice(0, 512 * 1024),
+      bytes.slice(512 * 1024, 1024 * 1024),
+      bytes.slice(1024 * 1024, 1024 * 1024 + 1),
+      bytes.slice(1024 * 1024 + 1),
+    ];
+    let nextChunk = 0;
+    let trailingChunkPulled = false;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (nextChunk === chunks.length) {
+            controller.close();
+            return;
+          }
+          trailingChunkPulled ||= nextChunk === chunks.length - 1;
+          controller.enqueue(chunks[nextChunk]);
+          nextChunk += 1;
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const providerFetch = fixtureFetchWithCurrentResponse(
+      new Response(stream, {
+        status: 200,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      }),
+    );
+
+    const outcome = await lookup(providerFetch);
+
+    expect.soft(cancelled).toBe(true);
+    expect.soft(trailingChunkPulled).toBe(false);
+    expect(outcome).toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("rejects Content-Length above one MiB before consuming the body", async () => {
+    const encoded = new TextEncoder().encode(JSON.stringify(fixtureBundle().current));
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulls += 1;
+          controller.enqueue(encoded);
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const providerFetch = fixtureFetchWithCurrentResponse(
+      new Response(stream, {
+        status: 200,
+        headers: {
+          "content-length": String(1024 * 1024 + 1),
+          "content-type": "application/json; charset=utf-8",
+        },
+      }),
+    );
+
+    const outcome = await lookup(providerFetch);
+
+    expect.soft(pulls).toBe(0);
+    expect(outcome).toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("rejects a persisted member name above 200 characters", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.houseDetail.member.directOrderName = "N".repeat(201);
+    expect(fixtures.houseDetail.member.directOrderName).toHaveLength(201);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects a canonical member source URL above 2,048 characters", async () => {
+    const fixtures = fixtureBundle();
+    const oversizedUrl =
+      `https://api.congress.gov/${"x/../".repeat(410)}` +
+      "v3/member/H000001?format=json";
+    expect(oversizedUrl.length).toBeGreaterThan(2_048);
+    expect(new URL(oversizedUrl).pathname).toBe("/v3/member/H000001");
+    fixtures.house.members[0].url = oversizedUrl;
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects a provider timestamp string above 24 characters", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.houseDetail.member.updateDate =
+      "2026-07-15T09:30:00.123Z " as typeof fixtures.houseDetail.member.updateDate;
+    expect(fixtures.houseDetail.member.updateDate).toHaveLength(25);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects member-summary term arrays above 64 unique entries", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.house.members[0].terms.item = Array.from(
+      { length: 65 },
+      (_, index) => ({
+        chamber: "House of Representatives",
+        startYear: 1961 + index,
+      }),
+    );
+    expect(new Set(
+      fixtures.house.members[0].terms.item.map(({ startYear }) => startYear),
+    ).size).toBe(65);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects member-detail term arrays above 64 unique entries", async () => {
+    const fixtures = fixtureBundle();
+    const currentTerm = structuredClone(fixtures.houseDetail.member.terms[0]);
+    fixtures.houseDetail.member.terms = [
+      ...Array.from({ length: 64 }, (_, index) => ({
+        ...currentTerm,
+        congress: 55 + index,
+        startYear: 1897 + index * 2,
+        endYear: 1899 + index * 2,
+      })),
+      currentTerm,
+    ];
+    expect(new Set(
+      fixtures.houseDetail.member.terms.map(({ congress }) => congress),
+    ).size).toBe(65);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects 251 otherwise-valid unique results above the API page limit", async () => {
+    const fixtures = fixtureBundle();
+    setStateMemberResults(fixtures, 251);
+    expect(fixtures.senate.members).toHaveLength(251);
+    expect(new Set(
+      fixtures.senate.members.map(({ bioguideId }) => bioguideId),
+    ).size).toBe(251);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
   it.each([
     "2026-07-15T10:00:00Z",
     "2026-07-15T10:00:00.1Z",
@@ -542,6 +712,37 @@ function fixtureFetch(fixtures = fixtureBundle()) {
                   : null;
     return body === null ? jsonResponse({}, 404) : jsonResponse(body);
   });
+}
+
+function fixtureFetchWithCurrentResponse(response: Response) {
+  const fallback = fixtureFetch();
+  return vi.fn<typeof globalThis.fetch>(async (input, init) =>
+    new URL(toUrl(input)).pathname === "/v3/congress/current"
+      ? response
+      : fallback(input, init),
+  );
+}
+
+function setStateMemberResults(fixtures: FixtureBundle, count: number) {
+  const house = fixtures.senate.members[0];
+  const senators = fixtures.senate.members.slice(1).map((member) =>
+    structuredClone(member),
+  );
+  fixtures.senate.members = [
+    ...Array.from({ length: count - senators.length }, (_, index) => {
+      const bioguideId = `H${String(index + 1).padStart(6, "0")}`;
+      return {
+        ...structuredClone(house),
+        bioguideId,
+        district: index % 100,
+        name: `House Member ${index + 1}`,
+        state: `State ${index + 1}`,
+        url: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
+      };
+    }),
+    ...senators,
+  ];
+  fixtures.senate.pagination.count = fixtures.senate.members.length;
 }
 
 function jsonResponse(body: unknown, status = 200) {
