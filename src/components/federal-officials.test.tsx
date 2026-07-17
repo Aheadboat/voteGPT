@@ -161,6 +161,47 @@ describe("FederalOfficials", () => {
     ).not.toMatch(/<script|onClick=/i);
   });
 
+  it("publishes profiles only for seats with qualifying evidence", () => {
+    const verifiedView: FederalOfficialsView = {
+      ...view,
+      house: { ...house, sources: [...house.sources, clerkSource] },
+    };
+    const { rerender } = render(
+      <FederalOfficials result={{ status: "available", view: verifiedView }} />,
+    );
+
+    expect(screen.getByRole("link", { name: "Alex House" })).toHaveAttribute(
+      "href",
+      "/officials/federal/H000001",
+    );
+    expect(screen.getByRole("link", { name: "Bailey Senate" })).toHaveAttribute(
+      "href",
+      "/officials/federal/S000001",
+    );
+
+    rerender(
+      <FederalOfficials
+        result={{
+          status: "available",
+          view: { ...view, coverage: { ...view.coverage, house: "partial" } },
+        }}
+      />,
+    );
+
+    const houseCard = screen.getByRole("article", {
+      name: "U.S. Representative \u2014 District 13: Alex House",
+    });
+    expect(within(houseCard).getByText("Alex House")).toBeInTheDocument();
+    expect(
+      within(houseCard).getByText("Verified current officeholder"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bailey Senate" })).toHaveAttribute(
+      "href",
+      "/officials/federal/S000001",
+    );
+    expect(within(houseCard).queryByRole("link", { name: "Alex House" })).toBeNull();
+  });
+
   it("uses an external context heading without duplicating the dashboard h2", () => {
     render(
       <section aria-labelledby="in-office-heading">

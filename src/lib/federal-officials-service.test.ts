@@ -650,6 +650,39 @@ describe("federal official cache service", () => {
     },
   );
 
+  it("accepts one cached senator only when coverage is partial", async () => {
+    const retrievedAt = new Date(NOW.getTime() - HOUR);
+    const complete = verifiedRoster(jurisdiction, "H000001", retrievedAt);
+    const senator = complete.senate[0];
+    if (senator === undefined) throw new Error("test fixture requires a senator");
+    const partial: FederalOfficialsRoster = {
+      ...complete,
+      senate: [senator],
+      coverage: { ...complete.coverage, senate: "partial" },
+    };
+    const unknown: FederalOfficialsRoster = {
+      ...partial,
+      coverage: { ...partial.coverage, senate: "unknown" },
+    };
+    const partialCache = memoryCache([
+      cacheRecord("roster:v1:GA:13", partial, retrievedAt),
+    ]);
+    const unknownCache = memoryCache([
+      cacheRecord("roster:v1:GA:13", unknown, retrievedAt),
+    ]);
+
+    expect(
+      (await serviceHarness(partialCache.repository, {
+        environment: { CONGRESS_GOV_API_KEY: "" },
+      }).service.getOfficials(jurisdiction)).status,
+    ).toBe("available");
+    expect(
+      await serviceHarness(unknownCache.repository, {
+        environment: { CONGRESS_GOV_API_KEY: "" },
+      }).service.getOfficials(jurisdiction),
+    ).toEqual({ status: "unavailable" });
+  });
+
   it("rejects unsupported jurisdictions before cache or provider work", async () => {
     const unsupported: FederalJurisdiction = {
       stateCode: "DC",
@@ -1070,6 +1103,11 @@ function profileRecord(
 
 function invalidProfileCases() {
   const fresh = profileFixture("H000001", HOUR);
+  const member = fresh.payload.sources[0];
+  const vacancy = fresh.payload.sources[1];
+  if (member === undefined || vacancy === undefined) {
+    throw new Error("test fixture requires member and vacancy sources");
+  }
   const unsupportedOffice = {
     ...fresh.payload.office,
     id: "federal:house:ZZ:13",
@@ -1099,6 +1137,52 @@ function invalidProfileCases() {
     [
       "source contract mismatch",
       profileRecord(fresh, { ...fresh.payload, sources: [clerkSource] }),
+    ],
+    [
+      "source time before cache retrieval",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [
+          {
+            ...member,
+            retrievedAt: new Date(
+              fresh.record.retrievedAt.getTime() - 1,
+            ).toISOString(),
+          },
+          vacancy,
+        ],
+      }),
+    ],
+    [
+      "member source without a record update time",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [{ ...member, recordUpdatedAt: null }, vacancy],
+      }),
+    ],
+    [
+      "member source with an effective time",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [{ ...member, effectiveAt: member.recordUpdatedAt }, vacancy],
+      }),
+    ],
+    [
+      "vacancy source with a record update time",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [
+          member,
+          { ...vacancy, recordUpdatedAt: member.recordUpdatedAt },
+        ],
+      }),
+    ],
+    [
+      "vacancy source with an effective time",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [member, { ...vacancy, effectiveAt: member.recordUpdatedAt }],
+      }),
     ],
     [
       "member plus matching district-vacancy source",
