@@ -8,6 +8,7 @@ import type {
 
 const apiOrigin = "https://api.congress.gov";
 const timeoutMilliseconds = 5_000;
+const maximumBodyBytes = 1024 * 1024;
 const bioguidePattern = /^[A-Z]\d{6}$/;
 
 type JsonOutcome =
@@ -274,7 +275,7 @@ async function requestJson(
     return { status: "failure", reason: "malformed" };
   }
   try {
-    return { status: "ok", body: (await response.json()) as unknown };
+    return await readJsonBody(response, controller.signal);
   } catch (error) {
     return {
       status: "failure",
@@ -286,6 +287,95 @@ async function requestJson(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function readJsonBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<JsonOutcome> {
+  const contentLength = response.headers.get("content-length");
+  if (
+    contentLength !== null &&
+    /^\d+$/.test(contentLength) &&
+    Number(contentLength) > maximumBodyBytes
+  ) {
+    cancelResponseBestEffort(response);
+    return { status: "failure", reason: "malformed" };
+  }
+  if (response.body === null) {
+    return { status: "failure", reason: "malformed" };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let byteCount = 0;
+  let json = "";
+  try {
+    while (true) {
+      const chunk = await readChunk(reader, signal);
+      if (chunk.done) {
+        json += decoder.decode();
+        try {
+          return { status: "ok", body: JSON.parse(json) as unknown };
+        } catch {
+          return { status: "failure", reason: "malformed" };
+        }
+      }
+      byteCount += chunk.value.byteLength;
+      if (byteCount > maximumBodyBytes) {
+        cancelReaderBestEffort(reader);
+        return { status: "failure", reason: "malformed" };
+      }
+      json += decoder.decode(chunk.value, { stream: true });
+    }
+  } catch (error) {
+    cancelReaderBestEffort(reader);
+    return {
+      status: "failure",
+      reason:
+        signal.aborted || isAbortError(error) ? "timeout" : "malformed",
+    };
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Cancellation is best-effort cleanup and never controls classification.
+    }
+  }
+}
+
+function cancelResponseBestEffort(response: Response) {
+  try {
+    void response.body?.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is best-effort cleanup and never controls classification.
+  }
+}
+
+function cancelReaderBestEffort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+) {
+  try {
+    void reader.cancel().catch(() => undefined);
+  } catch {
+    // Cancellation is best-effort cleanup and never controls classification.
+  }
+}
+
+function readChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+) {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException("Request timed out.", "AbortError"));
+  }
+  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+    const abort = () => reject(new DOMException("Request timed out.", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    reader.read().then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+  });
 }
 
 function parseCurrentCongress(body: unknown, retrievedAt: Date): number | null {
@@ -355,6 +445,7 @@ function parseMemberList(
       !isRecord(value.terms) ||
       !Array.isArray(value.terms.item) ||
       value.terms.item.length === 0 ||
+      value.terms.item.length > 64 ||
       !value.terms.item.every(isSummaryTerm) ||
       !canonicalItemUrl(value.url, `/v3/member/${bioguideId}`)
     ) {
@@ -437,11 +528,13 @@ function parseMemberDetail(
     member.currentMember !== true ||
     typeof member.directOrderName !== "string" ||
     member.directOrderName.trim() === "" ||
+    member.directOrderName.length > 200 ||
     typeof member.state !== "string" ||
     member.state.trim() !== summary.state ||
     (chamber === "house" && district !== jurisdiction.district) ||
     (chamber === "senate" && district !== null) ||
     !Array.isArray(member.terms) ||
+    member.terms.length > 64 ||
     !member.terms.every(
       (term) => isRecord(term) && Number.isInteger(term.congress),
     )
@@ -512,7 +605,7 @@ function hasUnexpectedPagination(value: unknown) {
 }
 
 function canonicalItemUrl(value: unknown, expectedPath: string) {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || value.length > 2_048) {
     return false;
   }
   try {
