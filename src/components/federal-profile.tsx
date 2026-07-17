@@ -8,6 +8,9 @@ import type {
 
 import styles from "./federal-officials.module.css";
 
+const clerkListUrl = "https://clerk.house.gov/Members/ViewVacancies";
+const firstCongressYear = 1789;
+
 type CurrentProfile = Readonly<{
   person: Person;
   office: Office;
@@ -134,18 +137,83 @@ function ProfileRecovery({
 }
 
 function isCurrentProfile(profile: CurrentProfile) {
+  const checkedAt = Date.parse(profile.freshness.checkedAt);
+  const currentCongress = congressAt(checkedAt);
+  const memberUrl =
+    `https://api.congress.gov/v3/member/${profile.person.bioguideId}?format=json`;
+  const isMemberSource = (source: SourceRef) =>
+    source.publisher === "Congress.gov" &&
+    source.sourceType === "member" &&
+    source.url === memberUrl;
+  const isClerkListSource = (source: SourceRef) =>
+    source.publisher ===
+      "Office of the Clerk, U.S. House of Representatives" &&
+    source.sourceType === "vacancy" &&
+    source.url === clerkListUrl;
+  const validSources =
+    profile.office.chamber === "house"
+      ? profile.sources.some(isMemberSource) &&
+        profile.sources.some(isClerkListSource) &&
+        profile.sources.every(
+          (source) => isMemberSource(source) || isClerkListSource(source),
+        )
+      : profile.sources.some(isMemberSource) &&
+        profile.sources.every(isMemberSource);
   return (
+    currentCongress !== null &&
     profile.person.id === `bioguide:${profile.person.bioguideId}` &&
+    profile.office.id ===
+      `federal:${profile.office.chamber}:${profile.office.stateCode}:${
+        profile.office.chamber === "house"
+          ? profile.office.district
+          : profile.person.bioguideId
+      }` &&
     profile.term.status === "serving" &&
     profile.term.personId === profile.person.id &&
     profile.term.officeId === profile.office.id &&
-    profile.sources.some(
-      (source) =>
-        source.publisher === "Congress.gov" &&
-        source.sourceType === "member" &&
-        source.url ===
-          `https://api.congress.gov/v3/member/${profile.person.bioguideId}?format=json`,
-    )
+    validCurrentTerm(profile.term, profile.office.chamber, currentCongress) &&
+    validSources
+  );
+}
+
+function congressAt(time: number) {
+  if (!Number.isFinite(time)) {
+    return null;
+  }
+  const date = new Date(time);
+  let startYear = date.getUTCFullYear();
+  if (startYear % 2 === 0) {
+    startYear -= 1;
+  } else if (time < Date.UTC(startYear, 0, 3, 17)) {
+    startYear -= 2;
+  }
+  const congress = (startYear - firstCongressYear) / 2 + 1;
+  return Number.isSafeInteger(congress) && congress > 0 ? congress : null;
+}
+
+function validCurrentTerm(
+  term: Term,
+  chamber: "house" | "senate",
+  currentCongress: number,
+) {
+  if (
+    term.congress !== currentCongress ||
+    !Number.isSafeInteger(term.congress) ||
+    !Number.isSafeInteger(term.startYear) ||
+    (term.endYear !== null && !Number.isSafeInteger(term.endYear))
+  ) {
+    return false;
+  }
+  const congressStart = firstCongressYear + (currentCongress - 1) * 2;
+  const congressEnd = congressStart + 2;
+  return (
+    (term.startYear as number) >= firstCongressYear &&
+    (term.startYear as number) < congressEnd &&
+    (chamber === "senate" || (term.startYear as number) >= congressStart) &&
+    (term.endYear === null ||
+      (term.endYear > (term.startYear as number) &&
+        term.endYear > congressStart &&
+        term.endYear <= congressEnd + (chamber === "senate" ? 4 : 0)))
   );
 }
 

@@ -9,6 +9,7 @@ import type {
 const apiOrigin = "https://api.congress.gov";
 const timeoutMilliseconds = 5_000;
 const maximumBodyBytes = 1024 * 1024;
+const firstCongressYear = 1789;
 const bioguidePattern = /^[A-Z]\d{6}$/;
 
 type JsonOutcome =
@@ -81,7 +82,11 @@ export const fetchCongressRoster: FetchCongressRoster = async (
   if (houseResponse.status === "failure") {
     return unavailable(houseResponse.reason);
   }
-  const houseMembers = parseMemberList(houseResponse.body, retrievedAtDate);
+  const houseMembers = parseMemberList(
+    houseResponse.body,
+    retrievedAtDate,
+    currentCongress,
+  );
   if (houseMembers === null) {
     return unavailable("malformed");
   }
@@ -107,7 +112,11 @@ export const fetchCongressRoster: FetchCongressRoster = async (
   if (senateResponse.status === "failure") {
     return unavailable(senateResponse.reason);
   }
-  const stateMembers = parseMemberList(senateResponse.body, retrievedAtDate);
+  const stateMembers = parseMemberList(
+    senateResponse.body,
+    retrievedAtDate,
+    currentCongress,
+  );
   if (stateMembers === null) {
     return unavailable("malformed");
   }
@@ -388,27 +397,39 @@ function parseCurrentCongress(body: unknown, retrievedAt: Date): number | null {
     return null;
   }
   const congress = body.congress;
+  const number = congress.number;
+  const startYear =
+    typeof congress.startYear === "string" && /^\d{4}$/.test(congress.startYear)
+      ? Number(congress.startYear)
+      : null;
+  const endYear =
+    typeof congress.endYear === "string" && /^\d{4}$/.test(congress.endYear)
+      ? Number(congress.endYear)
+      : null;
+  const expectedStartYear =
+    isSafePositiveInteger(number) && Number.isSafeInteger(1787 + 2 * number)
+      ? 1787 + 2 * number
+      : null;
   if (
-    !Number.isInteger(congress.number) ||
-    (congress.number as number) < 1 ||
+    expectedStartYear === null ||
+    startYear !== expectedStartYear ||
+    endYear !== startYear + 1 ||
+    congressAt(retrievedAt.getTime()) !== number ||
     typeof congress.name !== "string" ||
     congress.name.trim() === "" ||
-    typeof congress.startYear !== "string" ||
-    !/^\d{4}$/.test(congress.startYear) ||
-    typeof congress.endYear !== "string" ||
-    !/^\d{4}$/.test(congress.endYear) ||
     !Array.isArray(congress.sessions) ||
     timestamp(congress.updateDate, retrievedAt) === null ||
-    !canonicalItemUrl(congress.url, `/v3/congress/${congress.number}`)
+    !canonicalItemUrl(congress.url, `/v3/congress/${number}`)
   ) {
     return null;
   }
-  return congress.number as number;
+  return number as number;
 }
 
 function parseMemberList(
   body: unknown,
   retrievedAt: Date,
+  currentCongress: number,
 ): MemberSummary[] | null {
   if (
     !isRecord(body) ||
@@ -456,14 +477,6 @@ function parseMemberList(
       return null;
     }
 
-    const currentTerm = value.terms.item.at(-1);
-    if (!isRecord(currentTerm)) {
-      return null;
-    }
-    const chamber = currentTerm.chamber;
-    if (chamber !== "House of Representatives" && chamber !== "Senate") {
-      return null;
-    }
     const district =
       value.district === undefined || value.district === null
         ? null
@@ -472,12 +485,19 @@ function parseMemberList(
       (district !== null &&
         (!Number.isInteger(district) ||
           (district as number) < 0 ||
-          (district as number) > 99)) ||
-      (chamber === "House of Representatives" && district === null) ||
-      (chamber === "Senate" && district !== null)
+          (district as number) > 99))
     ) {
       return null;
     }
+    const expectedChamber =
+      district === null ? "Senate" : "House of Representatives";
+    const currentTerms = value.terms.item.filter((term) =>
+      isCurrentSummaryTerm(term, expectedChamber, currentCongress),
+    );
+    if (currentTerms.length !== 1) {
+      return null;
+    }
+    const chamber = expectedChamber;
     if (chamber === "House of Representatives") {
       const seatKey = `${value.state}:${district}`;
       if (houseSeats.has(seatKey)) {
@@ -536,14 +556,26 @@ function parseMemberDetail(
     !Array.isArray(member.terms) ||
     member.terms.length > 64 ||
     !member.terms.every(
-      (term) => isRecord(term) && Number.isInteger(term.congress),
+      (term) =>
+        isRecord(term) &&
+        isSafePositiveInteger(term.congress) &&
+        validTermYears(term.startYear, term.endYear),
     )
   ) {
     return null;
   }
 
   const currentTerms = member.terms.filter(
-    (term) => isRecord(term) && term.congress === currentCongress,
+    (term) =>
+      isRecord(term) &&
+      term.congress === currentCongress &&
+      term.chamber === expectedChamber &&
+      term.memberType === expectedMemberType &&
+      term.stateCode === jurisdiction.stateCode &&
+      term.stateName === summary.state &&
+      (chamber === "house"
+        ? term.district === jurisdiction.district
+        : term.district === undefined || term.district === null),
   );
   if (currentTerms.length !== 1 || !isRecord(currentTerms[0])) {
     return null;
@@ -551,13 +583,16 @@ function parseMemberDetail(
   const term = currentTerms[0];
   const endYear =
     term.endYear === undefined || term.endYear === null ? null : term.endYear;
+  const currentStartYear = 1787 + 2 * currentCongress;
+  const currentEndYear = currentStartYear + 1;
   if (
     term.chamber !== expectedChamber ||
     term.memberType !== expectedMemberType ||
     term.stateCode !== jurisdiction.stateCode ||
     term.stateName !== summary.state ||
-    !Number.isInteger(term.startYear) ||
-    (endYear !== null && !Number.isInteger(endYear)) ||
+    !validTermYears(term.startYear, endYear) ||
+    (term.startYear as number) > currentEndYear ||
+    (endYear !== null && (endYear as number) < currentStartYear) ||
     (chamber === "house" && term.district !== jurisdiction.district) ||
     (chamber === "senate" && term.district !== undefined && term.district !== null)
   ) {
@@ -580,9 +615,54 @@ function isSummaryTerm(value: unknown) {
   return (
     isRecord(value) &&
     (value.chamber === "House of Representatives" || value.chamber === "Senate") &&
-    Number.isInteger(value.startYear) &&
-    (value.endYear === undefined || value.endYear === null || Number.isInteger(value.endYear))
+    validTermYears(value.startYear, value.endYear)
   );
+}
+
+function isCurrentSummaryTerm(
+  value: unknown,
+  expectedChamber: MemberSummary["chamber"],
+  currentCongress: number,
+) {
+  if (!isRecord(value) || value.chamber !== expectedChamber) {
+    return false;
+  }
+  const startYear = firstCongressYear + (currentCongress - 1) * 2;
+  const endYear = startYear + 1;
+  return (
+    (value.startYear as number) <= endYear &&
+    (value.endYear === undefined ||
+      value.endYear === null ||
+      (value.endYear as number) >= startYear)
+  );
+}
+
+function validTermYears(startYear: unknown, endYear: unknown) {
+  return (
+    isSafePositiveInteger(startYear) &&
+    (endYear === undefined ||
+      endYear === null ||
+      (isSafePositiveInteger(endYear) && endYear >= startYear))
+  );
+}
+
+function isSafePositiveInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) > 0;
+}
+
+function congressAt(time: number) {
+  if (!Number.isFinite(time)) {
+    return null;
+  }
+  const date = new Date(time);
+  let startYear = date.getUTCFullYear();
+  if (startYear % 2 === 0) {
+    startYear -= 1;
+  } else if (time < Date.UTC(startYear, 0, 3, 17)) {
+    startYear -= 2;
+  }
+  const congress = (startYear - firstCongressYear) / 2 + 1;
+  return isSafePositiveInteger(congress) ? congress : null;
 }
 
 function validRequest(value: unknown) {

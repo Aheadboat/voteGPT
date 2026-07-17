@@ -257,6 +257,70 @@ describe("Congress.gov current roster adapter", () => {
     },
   );
 
+  it("keeps the outgoing Congress current until the exact odd-year swearing-in boundary", async () => {
+    const atBoundary = new Date("2027-01-03T17:00:00.000Z");
+    await expect(lookup(fixtureFetch(), atBoundary)).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+
+    const justBeforeBoundary = new Date("2027-01-03T16:59:59.999Z");
+    await expect(
+      lookup(fixtureFetch(), justBeforeBoundary),
+    ).resolves.toMatchObject({
+      status: "available",
+      currentCongress: 119,
+    });
+  });
+
+  it("selects a unique current summary seat independently of term-history order", async () => {
+    for (const priorTermLast of [false, true]) {
+      const fixtures = fixtureBundle();
+      const currentHouseTerm = structuredClone(
+        fixtures.house.members[0].terms.item[0],
+      );
+      const priorSenateTerm = {
+        chamber: "Senate",
+        startYear: 2019,
+        endYear: 2024,
+      };
+      Object.assign(fixtures.house.members[0].terms, {
+        item: priorTermLast
+          ? [currentHouseTerm, priorSenateTerm]
+          : [priorSenateTerm, currentHouseTerm],
+      });
+
+      const available = expectAvailable(
+        await lookup(fixtureFetch(fixtures)),
+      );
+      expect(available.house).toHaveLength(1);
+      expect(available.house[0]).toMatchObject({
+        status: "serving",
+        person: { bioguideId: "H000001" },
+        office: { chamber: "house", stateCode: "CA", district: 12 },
+      });
+    }
+  });
+
+  it("rejects ambiguous current member-summary terms", async () => {
+    const fixtures = fixtureBundle();
+    const firstCurrentTerm = structuredClone(
+      fixtures.house.members[0].terms.item[0],
+    );
+    const secondCurrentTerm = {
+      ...structuredClone(firstCurrentTerm),
+      startYear: 2026,
+    };
+    Object.assign(fixtures.house.members[0].terms, {
+      item: [firstCurrentTerm, secondCurrentTerm],
+    });
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
   it.each([
     ["unsafe start", { startYear: 1e100 }],
     ["unsafe end", { endYear: 1e100 }],
@@ -292,7 +356,12 @@ describe("Congress.gov current roster adapter", () => {
   );
 
   it.each([
-    ["the current fixture", (_f: FixtureBundle) => undefined],
+    [
+      "the current fixture",
+      (_f: FixtureBundle): void => {
+        void _f;
+      },
+    ],
     [
       "an explicit null term end",
       (f: FixtureBundle) => {
@@ -321,6 +390,81 @@ describe("Congress.gov current roster adapter", () => {
     expect(await lookup(fixtureFetch(fixtures))).toMatchObject({
       status: "available",
       currentCongress: 119,
+    });
+  });
+
+  it("accepts a same-Congress Senate-to-House detail transition", async () => {
+    const fixtures = fixtureBundle();
+    const currentHouseTerm = {
+      ...structuredClone(fixtures.houseDetail.member.terms[0]),
+      startYear: 2026,
+    };
+    const { district: _district, ...priorSenateTerm } = structuredClone(
+      currentHouseTerm,
+    );
+    void _district;
+    Object.assign(priorSenateTerm, {
+      memberType: "Senator",
+      chamber: "Senate",
+      startYear: 2025,
+      endYear: 2025,
+    });
+    Object.assign(fixtures.house.members[0].terms.item[0], {
+      startYear: 2026,
+    });
+    Object.assign(fixtures.houseDetail.member, {
+      terms: [priorSenateTerm, currentHouseTerm],
+    });
+
+    const available = expectAvailable(await lookup(fixtureFetch(fixtures)));
+    expect(available.house[0]).toMatchObject({
+      status: "serving",
+      person: { bioguideId: "H000001" },
+      term: { congress: 119, startYear: 2026 },
+    });
+  });
+
+  it("accepts a same-Congress House-to-Senate detail transition", async () => {
+    const fixtures = fixtureBundle();
+    const currentSenateTerm = {
+      ...structuredClone(fixtures.senatorOneDetail.member.terms[0]),
+      startYear: 2026,
+    };
+    const priorHouseTerm = {
+      ...structuredClone(currentSenateTerm),
+      memberType: "Representative",
+      chamber: "House of Representatives",
+      district: 12,
+      startYear: 2025,
+      endYear: 2025,
+    };
+    Object.assign(fixtures.senate.members[1].terms.item[0], {
+      startYear: 2026,
+    });
+    Object.assign(fixtures.senatorOneDetail.member, {
+      terms: [priorHouseTerm, currentSenateTerm],
+    });
+
+    const available = expectAvailable(await lookup(fixtureFetch(fixtures)));
+    expect(available.senate[0]).toMatchObject({
+      status: "serving",
+      person: { bioguideId: "S000001" },
+      term: { congress: 119, startYear: 2026 },
+    });
+  });
+
+  it("rejects duplicate matching member-detail terms", async () => {
+    const fixtures = fixtureBundle();
+    const matchingTerm = structuredClone(
+      fixtures.houseDetail.member.terms[0],
+    );
+    Object.assign(fixtures.houseDetail.member, {
+      terms: [matchingTerm, structuredClone(matchingTerm)],
+    });
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
     });
   });
 

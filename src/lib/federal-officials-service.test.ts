@@ -1044,7 +1044,13 @@ function profileFixture(bioguideId: string, age: number) {
     jurisdiction,
     retrievedAt,
   );
-  const payload: FederalProfileCachePayload = profileFor(seat);
+  const payload: FederalProfileCachePayload = {
+    ...profileFor(seat),
+    sources: [
+      ...seat.sources,
+      { ...clerkSource, retrievedAt: retrievedAt.toISOString() },
+    ],
+  };
   return {
     payload,
     record: cacheRecord(
@@ -1202,7 +1208,7 @@ function rosterPayload(record: FederalOfficialCacheRecord) {
 function availableCongress(
   house: readonly FederalSeat[],
   senate: readonly FederalSeat[],
-): CongressRosterOutcome {
+): Extract<CongressRosterOutcome, { status: "available" }> {
   return { status: "available", currentCongress: 119, house, senate };
 }
 
@@ -1212,7 +1218,7 @@ function availableClerk(
     { status: "available" }
   >["vacancies"] = [],
   retrievedAt = NOW,
-): HouseVacancyOutcome {
+): Extract<HouseVacancyOutcome, { status: "available" }> {
   return {
     status: "available",
     currentCongress: 119,
