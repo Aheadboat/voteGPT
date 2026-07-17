@@ -618,7 +618,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("scopes standing F4-F8 authorization to an isolated integration branch", () => {
+  it("scopes and supersedes F4-F8 authorization on an isolated integration branch", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
@@ -654,10 +654,18 @@ describe("concurrent roadmap delivery contract", () => {
       expect(batch).toContain("continue every independent admitted lane")
       expect(batch).toContain("defer the exact decision to final human review")
       expect(batch).toContain(
-        "when the autonomous window ends or remaining work is human-blocked",
+        "The autonomous window ends when F5's closeout merge places",
       )
+      expect(batch).toContain("fresh explicit human direction")
+      expect(batch).toContain("ended that queue after F5")
+      expect(batch).not.toContain("standing authorization covers")
+      expect(batch).not.toContain(
+        "Standing authorization places work in an authorized queue",
+      )
+      expect(batch).not.toContain("Authorization is a queue, not activation")
+      expect(batch).not.toContain("authorized batch queue")
       expect(batch).toContain("final human review")
-      expect(batch).toContain("must not merge")
+      expect(batch).toContain("must not be merged autonomously")
     }
 
     expect(agentBatch).toContain(
@@ -667,10 +675,13 @@ describe("concurrent roadmap delivery contract", () => {
       "Actual `main` remains frozen at the batch base",
     )
     expect(readme).toContain(
-      "F4-F8 autonomous integration batch is staged on `codex/autonomous-f4-f8-integration`",
+      "F4-F8 integration work is staged on `codex/autonomous-f4-f8-integration`",
     )
     expect(readme).toContain(
-      "The batch branch will not merge into `main` before final human review.",
+      "After F5 closes, the coordinator stops",
+    )
+    expect(readme).toContain(
+      "The integration branch will not merge into actual `main` before human review.",
     )
   })
 
@@ -914,7 +925,7 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (statuses.get("F6") === "TODO") {
       expect(readme).toContain(
-        "F6, F7, and F8 remain TODO in the authorized batch queue",
+        "F6, G1, F7, and F8 remain TODO/inactive and require fresh explicit human direction",
       )
     }
     for (const item of [f4, f5]) {
