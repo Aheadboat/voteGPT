@@ -157,10 +157,12 @@ describe("Congress.gov current roster adapter", () => {
 
   it("uses a newly discovered Congress in the House request and all selected details", async () => {
     const fixtures = fixtureBundle();
-    setCurrentCongress(fixtures, 120);
+    setCurrentCongress(fixtures, 120, "2027", "2028");
     const providerFetch = fixtureFetch(fixtures);
 
-    const available = expectAvailable(await lookup(providerFetch));
+    const available = expectAvailable(
+      await lookup(providerFetch, new Date("2028-07-16T12:00:00.000Z")),
+    );
 
     expect(available.currentCongress).toBe(120);
     expect(requestUrls(providerFetch)[1]).toBe(
@@ -175,17 +177,151 @@ describe("Congress.gov current roster adapter", () => {
 
   it("rejects a selected detail from the old Congress after discovering a new one", async () => {
     const fixtures = fixtureBundle();
-    setCurrentCongress(fixtures, 120);
+    setCurrentCongress(fixtures, 120, "2027", "2028");
     fixtures.houseDetail.member.terms[0].congress = 119;
     const providerFetch = fixtureFetch(fixtures);
 
-    await expect(lookup(providerFetch)).resolves.toEqual({
+    await expect(
+      lookup(providerFetch, new Date("2028-07-16T12:00:00.000Z")),
+    ).resolves.toEqual({
       status: "unavailable",
       reason: "malformed",
     });
     expect(requestUrls(providerFetch)[1]).toContain(
       "/v3/member/congress/120/CA/12",
     );
+  });
+
+  it("rejects an unsafe current-Congress number before member requests", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.current.congress.number = 1e100;
+    fixtures.current.congress.name = "1e+100th Congress";
+    fixtures.current.congress.url =
+      "https://api.congress.gov/v3/congress/1e+100?format=json";
+    const providerFetch = fixtureFetch(fixtures);
+
+    await expect(lookup(providerFetch)).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+    expect(providerFetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [
+      "number",
+      (f: FixtureBundle) => setCurrentCongress(f, 118, "2025", "2026"),
+    ],
+    [
+      "start year",
+      (f: FixtureBundle) => {
+        f.current.congress.startYear = "2024";
+      },
+    ],
+    [
+      "end year",
+      (f: FixtureBundle) => {
+        f.current.congress.endYear = "2027";
+      },
+    ],
+  ] as const)(
+    "rejects a current-Congress %s/calendar identity mismatch before member requests",
+    async (_label, mutate) => {
+      const fixtures = fixtureBundle();
+      mutate(fixtures);
+      const providerFetch = fixtureFetch(fixtures);
+
+      await expect(lookup(providerFetch)).resolves.toEqual({
+        status: "unavailable",
+        reason: "malformed",
+      });
+      expect(providerFetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    [118, "2023", "2024"],
+    [120, "2027", "2028"],
+  ] as const)(
+    "rejects internally coherent but inactive Congress %s for the retrieval clock",
+    async (congress, startYear, endYear) => {
+      const fixtures = fixtureBundle();
+      setCurrentCongress(fixtures, congress, startYear, endYear);
+      const providerFetch = fixtureFetch(fixtures);
+
+      await expect(lookup(providerFetch)).resolves.toEqual({
+        status: "unavailable",
+        reason: "malformed",
+      });
+      expect(providerFetch).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each([
+    ["unsafe start", { startYear: 1e100 }],
+    ["unsafe end", { endYear: 1e100 }],
+    ["fractional start", { startYear: 2025.5 }],
+    ["fractional end", { endYear: 2026.5 }],
+    ["negative start", { startYear: -1 }],
+    ["negative end", { endYear: -1 }],
+    ["reversed", { startYear: 2026, endYear: 2025 }],
+  ] as const)("rejects %s selected-term years", async (_label, years) => {
+    const fixtures = fixtureBundle();
+    Object.assign(fixtures.houseDetail.member.terms[0], years);
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it.each([
+    ["before", { startYear: 2023, endYear: 2024 }],
+    ["after", { startYear: 2027, endYear: 2028 }],
+  ] as const)(
+    "rejects a selected term wholly %s the current Congress window",
+    async (_label, years) => {
+      const fixtures = fixtureBundle();
+      Object.assign(fixtures.houseDetail.member.terms[0], years);
+
+      await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+        status: "unavailable",
+        reason: "malformed",
+      });
+    },
+  );
+
+  it.each([
+    ["the current fixture", (_f: FixtureBundle) => undefined],
+    [
+      "an explicit null term end",
+      (f: FixtureBundle) => {
+        Object.assign(f.house.members[0].terms.item[0], { endYear: null });
+        Object.assign(f.houseDetail.member.terms[0], { endYear: null });
+      },
+    ],
+    [
+      "a House member starting mid-Congress",
+      (f: FixtureBundle) => {
+        f.house.members[0].terms.item[0].startYear = 2026;
+        f.houseDetail.member.terms[0].startYear = 2026;
+      },
+    ],
+    [
+      "a senator whose service began in an earlier Congress",
+      (f: FixtureBundle) => {
+        f.senate.members[1].terms.item[0].startYear = 2021;
+        f.senatorOneDetail.member.terms[0].startYear = 2021;
+      },
+    ],
+  ] as const)("accepts %s", async (_label, mutate) => {
+    const fixtures = fixtureBundle();
+    mutate(fixtures);
+
+    expect(await lookup(fixtureFetch(fixtures))).toMatchObject({
+      status: "available",
+      currentCongress: 119,
+    });
   });
 
   it("preserves district zero in the at-large House request and normalized office", async () => {
@@ -660,11 +796,11 @@ describe("Congress.gov current roster adapter", () => {
   });
 });
 
-function lookup(providerFetch: typeof globalThis.fetch) {
+function lookup(providerFetch: typeof globalThis.fetch, retrievedAt = now) {
   return fetchCongressRoster(jurisdiction, {
     apiKey,
     fetch: providerFetch,
-    now: () => now,
+    now: () => retrievedAt,
   });
 }
 
@@ -679,9 +815,16 @@ function fixtureBundle(): FixtureBundle {
   });
 }
 
-function setCurrentCongress(fixtures: FixtureBundle, currentCongress: number) {
+function setCurrentCongress(
+  fixtures: FixtureBundle,
+  currentCongress: number,
+  startYear = fixtures.current.congress.startYear,
+  endYear = fixtures.current.congress.endYear,
+) {
   fixtures.current.congress.number = currentCongress;
   fixtures.current.congress.name = `${currentCongress}th Congress`;
+  fixtures.current.congress.startYear = startYear;
+  fixtures.current.congress.endYear = endYear;
   fixtures.current.congress.url =
     `https://api.congress.gov/v3/congress/${currentCongress}?format=json`;
   for (const detail of [

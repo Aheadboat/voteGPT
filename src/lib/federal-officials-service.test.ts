@@ -455,6 +455,60 @@ describe("federal official cache service", () => {
   });
 
   it.each([
+    ["current-Congress identity", "currentCongress"],
+    ["selected House term start year", "houseStartYear"],
+    ["selected Senate term start year", "senateStartYear"],
+  ] as const)("rejects unsafe provider %s before cache publication", async (_label, target) => {
+    type ServingSeat = Extract<FederalSeat, { status: "serving" }>;
+    const unsafeInteger = 1e100;
+    const withTerm = (
+      seat: ServingSeat,
+      term: Partial<ServingSeat["term"]>,
+    ): ServingSeat => ({
+      ...seat,
+      term: { ...seat.term, ...term },
+    });
+    let currentCongress = 119;
+    let clerkCurrentCongress = 119;
+    let house = servingSeat("house", "H000001", 13, jurisdiction);
+    let senators: [ServingSeat, ServingSeat] = [
+      servingSeat("senate", "S000001", null, jurisdiction),
+      servingSeat("senate", "S000002", null, jurisdiction),
+    ];
+
+    if (target === "currentCongress") {
+      currentCongress = unsafeInteger;
+      clerkCurrentCongress = unsafeInteger;
+      house = withTerm(house, { congress: unsafeInteger });
+      senators = [
+        withTerm(senators[0], { congress: unsafeInteger }),
+        withTerm(senators[1], { congress: unsafeInteger }),
+      ];
+    } else if (target === "houseStartYear") {
+      house = withTerm(house, { startYear: unsafeInteger, endYear: null });
+    } else {
+      senators = [
+        withTerm(senators[0], { startYear: unsafeInteger, endYear: null }),
+        senators[1],
+      ];
+    }
+
+    const cache = memoryCache();
+    const harness = serviceHarness(cache.repository, {
+      congress: {
+        ...availableCongress([house], senators),
+        currentCongress,
+      },
+      clerk: { ...availableClerk(), currentCongress: clerkCurrentCongress },
+    });
+
+    expect(await harness.service.getOfficials(jurisdiction)).toEqual({
+      status: "unavailable",
+    });
+    expect(cache.replacements).toEqual([]);
+  });
+
+  it.each([
     [
       "future retrieval",
       (valid: FederalOfficialCacheRecord) => ({
@@ -1039,6 +1093,34 @@ function invalidProfileCases() {
     [
       "source contract mismatch",
       profileRecord(fresh, { ...fresh.payload, sources: [clerkSource] }),
+    ],
+    [
+      "member plus matching district-vacancy source",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        sources: [
+          fresh.payload.sources[0],
+          {
+            ...clerkSource,
+            retrievedAt: fresh.record.retrievedAt.toISOString(),
+            url: "https://clerk.house.gov/members/GA13/vacancy",
+          },
+        ],
+      }),
+    ],
+    [
+      "unsafe integer term congress",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        term: { ...fresh.payload.term, congress: 1e100 },
+      }),
+    ],
+    [
+      "unsafe integer term start year",
+      profileRecord(fresh, {
+        ...fresh.payload,
+        term: { ...fresh.payload.term, startYear: 1e100, endYear: null },
+      }),
     ],
     [
       "source time after cache retrieval",

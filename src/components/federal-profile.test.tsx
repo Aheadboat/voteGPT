@@ -51,6 +51,10 @@ const clerkListSource: SourceRef = {
   recordUpdatedAt: null,
   effectiveAt: null,
 };
+const clerkDistrictSource: SourceRef = {
+  ...clerkListSource,
+  url: "https://clerk.house.gov/members/GA13/vacancy",
+};
 const freshness: Freshness = {
   checkedAt,
   refreshAfter: "2026-07-16T18:00:00.000Z",
@@ -62,6 +66,37 @@ const profile: ProfileFixture = {
   office,
   term,
   sources: [source, clerkListSource],
+  freshness,
+};
+const senatorPerson: Person = {
+  id: "bioguide:S000001",
+  bioguideId: "S000001",
+  name: "Jordan Senate",
+};
+const senatorOffice: Office = {
+  id: "federal:senate:GA:S000001",
+  chamber: "senate",
+  stateCode: "GA",
+  district: null,
+  title: "U.S. Senator",
+};
+const senatorTerm: Term = {
+  officeId: senatorOffice.id,
+  personId: senatorPerson.id,
+  congress: 119,
+  startYear: 2023,
+  endYear: 2029,
+  status: "serving",
+};
+const senatorSource: SourceRef = {
+  ...source,
+  url: "https://api.congress.gov/v3/member/S000001?format=json",
+};
+const senatorProfile: ProfileFixture = {
+  person: senatorPerson,
+  office: senatorOffice,
+  term: senatorTerm,
+  sources: [senatorSource],
   freshness,
 };
 
@@ -87,6 +122,19 @@ const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
     { ...profile, term: { ...term, officeId: "federal:house:GA:12" } },
   ],
   ["empty sources", { ...profile, sources: [] }],
+  ["a House member source without the Clerk list", { ...profile, sources: [source] }],
+  [
+    "House member and district-vacancy evidence without the Clerk list",
+    { ...profile, sources: [source, clerkDistrictSource] },
+  ],
+  [
+    "contradictory House current-list and district-vacancy evidence",
+    { ...profile, sources: [source, clerkListSource, clerkDistrictSource] },
+  ],
+  [
+    "Senate member evidence mixed with Clerk evidence",
+    { ...senatorProfile, sources: [senatorSource, clerkListSource] },
+  ],
   [
     "an unrelated Congress.gov member source",
     {
@@ -161,6 +209,20 @@ describe("FederalProfile", () => {
     ).not.toMatch(/<script|onClick=/i);
   });
 
+  it("accepts a current Senate profile with member evidence only", () => {
+    render(
+      <FederalProfile result={{ status: "available", profile: senatorProfile }} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Jordan Senate" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Verified federal profile")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Congress.gov member source" }),
+    ).toHaveAttribute("href", senatorSource.url);
+  });
+
   it("shows stale-below-expiry profile facts with an explicit warning", () => {
     render(
       <FederalProfile
@@ -231,7 +293,8 @@ describe("FederalProfile", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Federal profile information is unavailable.",
     );
-    expect(screen.queryByText("Alex House")).toBeNull();
+    expect(screen.queryByText(invalidProfile.person.name)).toBeNull();
+    expect(screen.queryByText("Verified federal profile")).toBeNull();
   });
 
   it("renders unavailable recovery without person, office, or source facts", () => {
