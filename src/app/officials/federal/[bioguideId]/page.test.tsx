@@ -316,7 +316,7 @@ function profileRecord(ageHours: number): FederalOfficialCacheRecord {
         recordUpdatedAt: new Date(
           retrievedAt.getTime() - HOUR,
         ).toISOString(),
-        effectiveAt: "2025-01-03T00:00:00.000Z",
+        effectiveAt: null,
       },
       {
         publisher:
