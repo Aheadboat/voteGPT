@@ -470,7 +470,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [Closeout PR #7](https://github.com/Aheadboat/voteGPT/pull/7) was created from verified staging head `da8dc40249b2f6b7b5a6ce11a7535e8e3a3a460f` and changes only `ROADMAP.md`/`README.md`. Initial head `10958ba463dc7abe06da8bb96484f8557b992cdc` passed push CI 29533710459 and pull-request CI 29533714444 with PostgreSQL 4/4, full 254/254 plus typecheck/lint/build, and Playwright 13/13; GitHub reported `MERGEABLE`/`CLEAN`. This evidence-only successor must repeat hosted CI and remain mergeable; merging the linked PR supplies the authoritative closeout-merge proof that places F4 `DONE` on the staging branch.
 - **Next Human Gate:** F4 has no remaining item gate. After the closeout merge, the coordinator records the serialized F4-to-F5 handoff; actual `main` remains reserved for the user's final batch review.
 
-## F5 — Federal Officials [IN PROGRESS (RED)]
+## F5 — Federal Officials [IN PROGRESS (REFACTOR)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
