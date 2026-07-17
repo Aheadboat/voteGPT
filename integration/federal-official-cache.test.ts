@@ -517,7 +517,139 @@ describe("PostgreSQL federal official cache", () => {
         .filter((id): id is string => id !== null)
         .sort(),
     ).toEqual(["H000012", "H000013", "S000002", "S000003"]);
+
+    const restoredAt = new Date(NOW.getTime() + HOUR);
+    await expect(
+      repository.replaceRoster(
+        replacementForDistrict(
+          12,
+          "H000099",
+          ["S000002", "S000003"],
+          restoredAt,
+        ),
+      ),
+    ).resolves.toEqual({ status: "written" });
+
+    const restoredRows = await storedRows();
+    const restoredRoster = restoredRows.find(
+      ({ cacheKey }) => cacheKey === "roster:v1:GA:12",
+    );
+    expect(
+      restoredRows
+        .filter(({ cacheKey }) => cacheKey.startsWith("roster:v1:GA:"))
+        .map(({ cacheKey }) => cacheKey),
+    ).toEqual(["roster:v1:GA:12", "roster:v1:GA:13"]);
+    expect(rosterSenateIds(restoredRoster)).toEqual(["S000002", "S000003"]);
+    expect(restoredRoster?.retrievedAt).toEqual(restoredAt);
+    expect(
+      restoredRows.find(
+        ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+      ),
+    ).toBeUndefined();
+    const replacementHouse = restoredRows.find(
+      ({ cacheKey }) => cacheKey === "profile:v2:H000099",
+    );
+    expect(profileBioguideId(replacementHouse)).toBe("H000099");
+    expect(replacementHouse?.retrievedAt).toEqual(restoredAt);
+    expect(
+      restoredRows
+        .filter(({ cacheKey }) => cacheKey.startsWith("profile:v2:"))
+        .map(profileBioguideId)
+        .filter((id): id is string => id !== null)
+        .sort(),
+    ).toEqual(["H000013", "H000099", "S000002", "S000003"]);
+    expect(
+      restoredRows
+        .filter(({ cacheKey }) =>
+          ["profile:v2:S000002", "profile:v2:S000003"].includes(cacheKey),
+        )
+        .map(({ cacheKey, retrievedAt }) => [cacheKey, retrievedAt]),
+    ).toEqual([
+      ["profile:v2:S000002", restoredAt],
+      ["profile:v2:S000003", restoredAt],
+    ]);
   });
+
+  it.each([
+    ["newer", hoursBefore(3)],
+    ["equal", hoursBefore(2)],
+  ])(
+    "ignores a replacement when its detached House profile has a %s generation",
+    async (_detachedGeneration, attemptedAt) => {
+      await repository.replaceRoster(
+        replacementForDistrict(
+          12,
+          "H000012",
+          ["S000001", "S000002"],
+          hoursBefore(2),
+        ),
+      );
+      await repository.replaceRoster(
+        replacementForDistrict(
+          13,
+          "H000013",
+          ["S000001", "S000002"],
+          hoursBefore(1),
+        ),
+      );
+      await repository.replaceRoster(
+        replacementForDistrict(
+          13,
+          "H000013",
+          ["S000002", "S000003"],
+          NOW,
+        ),
+      );
+
+      const beforeAttempt = await storedRows();
+      expect(
+        beforeAttempt.some(
+          ({ cacheKey }) => cacheKey === "roster:v1:GA:12",
+        ),
+      ).toBe(false);
+      const detachedHouse = beforeAttempt.find(
+        ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+      );
+      expect(profileBioguideId(detachedHouse)).toBe("H000012");
+      expect(detachedHouse?.retrievedAt).toEqual(hoursBefore(2));
+      expect(
+        rosterSenateIds(
+          beforeAttempt.find(
+            ({ cacheKey }) => cacheKey === "roster:v1:GA:13",
+          ),
+        ),
+      ).toEqual(["S000002", "S000003"]);
+
+      await expect(
+        repository.replaceRoster(
+          replacementForDistrict(
+            12,
+            "H000099",
+            ["S000002", "S000003"],
+            attemptedAt,
+          ),
+        ),
+      ).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+
+      const afterAttempt = await storedRows();
+      expect(afterAttempt).toEqual(beforeAttempt);
+      expect(
+        afterAttempt.some(
+          ({ cacheKey }) =>
+            cacheKey === "roster:v1:GA:12" ||
+            cacheKey === "profile:v2:H000099",
+        ),
+      ).toBe(false);
+      expect(
+        afterAttempt.find(
+          ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+        ),
+      ).toEqual(detachedHouse);
+    },
+  );
 
   it("settles concurrent reverse-order shared profile publications at the newest generation", async () => {
     const olderPool = new Pool({ connectionString, max: 1 });
