@@ -213,6 +213,123 @@ describe("PostgreSQL federal official cache", () => {
     }
   }, 15_000);
 
+  it.each([
+    {
+      conflict: "Senate identity",
+      expectedHouseCoverage: "verified",
+      expectedHouseStatus: "serving",
+      expectedKeys: [
+        "profile:v2:H000013",
+        "profile:v2:S000001",
+        "profile:v2:S000002",
+        "roster:v1:GA:13",
+      ],
+      expectedSenateCoverage: "verified",
+      expectedSenateIds: ["S000001", "S000002"],
+      first: replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001", "S000002"],
+        NOW,
+      ),
+      losing: replacementForDistrict(
+        13,
+        "H000013",
+        ["S000002", "S000003"],
+        NOW,
+      ),
+    },
+    {
+      conflict: "Senate coverage status",
+      expectedHouseCoverage: "verified",
+      expectedHouseStatus: "serving",
+      expectedKeys: [
+        "profile:v2:H000013",
+        "profile:v2:S000001",
+        "roster:v1:GA:13",
+      ],
+      expectedSenateCoverage: "partial",
+      expectedSenateIds: ["S000001"],
+      first: replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001"],
+        NOW,
+        "partial",
+      ),
+      losing: replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001"],
+        NOW,
+        "unknown",
+      ),
+    },
+    {
+      conflict: "profile-less House status",
+      expectedHouseCoverage: "unknown",
+      expectedHouseStatus: "unknown",
+      expectedKeys: [
+        "profile:v2:S000001",
+        "profile:v2:S000002",
+        "roster:v1:GA:13",
+      ],
+      expectedSenateCoverage: "verified",
+      expectedSenateIds: ["S000001", "S000002"],
+      first: replacementWithUnknownHouse(
+        ["S000001", "S000002"],
+        NOW,
+      ),
+      losing: replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001", "S000002"],
+        NOW,
+      ),
+    },
+  ] as const)(
+    "keeps the first same-key equal-generation publication on $conflict conflict",
+    async ({
+      expectedHouseCoverage,
+      expectedHouseStatus,
+      expectedKeys,
+      expectedSenateCoverage,
+      expectedSenateIds,
+      first,
+      losing,
+    }) => {
+      expect(first.roster.cacheKey).toBe(losing.roster.cacheKey);
+      expect(first.roster.retrievedAt).toEqual(losing.roster.retrievedAt);
+      await expect(repository.replaceRoster(first)).resolves.toEqual({
+        status: "written",
+      });
+
+      const before = await storedRows();
+      expect(before.map(({ cacheKey }) => cacheKey)).toEqual(expectedKeys);
+      const storedRoster = before.find(
+        ({ cacheKey }) => cacheKey === "roster:v1:GA:13",
+      );
+      if (!storedRoster) {
+        throw new Error("initial equal-generation roster must be stored");
+      }
+      expect(storedRoster.retrievedAt).toEqual(NOW);
+      expect(rosterSenateIds(storedRoster)).toEqual(expectedSenateIds);
+      expect(objectPayload(storedRoster)).toMatchObject({
+        coverage: {
+          house: expectedHouseCoverage,
+          senate: expectedSenateCoverage,
+        },
+        house: { status: expectedHouseStatus },
+      });
+
+      await expect(repository.replaceRoster(losing)).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+      expect(await storedRows()).toEqual(before);
+    },
+  );
+
   it("keeps the maximum generation coherent when initially empty same-key publications race", async () => {
     const olderPool = new Pool({ connectionString, max: 1 });
     const newerPool = new Pool({ connectionString, max: 1 });
@@ -876,6 +993,38 @@ function replacement(
   retrievedAt: Date,
 ): FederalRosterReplacement {
   return replacementForDistrict(13, houseId, senateIds, retrievedAt);
+}
+
+function replacementWithUnknownHouse(
+  senateIds: readonly string[],
+  retrievedAt: Date,
+): FederalRosterReplacement {
+  const base = replacement("H000013", senateIds, retrievedAt);
+  const roster = objectPayload(base.roster) as FederalOfficialsRoster;
+  const unknownHouse: FederalSeat = {
+    status: "unknown",
+    office: {
+      id: "federal:house:GA:13",
+      chamber: "house",
+      stateCode: "GA",
+      district: 13,
+      title: "U.S. Representative",
+    },
+    sources: [clerkListSource(retrievedAt)],
+  };
+  return {
+    roster: {
+      ...base.roster,
+      payload: {
+        ...roster,
+        house: unknownHouse,
+        coverage: { ...roster.coverage, house: "unknown" },
+      },
+    },
+    profiles: base.profiles.filter(
+      (profile) => profilePayload(profile).office.chamber === "senate",
+    ),
+  };
 }
 
 function replacementForDistrict(
