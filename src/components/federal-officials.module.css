@@ -1,0 +1,152 @@
+.shell,
+.profile {
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.header h2,
+.card h3,
+.sources h3,
+.sources h4,
+.notices h3 {
+  margin: 0;
+  color: #111827;
+}
+
+.eyebrow {
+  margin: 0 0 0.375rem;
+  color: #4b5563;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.intro {
+  margin: 0.5rem 0 0;
+}
+
+.status,
+.notices {
+  margin: 1rem 0;
+  padding: 0.75rem;
+  color: #1f2937;
+  background: #f4f4f5;
+  border-left: 0.25rem solid #6b7280;
+}
+
+.notices p:last-child {
+  margin-bottom: 0;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gridItem {
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 1rem;
+  background: #f7f7f8;
+  border: 1px solid #d1d5db;
+  border-radius: 0.625rem;
+}
+
+.fact {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+}
+
+.freshness {
+  margin: 0;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.sources {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid #d1d5db;
+}
+
+.sources ul {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sources li {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sourceLink,
+.profileLink,
+.recoveryLink {
+  width: fit-content;
+  color: #1d4ed8;
+  font-weight: 650;
+  text-decoration-thickness: 0.125rem;
+  text-underline-offset: 0.2rem;
+}
+
+.sourceLink:focus-visible,
+.profileLink:focus-visible,
+.recoveryLink:focus-visible {
+  outline: 0.1875rem solid #1d4ed8;
+  outline-offset: 0.1875rem;
+}
+
+.details {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.details div {
+  padding: 0.75rem;
+  background: #f4f4f5;
+}
+
+.details dt {
+  color: #4b5563;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.details dd {
+  margin: 0.25rem 0 0;
+  font-weight: 650;
+}
+
+@media (min-width: 48rem) {
+  .shell,
+  .profile {
+    padding: 1.5rem;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .details {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

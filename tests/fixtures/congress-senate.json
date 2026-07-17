@@ -1,0 +1,61 @@
+{
+  "members": [
+    {
+      "bioguideId": "H000001",
+      "currentMember": true,
+      "district": 12,
+      "name": "Rivera, Alex",
+      "state": "California",
+      "terms": {
+        "item": [
+          {
+            "chamber": "House of Representatives",
+            "startYear": 2025
+          }
+        ]
+      },
+      "updateDate": "2026-07-15T09:00:00Z",
+      "url": "https://api.congress.gov/v3/member/H000001?format=json"
+    },
+    {
+      "bioguideId": "S000001",
+      "currentMember": true,
+      "name": "Lee, Jordan",
+      "state": "California",
+      "terms": {
+        "item": [
+          {
+            "chamber": "Senate",
+            "startYear": 2025
+          }
+        ]
+      },
+      "updateDate": "2026-07-15T08:00:00Z",
+      "url": "https://api.congress.gov/v3/member/S000001?format=json"
+    },
+    {
+      "bioguideId": "S000002",
+      "currentMember": true,
+      "name": "Patel, Morgan",
+      "state": "California",
+      "terms": {
+        "item": [
+          {
+            "chamber": "Senate",
+            "startYear": 2025
+          }
+        ]
+      },
+      "updateDate": "2026-07-15T07:00:00Z",
+      "url": "https://api.congress.gov/v3/member/S000002?format=json"
+    }
+  ],
+  "pagination": {
+    "count": 3,
+    "next": null
+  },
+  "request": {
+    "contentType": "application/json",
+    "format": "json"
+  }
+}

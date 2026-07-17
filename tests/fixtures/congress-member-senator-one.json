@@ -1,0 +1,24 @@
+{
+  "member": {
+    "bioguideId": "S000001",
+    "currentMember": true,
+    "directOrderName": "Jordan Lee",
+    "invertedOrderName": "Lee, Jordan",
+    "state": "California",
+    "terms": [
+      {
+        "memberType": "Senator",
+        "chamber": "Senate",
+        "congress": 119,
+        "stateCode": "CA",
+        "stateName": "California",
+        "startYear": 2025
+      }
+    ],
+    "updateDate": "2026-07-15T08:30:00Z"
+  },
+  "request": {
+    "contentType": "application/json",
+    "format": "json"
+  }
+}
