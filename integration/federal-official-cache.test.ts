@@ -275,7 +275,7 @@ describe("PostgreSQL federal official cache", () => {
     }
   }, 30_000);
 
-  it("preserves newer shared senator profiles across reverse-order district publications", async () => {
+  it("keeps sibling rosters that share a Senate snapshot despite different retrieval times", async () => {
     const newerDistrict13 = orderProfiles(
       replacementForDistrict(
         13,
@@ -295,18 +295,31 @@ describe("PostgreSQL federal official cache", () => {
       ["profile:v2:S000001", "profile:v2:S000002", "profile:v2:H000012"],
     );
 
-    await repository.replaceRoster(newerDistrict13);
-    await repository.replaceRoster(olderDistrict12);
-    await repository.replaceRoster(
-      replacementForDistrict(
-        12,
-        "H000012",
-        ["S000002"],
-        hoursBefore(1),
-      ),
-    );
+    await expect(repository.replaceRoster(newerDistrict13)).resolves.toEqual({
+      status: "written",
+    });
+    await expect(repository.replaceRoster(olderDistrict12)).resolves.toEqual({
+      status: "written",
+    });
 
-    const sharedProfiles = (await storedRows()).filter(({ cacheKey }) =>
+    const rows = await storedRows();
+    expect(rows.map(({ cacheKey }) => cacheKey)).toEqual([
+      "profile:v2:H000012",
+      "profile:v2:H000013",
+      "profile:v2:S000001",
+      "profile:v2:S000002",
+      "roster:v1:GA:12",
+      "roster:v1:GA:13",
+    ]);
+    expect(
+      rows
+        .filter(({ cacheKey }) => cacheKey.startsWith("roster:v1:GA:"))
+        .map(({ cacheKey, retrievedAt }) => [cacheKey, retrievedAt]),
+    ).toEqual([
+      ["roster:v1:GA:12", hoursBefore(2)],
+      ["roster:v1:GA:13", NOW],
+    ]);
+    const sharedProfiles = rows.filter(({ cacheKey }) =>
       ["profile:v2:S000001", "profile:v2:S000002"].includes(cacheKey),
     );
     expect(
@@ -315,7 +328,196 @@ describe("PostgreSQL federal official cache", () => {
       ["profile:v2:S000001", NOW],
       ["profile:v2:S000002", NOW],
     ]);
+
+    await expect(
+      repository.replaceRoster(
+        replacementForDistrict(
+          12,
+          "H000099",
+          ["S000002"],
+          hoursBefore(1),
+        ),
+      ),
+    ).resolves.toEqual({
+      status: "ignored",
+      reason: "older_generation",
+    });
+
+    const afterIgnored = await storedRows();
+    expect(afterIgnored).toEqual(rows);
+    expect(
+      rosterSenateIds(
+        afterIgnored.find(({ cacheKey }) => cacheKey === "roster:v1:GA:12"),
+      ),
+    ).toEqual(["S000001", "S000002"]);
+    const retainedHouse = afterIgnored.find(
+      ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+    );
+    expect(profileBioguideId(retainedHouse)).toBe("H000012");
+    expect(retainedHouse?.retrievedAt).toEqual(hoursBefore(2));
+    expect(
+      afterIgnored
+        .filter(({ cacheKey }) =>
+          ["profile:v2:S000001", "profile:v2:S000002"].includes(cacheKey),
+        )
+        .map(({ cacheKey, retrievedAt }) => [cacheKey, retrievedAt]),
+    ).toEqual([
+      ["profile:v2:S000001", NOW],
+      ["profile:v2:S000002", NOW],
+    ]);
   }, 15_000);
+
+  it.each([
+    {
+      conflict: "equal-generation identity",
+      losingCoverage: "verified",
+      losingIds: ["S000002", "S000003"],
+      siblingCoverage: "verified",
+      siblingIds: ["S000001", "S000002"],
+      siblingRetrievedAt: hoursBefore(1),
+    },
+    {
+      conflict: "newer-generation identity",
+      losingCoverage: "verified",
+      losingIds: ["S000002", "S000003"],
+      siblingCoverage: "verified",
+      siblingIds: ["S000001", "S000002"],
+      siblingRetrievedAt: NOW,
+    },
+    {
+      conflict: "equal-generation status",
+      losingCoverage: "unknown",
+      losingIds: ["S000001"],
+      siblingCoverage: "partial",
+      siblingIds: ["S000001"],
+      siblingRetrievedAt: hoursBefore(1),
+    },
+    {
+      conflict: "newer-generation status",
+      losingCoverage: "unknown",
+      losingIds: ["S000001"],
+      siblingCoverage: "partial",
+      siblingIds: ["S000001"],
+      siblingRetrievedAt: NOW,
+    },
+  ] as const)(
+    "ignores a losing state publication as a whole on $conflict conflict",
+    async ({
+      losingCoverage,
+      losingIds,
+      siblingCoverage,
+      siblingIds,
+      siblingRetrievedAt,
+    }) => {
+      const siblingIdSet = new Set<string>(siblingIds);
+      await repository.replaceRoster(
+        replacementForDistrict(
+          13,
+          "H000013",
+          siblingIds,
+          siblingRetrievedAt,
+          siblingCoverage,
+        ),
+      );
+
+      await expect(
+        repository.replaceRoster(
+          replacementForDistrict(
+            12,
+            "H000012",
+            losingIds,
+            hoursBefore(1),
+            losingCoverage,
+          ),
+        ),
+      ).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+
+      const rows = await storedRows();
+      expect(rows.map(({ cacheKey }) => cacheKey)).toEqual(
+        [
+          "profile:v2:H000013",
+          ...siblingIds.map((id) => `profile:v2:${id}`),
+          "roster:v1:GA:13",
+        ].sort(),
+      );
+      expect(
+        rosterSenateIds(
+          rows.find(({ cacheKey }) => cacheKey === "roster:v1:GA:13"),
+        ),
+      ).toEqual(siblingIds);
+      expect(
+        rows.some(({ cacheKey }) =>
+          [
+            "roster:v1:GA:12",
+            "profile:v2:H000012",
+            ...losingIds
+              .filter((id) => !siblingIdSet.has(id))
+              .map((id) => `profile:v2:${id}`),
+          ].includes(cacheKey),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("invalidates older sibling artifacts when a newer publication changes the Senate snapshot", async () => {
+    await repository.replaceRoster(
+      replacementForDistrict(
+        12,
+        "H000012",
+        ["S000001", "S000002"],
+        hoursBefore(2),
+      ),
+    );
+    await repository.replaceRoster(
+      replacementForDistrict(
+        13,
+        "H000013",
+        ["S000001", "S000002"],
+        hoursBefore(1),
+      ),
+    );
+
+    await expect(
+      repository.replaceRoster(
+        replacementForDistrict(
+          13,
+          "H000013",
+          ["S000002", "S000003"],
+          NOW,
+        ),
+      ),
+    ).resolves.toEqual({ status: "written" });
+
+    const rows = await storedRows();
+    expect(
+      rows.some(({ cacheKey }) => cacheKey === "roster:v1:GA:12"),
+    ).toBe(false);
+    expect(
+      rosterSenateIds(
+        rows.find(({ cacheKey }) => cacheKey === "roster:v1:GA:13"),
+      ),
+    ).toEqual(["S000002", "S000003"]);
+    const preservedHouse = rows.find(
+      ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+    );
+    expect(profileBioguideId(preservedHouse)).toBe("H000012");
+    expect(preservedHouse?.retrievedAt).toEqual(hoursBefore(2));
+    expect(
+      profileBioguideId(
+        rows.find(({ cacheKey }) => cacheKey === "profile:v2:S000001"),
+      ),
+    ).toBeNull();
+    expect(
+      rows
+        .filter(({ cacheKey }) => cacheKey.startsWith("profile:v2:"))
+        .map(profileBioguideId)
+        .filter((id): id is string => id !== null)
+        .sort(),
+    ).toEqual(["H000012", "H000013", "S000002", "S000003"]);
+  });
 
   it("settles concurrent reverse-order shared profile publications at the newest generation", async () => {
     const olderPool = new Pool({ connectionString, max: 1 });
@@ -416,9 +618,26 @@ describe("PostgreSQL federal official cache", () => {
         replacementForDistrict(13, "H000013", ["S000002"], NOW),
       );
       releaseOlder.resolve();
-      await within(olderWrite, 5_000, "older district publication completion");
+      await expect(
+        within(olderWrite, 5_000, "older district publication completion"),
+      ).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
 
       const afterOlderCompletion = await storedRows();
+      expect(
+        afterOlderCompletion.some(
+          ({ cacheKey }) => cacheKey === "roster:v1:GA:12",
+        ),
+      ).toBe(false);
+      expect(
+        profileBioguideId(
+          afterOlderCompletion.find(
+            ({ cacheKey }) => cacheKey === "profile:v2:H000012",
+          ),
+        ),
+      ).toBeNull();
       expect(
         profileBioguideId(
           afterOlderCompletion.find(
@@ -428,20 +647,30 @@ describe("PostgreSQL federal official cache", () => {
       ).toBeNull();
 
       const reappearedAt = new Date(NOW.getTime() + HOUR);
-      await repository.replaceRoster(
-        replacementForDistrict(
-          13,
-          "H000013",
-          ["S000001", "S000002"],
-          reappearedAt,
+      await expect(
+        repository.replaceRoster(
+          replacementForDistrict(
+            13,
+            "H000013",
+            ["S000001", "S000002"],
+            reappearedAt,
+          ),
         ),
-      );
+      ).resolves.toEqual({ status: "written" });
       const afterNewerReappearance = await storedRows();
       const reappeared = afterNewerReappearance.find(
         ({ cacheKey }) => cacheKey === "profile:v2:S000001",
       );
+      const reappearedRoster = afterNewerReappearance.find(
+        ({ cacheKey }) => cacheKey === "roster:v1:GA:13",
+      );
       expect(profileBioguideId(reappeared)).toBe("S000001");
       expect(reappeared?.retrievedAt).toEqual(reappearedAt);
+      expect(rosterSenateIds(reappearedRoster)).toEqual([
+        "S000001",
+        "S000002",
+      ]);
+      expect(reappearedRoster?.retrievedAt).toEqual(reappearedAt);
     } finally {
       releaseOlder.resolve();
       await Promise.allSettled([olderWrite]);
@@ -522,6 +751,7 @@ function replacementForDistrict(
   houseId: string,
   senateIds: readonly string[],
   retrievedAt: Date,
+  senateCoverage?: "verified" | "partial" | "unknown",
 ): FederalRosterReplacement {
   const jurisdiction: FederalJurisdiction = {
     stateCode: "GA",
@@ -541,7 +771,7 @@ function replacementForDistrict(
     senate,
     coverage: {
       house: "verified",
-      senate: senate.length === 2 ? "verified" : "unknown",
+      senate: senateCoverage ?? (senate.length === 2 ? "verified" : "unknown"),
     },
   };
   return {
@@ -702,6 +932,29 @@ function profileBioguideId(
     typeof person.bioguideId === "string"
     ? person.bioguideId
     : null;
+}
+
+function rosterSenateIds(
+  record: FederalOfficialCacheRecord | undefined,
+): string[] | null {
+  if (!record?.payload || typeof record.payload !== "object") {
+    return null;
+  }
+  const senate = "senate" in record.payload ? record.payload.senate : null;
+  if (!Array.isArray(senate)) {
+    return null;
+  }
+  const ids = senate.map((seat) => {
+    if (!seat || typeof seat !== "object" || !("person" in seat)) {
+      return null;
+    }
+    const person = seat.person;
+    return person && typeof person === "object" && "bioguideId" in person &&
+      typeof person.bioguideId === "string"
+      ? person.bioguideId
+      : null;
+  });
+  return ids.every((id): id is string => id !== null) ? ids : null;
 }
 
 function memberSource(bioguideId: string, retrievedAt: Date): SourceRef {
