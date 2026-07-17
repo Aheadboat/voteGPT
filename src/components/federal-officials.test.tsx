@@ -31,7 +31,11 @@ const clerkDistrictSource: SourceRef = {
   url: "https://clerk.house.gov/members/GA13/vacancy",
 };
 
-const house = servingSeat("house", "Alex House", "H000001", 13);
+const houseMember = servingSeat("house", "Alex House", "H000001", 13);
+const house: ServingSeat = {
+  ...houseMember,
+  sources: [...houseMember.sources, clerkSource],
+};
 const firstSenator = servingSeat("senate", "Bailey Senate", "S000001", null);
 const secondSenator = servingSeat("senate", "Casey Senate", "S000002", null);
 
@@ -80,7 +84,7 @@ const conflictView: FederalOfficialsView = {
   house: {
     ...house,
     status: "conflict",
-    sources: [...house.sources, clerkSource, clerkDistrictSource],
+    sources: [...house.sources, clerkDistrictSource],
   },
   coverage: { ...view.coverage, house: "partial" },
 };
@@ -162,12 +166,12 @@ describe("FederalOfficials", () => {
   });
 
   it("publishes profiles only for seats with qualifying evidence", () => {
-    const verifiedView: FederalOfficialsView = {
-      ...view,
-      house: { ...house, sources: [...house.sources, clerkSource] },
+    const partialHouse: ServingSeat = {
+      ...house,
+      sources: house.sources.filter(({ url }) => url !== clerkSource.url),
     };
     const { rerender } = render(
-      <FederalOfficials result={{ status: "available", view: verifiedView }} />,
+      <FederalOfficials result={{ status: "available", view }} />,
     );
 
     expect(screen.getByRole("link", { name: "Alex House" })).toHaveAttribute(
@@ -183,7 +187,11 @@ describe("FederalOfficials", () => {
       <FederalOfficials
         result={{
           status: "available",
-          view: { ...view, coverage: { ...view.coverage, house: "partial" } },
+          view: {
+            ...view,
+            house: partialHouse,
+            coverage: { ...view.coverage, house: "partial" },
+          },
         }}
       />,
     );
