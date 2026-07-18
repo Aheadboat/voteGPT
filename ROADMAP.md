@@ -464,7 +464,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Phase:** `DISCOVER/DESIGN/PLAN`
 - **Branch:** `codex/f4-review-corrections`
 - **Base commit:** `d2c856a206cd4a7b8cf71958da0465fe414dbac6`
-- **Integrated-main commit:** `fbb7945a48d6887498da9116104422ebc565e42d`
+- **Integrated-main commit:** `efab0874b67e1bfa44e26672d20a82af97d72eff`
 - **Dispatch prerequisite:** The activation merge, `d1cf4bfd5c9f474ba1c340cf59caf5eba266fb90` approved planning merge, and this approved Gate A record must be integrated before F4-R1 dispatch.
 - **Admission result:** `CONDITIONAL` — dependencies are complete and F4/F5 have useful disjoint correction lanes, but F4 owns the schema/revision boundary and closes before F5 final integration.
 - **Assigned feature lead:** `f4_review_correction_lead` — reserved for fresh bounded task dispatch only after the activation merge, approved planning merge, and plan-level Gate A record are integrated.
