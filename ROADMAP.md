@@ -417,7 +417,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [IN PROGRESS (RED)]
+## F4 — Consented Saved Residence [IN PROGRESS (GREEN)]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
@@ -426,6 +426,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Review-correction audit/setup:** The read-only audit admitted F4/F5 as `CONDITIONAL`. Inert `codex/f4-review-corrections` and `codex/f5-review-corrections` worktrees were created from integration commit `d2c856a206cd4a7b8cf71958da0465fe414dbac6`; no feature-design or production agent was dispatched. F4 owns the schema/revision and residence trust boundary and must complete its correction feature and closeout before F5 final integration.
 - **Review-correction design approval evidence:** The reviewed [F4/F5 correction design](docs/superpowers/specs/2026-07-17-f4-f5-review-corrections-design.md) merged to the integration branch as `c5e12bbd7606f861ae353861e8c6fa29cd53a899`. On 2026-07-17 the user explicitly approved that overall design. The independently reviewed [F4 tests-first correction plan](docs/superpowers/plans/2026-07-17-f4-review-corrections.md) then merged in [PR #12](https://github.com/Aheadboat/voteGPT/pull/12) as `d1cf4bfd5c9f474ba1c340cf59caf5eba266fb90`. **Plan-level Human Gate A approval evidence:** on 2026-07-18 the user replied `approve` to the Gate A packet, approving both reviewed tests-first plans. F4-R1 may enter RED after this coordinator record is merged and integrated into its feature worktree; no later F4 task or feature merge is authorized by this approval.
 - **F4-R1 RED evidence (2026-07-18):** The tests-only `src/lib/residence-policy.test.ts` and `src/lib/bounded-json.test.ts` define the named address/coordinate/token/body-cap and bounded-stream behavior. The coordinator replayed `npm.cmd test -- src/lib/residence-policy.test.ts src/lib/bounded-json.test.ts`; both suites failed before test execution solely because the planned `./residence-policy` and `./bounded-json` modules do not exist. No production F4-R1 module was created before this recorded failure.
+- **F4-R1 GREEN/review evidence (2026-07-18):** `f3af168` implemented the named policies and bounded decoder, and `cec7253` added the locked-body fail-closed regression. The coordinator replayed 17 focused tests, typecheck, zero-warning lint, and the scoped diff check. A separate read-only task review found the initial locked-reader gap; its exact test-first fix was re-reviewed `CLEAN` for both specification and code quality. The reviewed F4-R1 commit range is pushed to `codex/f4-review-corrections`.
 - **Concurrency audit:** F3 is `DONE` on the integration branch, and its signed normalized residence result plus congressional-division handoff are settled. F4 owns the schema/revision, residence trust boundary, destructive E2E guard, and initial CI separation; F5 owns disjoint federal-only lanes. Dashboard page/test are frozen until the post-F4 handoff gives them to F5. `src/app/globals.css` is frozen throughout both corrections. No audit claim grants F4 dashboard or global-style ownership.
 - **Activation setup evidence:** The coordinator created inert `codex/f4-consented-saved-residence` and `codex/f5-federal-officials` worktrees from dependency-complete `main@735d73b0b069fa67a1e16a968a7298fb973ef17a`. Dependency installation reported zero vulnerabilities; each feature checkout passed the unchanged 13-file/90-test baseline. No feature agent was dispatched before the activation record.
 - **Activation guard RED/GREEN evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` first failed 1 of 14 tests because the unchanged roadmap had zero active items instead of the authorized F4/F5 pair. After only the activation records, README status, and state-specific assertion were updated, the same command passed 14/14.
@@ -462,7 +463,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `RED`
+- **Phase:** `GREEN`
 - **Branch:** `codex/f4-review-corrections`
 - **Base commit:** `d2c856a206cd4a7b8cf71958da0465fe414dbac6`
 - **Integrated-main commit:** `efab0874b67e1bfa44e26672d20a82af97d72eff`
@@ -474,11 +475,11 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **F4-only integration tests:** `integration/saved-residence-revision-migration.test.ts` remains bound only to `F4_MIGRATION_DATABASE_URL`; `integration/e2e-guarded-harness.test.ts` remains bound only to the three F4 guard resources in `missing -> wrong -> marked` order. Those two tests and all F4 resource URLs are never transferred to F5.
 - **Merge order:** F4 completes focused/full verification, F4 correction feature PR, hosted CI, mergeability, and independent review → explicit Human Gate B → feature merge to `codex/autonomous-f4-f8-integration` → post-merge verification → F4 correction closeout PR/CI/merge → coordinator-recorded F5 handoff. No step crosses a Human Gate autonomously.
 - **Feature PR/CI:** Pending correction implementation, review, and explicit Human Gate B.
-- **Blockers:** None for F4-R1; its task-level RED evidence is the next required record. Later tasks remain gated by the linked sequential plan, verification, review, and Human Gate B.
+- **Blockers:** F4-R1 is reviewed GREEN. The recorded Gate A scope authorizes no F4-R2 RED, so F4-R2 awaits fresh explicit human approval to extend that scope.
 - **Feature merge:** Pending; correction work must not merge before Gate B.
 - **Post-merge evidence:** Pending correction feature merge.
 - **Closeout PR/CI/merge:** Pending successful post-merge verification.
-- **Next Human Gate:** Human Gate B — only after F4-R11 verification, feature PR/CI, mergeability, and independent review.
+- **Next Human Gate:** Fresh explicit approval to extend the Gate A scope to F4-R2; Human Gate B remains required only after F4-R11 verification, feature PR/CI, mergeability, and independent review.
 
 ## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
