@@ -18,14 +18,16 @@ export async function readBoundedJson(
     return null;
   }
 
-  if (request.body === null) {
+  const body = request.body;
+  if (body === null) {
     return null;
   }
 
-  const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let byteCount = 0;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   try {
+    reader = body.getReader();
     while (true) {
       const chunk = await reader.read();
       if (chunk.done) {
@@ -49,13 +51,19 @@ export async function readBoundedJson(
 
     return JSON.parse(utf8Decoder.decode(bytes));
   } catch {
-    cancelReaderBestEffort(reader);
+    if (reader === null) {
+      cancelStreamBestEffort(body);
+    } else {
+      cancelReaderBestEffort(reader);
+    }
     return null;
   } finally {
-    try {
-      reader.releaseLock();
-    } catch {
-      // Cleanup must not affect a private failure result.
+    if (reader !== null) {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Cleanup must not affect a private failure result.
+      }
     }
   }
 }

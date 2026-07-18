@@ -87,6 +87,21 @@ describe("readBoundedJson", () => {
     },
   );
 
+  it("fails closed when a request body is locked", async () => {
+    const lockedRequest = {
+      body: {
+        getReader() {
+          throw new TypeError("Body is locked.");
+        },
+      },
+      headers: new Headers(),
+    } as unknown as Request;
+
+    await expect(
+      readBoundedJson(lockedRequest, RESIDENCE_PREVIEW_BODY_CAP_BYTES),
+    ).resolves.toBeNull();
+  });
+
   it("rejects an excessive Content-Length before reading its stream", async () => {
     let pulls = 0;
     const stream = new ReadableStream<Uint8Array>(
