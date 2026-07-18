@@ -706,6 +706,9 @@ describe("concurrent roadmap delivery contract", () => {
     expect(roadmapBatch).toContain(
       "Actual `main` remains frozen at the batch base",
     )
+    expect(roadmapBatch).toContain(
+      "Gate A scope: only F4-R1 and F5-R1 may enter RED; no later task, feature merge, closeout, or actual-`main` merge is authorized.",
+    )
     expect(readme).toContain(
       "F4-F8 integration work is staged on `codex/autonomous-f4-f8-integration`",
     )
@@ -984,7 +987,10 @@ describe("concurrent roadmap delivery contract", () => {
         "F6, G1, F7, and F8 remain TODO/inactive and require fresh explicit human direction",
       )
     }
-    for (const item of [f4, f5]) {
+    for (const [item, firstRedTask] of [
+      [f4, "F4-R1"],
+      [f5, "F5-R1"],
+    ] as const) {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",
       )
@@ -994,7 +1000,11 @@ describe("concurrent roadmap delivery contract", () => {
       expect(
         readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
       ).toMatch(/^[0-9a-f]{40}$/i)
-      expect(item).toContain(
+      expect(item).toContain("Plan-level Human Gate A approval evidence")
+      expect(item).toContain("2026-07-18")
+      expect(item).toContain("d1cf4bfd5c9f474ba1c340cf59caf5eba266fb90")
+      expect(item).toContain(firstRedTask + " may enter RED")
+      expect(item).not.toContain(
         "Human Gate A remains required before RED or production work.",
       )
       expect(item).toContain("does not authorize correction work")
