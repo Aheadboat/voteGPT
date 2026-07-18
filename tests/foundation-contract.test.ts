@@ -612,7 +612,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps R1 closed and validates the authorized F4/F5 activation", () => {
+  it("keeps R1 closed, validates F4/F5 activation, and queues R2 next", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -673,6 +673,7 @@ describe("concurrent roadmap delivery contract", () => {
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
     const inactiveLaterRoadmapIds = [
+      "R2",
       "F6",
       "F7",
       "F8",
@@ -690,6 +691,8 @@ describe("concurrent roadmap delivery contract", () => {
       .map(([id]) => id)
     const f4 = readRoadmapItem(roadmap, "F4")
     const f5 = readRoadmapItem(roadmap, "F5")
+    const r2 = readRoadmapItem(roadmap, "R2")
+    const f6 = readRoadmapItem(roadmap, "F6")
     const f4Status = statuses.get("F4") ?? ""
     const f5Status = statuses.get("F5") ?? ""
     const f4Ownership = readCoordinationField(f4, "Ownership")
@@ -789,8 +792,24 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readme).toMatch(/F5[^.\n]*active/i)
     }
     expect(readme).toContain(
-      "F6 and every later roadmap item remain TODO",
+      "R2 is queued as the next roadmap step after F4 and F5 are `DONE`",
     )
+    expectTokensInOrder(roadmap, ["## F5 ", "## R2 ", "## F6 "])
+    expect(r2).toContain("PROJECT-MAP.md")
+    expect(r2).toContain("TEMPORARY.md")
+    expect(r2).toContain("F4 and F5 are both `DONE` on `main`")
+    expect(r2).toContain("This records order only")
+    expect(r2).toContain("explicitly activates it")
+    expect(r2).toContain(
+      "every feature-owned entry is removed, reverted, or promoted before `VERIFIED` and remains absent through Gate B",
+    )
+    expect(r2).toContain("placeholder child indexes")
+    expect(r2).toContain("root plus one child level")
+    expect(r2).toContain("codegraph init .")
+    expect(r2).toContain("codegraph sync .")
+    expect(r2).toContain("fresh pre-activation audit")
+    expect(r2).toContain("remains `TODO` and inactive")
+    expect(f6).toContain("**Dependencies:** F5 and R2.")
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",

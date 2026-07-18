@@ -466,10 +466,19 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
 - **Next Human Gate:** Human Gate A after the lead returns the overall design, tests-first task graph, dependencies, interfaces, isolated/deferred lanes, risks, and non-goals.
 
+## R2 — Repository Context and Hygiene Contract [TODO]
+
+- **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
+- **Dependencies:** F4 and F5 are both `DONE` on `main`, so the initial map describes their merged code rather than unmerged worktree state.
+- **Ordering authorization:** User explicitly approved R2 as the very next roadmap step after F4 and F5 on 2026-07-18. This records order only; R2 remains `TODO` and inactive until both closeout merges are on `main`, a fresh pre-activation audit passes, and the user explicitly activates it.
+- **Tests first:** Foundation contract checks fail until the current-code-only `PROJECT-MAP.md`, progressive child-map routing, map-impact completion rule, intentional-temporary-artifact registry, zero-open-entry completion gate, ignored scratch/index state, and post-merge CodeGraph synchronization contract are present and internally linked.
+- **Done:** `PROJECT-MAP.md` stays capability-oriented and concise, links only earned subtree indexes, and is updated before `VERIFIED` when routing surfaces change; `TEMPORARY.md` registers intentional temporary files or modifications while ordinary generated output remains ignored, and every feature-owned entry is removed, reverted, or promoted before `VERIFIED` and remains absent through Gate B; local scratch and derived CodeGraph state are ignored; when the CLI is available, R2 establishes the derived index once with `codegraph init .`; after new code merges to updated `main`, the coordinator attempts `codegraph sync .`, records `codegraph status --json`, and falls back to the map rather than trusting a stale graph.
+- **Non-goals:** Exhaustive per-file inventory, generated documentation, placeholder child indexes, nesting deeper than root plus one child level, CodeGraph in CI, a new dependency, or retroactive scope changes to F4/F5.
+
 ## F6 — State Officials and Government-Level Navigation [TODO]
 
 - **Outcome:** Accessible `Local | State | Federal` tabs and sourced state legislative officials.
-- **Dependencies:** F5.
+- **Dependencies:** F5 and R2.
 - **Tests first:** Keyboard/focus/deep-link/screen-reader tab behavior, multi-member body, vacancy, current-official presentation, and unavailable-local-coverage state.
 - **Done:** OpenStates adapter, `In office | Elections` mode, office-category chips, and verified-only local panel pass; federal/state coverage promise is test-backed; local gaps are explicit.
 - **Non-goals:** Claim of complete nationwide local coverage or candidate research.
