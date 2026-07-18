@@ -189,6 +189,33 @@ function expectedAutonomousBatchActiveIds(statuses: Map<string, string>) {
   return activeIds
 }
 
+function readDelimitedText(
+  contents: string,
+  startMarker: string,
+  endMarker: string,
+): string {
+  const start = contents.indexOf(startMarker)
+  const end = contents.indexOf(endMarker, start + startMarker.length)
+
+  if (start === -1 || end === -1) {
+    throw new Error("Missing delimited ownership section")
+  }
+
+  return contents.slice(start + startMarker.length, end)
+}
+
+function expectedCorrectionActiveIds(statuses: Map<string, string>) {
+  for (const id of ["F6", "G1", "F7", "F8"]) {
+    const status = statuses.get(id) ?? "TODO"
+
+    if (status !== "TODO") {
+      throw new Error(id + " requires fresh explicit human direction")
+    }
+  }
+
+  return expectedAuthorizedPairActiveIds(statuses)
+}
+
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
@@ -618,7 +645,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("scopes and supersedes F4-F8 authorization on an isolated integration branch", () => {
+  it("scopes the F4/F5 review corrections on the isolated integration branch", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
@@ -640,10 +667,9 @@ describe("concurrent roadmap delivery contract", () => {
       expect(batch).toContain("independent review")
       expect(batch).toContain("hosted CI")
       expect(batch).toContain("feature and closeout PRs")
-      expect(batch).toContain("standing authorization")
-      expect(batch).toContain("delegated Gate A")
-      expect(batch).toContain("delegated Gate B")
-      expect(batch).toContain("does not pause for additional permission")
+      expect(batch).toContain("explicit Human Gate A")
+      expect(batch).toContain("explicit Human Gate B")
+      expect(batch).toContain("pauses for user review")
       expect(batch).toContain("G1")
       expect(batch).toContain("no paid vendor commitment")
       expect(batch).toContain("read-only, no-commitment G1 evaluation")
@@ -654,10 +680,10 @@ describe("concurrent roadmap delivery contract", () => {
       expect(batch).toContain("continue every independent admitted lane")
       expect(batch).toContain("defer the exact decision to final human review")
       expect(batch).toContain(
-        "The autonomous window ends when F5's closeout merge places",
+        "The original autonomous window ended when F5's closeout merge placed",
       )
       expect(batch).toContain("fresh explicit human direction")
-      expect(batch).toContain("ended that queue after F5")
+      expect(batch).toContain("original autonomous window ended")
       expect(batch).not.toContain("standing authorization covers")
       expect(batch).not.toContain(
         "Standing authorization places work in an authorized queue",
@@ -666,6 +692,12 @@ describe("concurrent roadmap delivery contract", () => {
       expect(batch).not.toContain("authorized batch queue")
       expect(batch).toContain("final human review")
       expect(batch).toContain("must not be merged autonomously")
+      expect(batch).toContain("F4 and F5 review corrections")
+      expect(batch).toContain("one fresh implementer subagent per bounded task")
+      expect(batch).toContain(
+        "followed by a separate read-only task reviewer",
+      )
+      expect(batch).toContain("F4 correction closeout before F5 final integration")
     }
 
     expect(agentBatch).toContain(
@@ -677,9 +709,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readme).toContain(
       "F4-F8 integration work is staged on `codex/autonomous-f4-f8-integration`",
     )
-    expect(readme).toContain(
-      "After F5 closes, the coordinator stops",
-    )
+    expect(readme).toContain("F4 and F5 review corrections are active")
     expect(readme).toContain(
       "The integration branch will not merge into actual `main` before human review.",
     )
@@ -726,7 +756,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps R1 closed and validates the authorized F4/F5 activation", () => {
+  it("keeps R1 closed and validates the authorized F4/F5 correction activation", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -808,36 +838,61 @@ describe("concurrent roadmap delivery contract", () => {
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
     const f5MergeOrder = readCoordinationField(f5, "Merge order")
-    const activationBase = "735d73b0b069fa67a1e16a968a7298fb973ef17a"
-    const sharedSurfaces = [
+    const activationBase = "d2c856a206cd4a7b8cf71958da0465fe414dbac6"
+    const f4CorrectionSurfaces = [
       "src/db/schema.ts",
       "src/db/index.ts",
       "drizzle/**",
-      "drizzle.config.ts",
-      "src/db/index.test.ts",
-      "integration/postgres-auth.test.ts",
-      "e2e/seed-session.mjs",
+      "src/lib/saved-residence.ts",
+      "src/lib/saved-residence.test.ts",
       "src/lib/residence.ts",
-      "src/lib/account.test.ts",
+      "src/lib/residence.test.ts",
+      "src/app/api/v1/residence/route.ts",
+      "src/app/api/v1/residence/route.test.ts",
+      "src/app/api/v1/location/resolve/route.ts",
+      "src/app/api/v1/location/resolve/route.test.ts",
       "src/components/residence-preview.tsx",
       "src/components/residence-preview.test.tsx",
       "src/components/account-controls.tsx",
-      "src/app/dashboard/page.tsx",
-      "src/app/dashboard/page.test.tsx",
-      "src/app/identity-shell.test.tsx",
-      "src/app/globals.css",
+      "src/lib/account.test.ts",
+      "tests/fixtures/residence-responses.ts",
+      "integration/postgres-auth.test.ts",
+      "scripts/rotate-saved-residence-keys.mts",
       "e2e/residence.spec.ts",
       ".env.example",
-      "package.json",
-      "package-lock.json",
-      "next.config.ts",
+    ]
+    const f5ExclusiveSurfaces = [
+      "src/lib/congress-gov.ts",
+      "src/lib/congress-gov.test.ts",
+      "src/lib/house-clerk-vacancy.ts",
+      "src/lib/house-clerk-vacancy.test.ts",
+      "src/lib/federal-officials.ts",
+      "src/lib/federal-officials.test.ts",
+      "src/lib/federal-officials-service.ts",
+      "src/lib/federal-officials-service.test.ts",
+      "src/components/federal-officials.tsx",
+      "src/components/federal-officials.test.tsx",
+      "src/components/federal-profile.tsx",
+      "src/components/federal-profile.test.tsx",
+      "src/app/officials/federal/[bioguideId]/page.tsx",
+      "src/app/officials/federal/[bioguideId]/page.test.tsx",
+      "integration/federal-official-cache.test.ts",
+      "e2e/federal-officials.spec.ts",
+    ]
+    const f5HandoffSurfaces = [
+      "src/app/dashboard/page.tsx",
+      "src/app/dashboard/page.test.tsx",
+      "e2e/seed-session.mjs",
+      "playwright.config.ts",
+      "src/db/index.test.ts",
+      "integration/postgres-auth.test.ts",
       "vitest.config.mts",
       "vitest.postgres.config.mts",
-      "playwright.config.ts",
+      ".github/workflows/ci.yml",
     ]
 
     expect(r1Status).toBe("DONE")
-    expect(activeIds).toEqual(expectedAutonomousBatchActiveIds(statuses))
+    expect(activeIds).toEqual(expectedCorrectionActiveIds(statuses))
     expect(
       expectedAuthorizedPairActiveIds(
         new Map([
@@ -878,15 +933,17 @@ describe("concurrent roadmap delivery contract", () => {
         ]),
       ),
     ).toThrow("F5 cannot activate before F4")
-    expect(
-      expectedAutonomousBatchActiveIds(
-        new Map([
-          ["F4", "DONE"],
-          ["F5", "DONE"],
-          ["F6", "IN PROGRESS (RED)"],
-        ]),
-      ),
-    ).toEqual(["F6"])
+    for (const id of ["F6", "G1", "F7", "F8"]) {
+      expect(() =>
+        expectedCorrectionActiveIds(
+          new Map([
+            ["F4", "DONE"],
+            ["F5", "DONE"],
+            [id, "IN PROGRESS (RED)"],
+          ]),
+        ),
+      ).toThrow(id + " requires fresh explicit human direction")
+    }
     expect(() =>
       expectedAutonomousBatchActiveIds(
         new Map([
@@ -901,12 +958,11 @@ describe("concurrent roadmap delivery contract", () => {
     for (const id of outsideBatchRoadmapIds) {
       expect(statuses.get(id), id + " must remain TODO").toBe("TODO")
     }
-    if (f5Status !== "DONE") {
-      for (const id of ["F6", "G1", "F7", "F8"]) {
-        expect(statuses.get(id), id + " must wait for F5").toBe("TODO")
-      }
+    for (const id of ["F6", "G1", "F7", "F8"]) {
+      expect(statuses.get(id), id + " requires fresh direction").toBe("TODO")
     }
     expect(readme).not.toContain("is implemented and verified")
+    expect(readme).not.toMatch(/F[45][^.\n]*complete only when/i)
     expect(implementationPlan).toContain(
       "contents.indexOf(token, previousIndex + 1)",
     )
@@ -938,23 +994,60 @@ describe("concurrent roadmap delivery contract", () => {
       expect(
         readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
       ).toMatch(/^[0-9a-f]{40}$/i)
-      expect(item).toMatch(
-        /Human Gate A remains required before RED or production work\.|delegated Gate A/i,
+      expect(item).toContain(
+        "Human Gate A remains required before RED or production work.",
       )
+      expect(item).toContain("does not authorize correction work")
     }
     expect(readCoordinationField(f4, "Branch")).toContain(
-      "codex/f4-consented-saved-residence",
+      "codex/f4-review-corrections",
     )
     expect(readCoordinationField(f5, "Branch")).toContain(
-      "codex/f5-federal-officials",
+      "codex/f5-review-corrections",
     )
-    expect(f4Ownership).toContain("F4 exclusively owns these shared surfaces:")
+    expect(f4Ownership).toContain(
+      "F4 exclusively owns these correction surfaces:",
+    )
     expect(f5Ownership).toContain(
-      "F5 defers these F4-owned shared surfaces:",
+      "F5 defers these F4-owned correction surfaces:",
     )
-    for (const surface of sharedSurfaces) {
-      expect(f4Ownership, "F4 must own " + surface).toContain(surface)
-      expect(f5Ownership, "F5 must defer " + surface).toContain(surface)
+    const f4ExclusiveOwnership = readDelimitedText(
+      f4Ownership,
+      "F4 exclusively owns these correction surfaces:",
+      "`src/lib/account.ts` remains read-only;",
+    )
+    const f5ExclusiveOwnership = readDelimitedText(
+      f5Ownership,
+      "F5 exclusively owns ",
+      "F5 exclusively owns the Congress.gov request/configuration external resource.",
+    )
+    const f5DeferredOwnership = readDelimitedText(
+      f5Ownership,
+      "F5 defers these F4-owned correction surfaces:",
+      "After F4 closes, the shared-surface handoff",
+    )
+    const f5HandoffOwnership = readDelimitedText(
+      f5Ownership,
+      "After F4 closes, the shared-surface handoff grants F5 exclusive correction ownership of",
+      "`src/lib/account.ts` remains read-only.",
+    )
+    for (const surface of f4CorrectionSurfaces) {
+      expect(f4ExclusiveOwnership, "F4 must own " + surface).toContain(surface)
+      expect(f5DeferredOwnership, "F5 must defer " + surface).toContain(surface)
+      expect(f5ExclusiveOwnership, "F5 must not concurrently own " + surface).not.toContain(
+        surface,
+      )
+    }
+    for (const surface of f5ExclusiveSurfaces) {
+      expect(f5ExclusiveOwnership, "F5 must own " + surface).toContain(surface)
+      expect(f4ExclusiveOwnership, "F4 must not own " + surface).not.toContain(
+        surface,
+      )
+    }
+    for (const surface of f5HandoffSurfaces) {
+      expect(f5HandoffOwnership, "F5 handoff must own " + surface).toContain(
+        surface,
+      )
     }
     for (const coordinatorFile of [
       "AGENTS.md",
@@ -964,7 +1057,7 @@ describe("concurrent roadmap delivery contract", () => {
     ]) {
       expect(f4Ownership).toContain(coordinatorFile)
     }
-    expect(f4Ownership).toContain("shared PostgreSQL schema/migration history")
+    expect(f4Ownership).toContain("next ordered schema/migration revision")
     expect(f4Ownership).toContain(
       "F4 exclusively owns the encryption-key configuration external resource",
     )
@@ -977,16 +1070,27 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f5Ownership).toContain(
       "shared CI configuration and generated artifacts remain frozen",
     )
+    expect(f5Ownership).toContain("versioned/generated Census apportionment data")
+    expect(f4).toContain("Historical original closeout proof")
+    expect(f4).toContain("af4187f09719998be45e5690f32e25da4f54ac5c")
+    expect(f4).toContain("6a7db1d9037ebd9ea7a47d2c00d6a623575619f5")
+    expect(f4).toContain("29533980553")
+    expect(f4).toContain("29533983421")
+    expect(f5).toContain("Historical original closeout proof")
+    expect(f5).toContain("905b830c75c85eae1bef6c73f9ac25c56e38c10f")
+    expect(f5).toContain("d2c856a206cd4a7b8cf71958da0465fe414dbac6")
+    expect(f5).toContain("29618958419")
+    expect(f5).toContain("29618960420")
     expectTokensInOrder(f4MergeOrder + " " + f5MergeOrder, [
-      "F4 feature PR",
+      "F4 correction feature PR",
       "post-merge verification",
-      "F4 closeout",
-      "integrates completed F4",
+      "F4 correction closeout",
+      "integrates the completed F4 correction",
       "shared-surface handoff",
       "only then may approach Gate B",
     ])
     expect(f5MergeOrder).toContain(
-      "cannot reach Gate B until it integrates completed F4",
+      "cannot reach Gate B until it integrates the completed F4 correction",
     )
   })
 })

@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete on actual `main`. R1 — Concurrent Roadmap Delivery Contract is complete. The F4-F8 integration work is staged on `codex/autonomous-f4-f8-integration`, based on `main@d5978ba830f0ee715c9162afba8963139c0fb707`; F4 is complete on the integration branch, and F5 feature PR #8 is merged with exact-merge local and hosted verification. F5 is complete only when status-only closeout PR #9 merges; that merge supplies the final roadmap authority. After F5 closes, the coordinator stops: F6, G1, F7, and F8 remain TODO/inactive and require fresh explicit human direction. The integration branch will not merge into actual `main` before human review.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, and F3 — Residence Resolution Preview are complete on actual `main`. R1 — Concurrent Roadmap Delivery Contract is complete. The F4-F8 integration work is staged on `codex/autonomous-f4-f8-integration`, based on `main@d5978ba830f0ee715c9162afba8963139c0fb707`. F4 and F5 review corrections are active from integration commit `d2c856a206cd4a7b8cf71958da0465fe414dbac6`; F4 closes first, then F5 integrates it before final shared-surface verification. F6, G1, F7, and F8 remain TODO/inactive and require fresh explicit human direction. The integration branch will not merge into actual `main` before human review.
 
 ## Local identity setup
 
