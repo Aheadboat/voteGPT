@@ -1,15 +1,15 @@
 # F4/F5 Review Corrections Design
 
-**Status:** Draft for explicit user review
+**Status:** Approved design; tests-first plan approval pending
 **Date:** 2026-07-17
-**Authoritative integration base:** `codex/autonomous-f4-f8-integration@fbb7945a48d6887498da9116104422ebc565e42d`
+**Authoritative integration base:** `codex/autonomous-f4-f8-integration@c5e12bbd7606f861ae353861e8c6fa29cd53a899`
 **Correction branches:** `codex/f4-review-corrections`, then `codex/f5-review-corrections`
 
 ## Purpose
 
 Correct the F4 saved-residence and F5 federal-officials trust, concurrency, provenance, recovery, and test-harness gaps found by independent adversarial review. Preserve the existing user outcomes and the F3-to-F4-to-F5 privacy boundary. Do not activate F6 or later work.
 
-The implementation remains tests-first. Each bounded correction task gets one fresh implementer subagent and a separate read-only reviewer. The coordinator owns this design, the later implementation plan, roadmap state, shared-surface handoffs, PRs, CI, and Human Gates; it does not implement production code.
+The implementation remains tests-first. Each bounded correction task gets one fresh implementer subagent and a separate read-only reviewer. The coordinator owns this design, the later implementation plan, roadmap state, shared-surface handoffs, PRs, CI orchestration, and Human Gates; it does not implement production code. CI files are branch-owned only for the recorded bounded correction task and are changed only through coordinator dispatch.
 
 ## Constraints that remain unchanged
 
@@ -18,8 +18,9 @@ The implementation remains tests-first. Each bounded correction task gets one fr
 - F5 receives divisions only through `getSavedResidenceDivisions(userId)` and never receives or decrypts the address.
 - Exact location stays out of URLs, logs, analytics, research/search inputs, LLM prompts, and app-managed browser storage.
 - Civic facts remain deterministic, source-backed, usable without AI, and explicit about partial, unavailable, stale, or conflicting evidence.
-- Actual `main` remains unchanged until final Human Gate B approval.
-- F4 correction feature and closeout merge before F5 receives shared dashboard, database-test, and E2E ownership.
+- Actual `main` remains unchanged until the cumulative integration PR receives final explicit user approval.
+- F4 correction feature and closeout merge before F5 receives the destructive E2E harness, dashboard, its own named database-test surfaces, and CI ownership recorded below.
+- `src/app/dashboard/page.tsx` and `src/app/dashboard/page.test.tsx` remain frozen until that F4-to-F5 handoff. `src/app/globals.css` remains frozen throughout both corrections.
 
 ## Decisions at a glance
 
@@ -36,7 +37,7 @@ The implementation remains tests-first. Each bounded correction task gets one fr
 | D9 | One shared Congress clock and one aggregate refresh deadline replace scattered dates, Congress numbers, and per-request timers. Independent provider calls run concurrently under the shared signal. |
 | D10 | User-facing provenance uses public human-readable pages; ingestion URLs remain server-side evidence metadata. Partial House evidence never claims a verified current officeholder. |
 | D11 | Invalid or future-dated cache records are repairable poison. Cross-roster Bioguide transitions are resolved atomically; Senate ordering is a neutral Bioguide order. |
-| D12 | E2E requires a dedicated guarded database and cannot fall back to runtime `DATABASE_URL`. Congress credentials are blanked and live provider access is trapped. |
+| D12 | F4 first makes E2E use a dedicated guarded database with no runtime `DATABASE_URL` fallback. F5 inherits that harness, blanks Congress credentials, traps live provider access, and derives federal fixtures from one clock. |
 | D13 | PGlite migrations run in an isolated bounded test project; hosted PostgreSQL rehearses upgrading existing F1 identity/session data through the complete migration chain. |
 
 ## F4 design: saved-residence trust and consistency
@@ -172,9 +173,13 @@ Each refresh captures one `CongressSnapshot` containing checked time and current
 
 Every provider response, Census artifact, cache generation, term, and E2E fixture is checked against the same snapshot. Late results after abort are ignored. Runtime incompleteness uses the approved local fallback; malformed or contradictory evidence fails closed.
 
+**Pending tests-first plan approval:** use one current Congress state-roster response and split its validated members by chamber instead of issuing separate state House and Senate roster requests. This is a plan-level simplification, not authorization for RED or production work.
+
 ### 4. Public provenance and truthful presentation
 
 `SourceRef` separates `publicUrl` from `ingestionUrl`. User-facing links use the official Biographical Directory page keyed by Bioguide ID; the Congress.gov API URL remains ingestion metadata and is never rendered as the public citation. Clerk vacancy links remain public Clerk pages.
+
+**Pending tests-first plan approval:** use `Biographical Directory of the United States Congress` as the publisher label for those public member pages. This label refinement is not authorized until the plan-level Human Gate A approval.
 
 Accessible source names include the official or office so repeated Senate links and source regions are distinguishable. Card hierarchy, spacing, and source/freshness placement remain equal.
 
@@ -217,6 +222,8 @@ Dashboard copy becomes honest until F6: public federal profiles can be opened wi
 
 ### 2. Dedicated destructive E2E database
 
+F4 implements and verifies this boundary before its Gate B. Its branch owns `e2e/database-guard.mjs`, `tests/e2e-database-guard.test.ts`, `e2e/start-server.mjs`, `e2e/seed-session.mjs`, `playwright.config.ts`, `e2e/residence.spec.ts`, `.env.example`, `.github/workflows/ci.yml`, `tests/ci-e2e-database-contract.test.ts`, `integration/saved-residence-revision-migration.test.ts`, `integration/postgres-auth.test.ts`, and `integration/e2e-guarded-harness.test.ts` for this bounded task. `integration/saved-residence-revision-migration.test.ts` remains F4-only on `F4_MIGRATION_DATABASE_URL`; `integration/e2e-guarded-harness.test.ts` remains F4-only on the three F4 guard URLs. Neither transfers to F5. CI files remain coordinator-dispatched and coordinator-orchestrated despite that temporary branch ownership.
+
 E2E accepts only `E2E_DATABASE_URL`; it never reads runtime `DATABASE_URL` as a fallback. Before opening any connection, the harness performs every offline check:
 
 - a named destructive-test opt-in must match the versioned harness sentinel;
@@ -227,11 +234,17 @@ E2E accepts only `E2E_DATABASE_URL`; it never reads runtime `DATABASE_URL` as a 
 
 For PostgreSQL only, the harness then opens a connection for one read-only marker query. The dedicated database must already contain the expected versioned marker row. A missing or wrong marker closes the connection and fails before any migration, seed, delete, update, or insert.
 
-Hosted CI creates a separate E2E database and marker before running the seed. The marker cannot be created by the destructive seeder itself. The one validated URL is then passed explicitly to seed, app, browser worker, raw inspection, and rotation processes.
+Hosted F4 CI creates every disposable F4 resource through an administrative PostgreSQL service database used only for provisioning. The marker cannot be created by the destructive seeder itself. The one validated E2E URL is then passed explicitly to seed, app, browser worker, raw inspection, and rotation processes; only the validated wrapper may expose it to a child as `DATABASE_URL`.
 
 This layered contract avoids database-name heuristics and prevents a mere environment typo from authorizing production mutation.
 
+F4 owns six pairwise-distinct, disposable application databases: `votegpt_f4_migration` (`F4_MIGRATION_DATABASE_URL`) for the `0000..0003` legacy-fixture then `0004` upgrade proof; `votegpt_f4_contract` (`F4_CONTRACT_DATABASE_URL`) for current-schema contracts; marked `votegpt_e2e` (`E2E_DATABASE_URL`) for browser E2E; unmarked `votegpt_f4_e2e_guard_missing` (`F4_E2E_GUARD_MISSING_DATABASE_URL`); wrong-marker `votegpt_f4_e2e_guard_wrong` (`F4_E2E_GUARD_WRONG_MARKER_DATABASE_URL`); and marked `votegpt_f4_e2e_guard_marked` (`F4_E2E_GUARD_MARKED_DATABASE_URL`) for the black-box guard proof. The administrative service database is provisioning-only and is never exposed to an app or test. Contract commands map `DATABASE_URL` only from their owning resource; guard resources never become ambient `DATABASE_URL`.
+
+F4 CI order is: isolated migration proof and fixture/pool teardown; current contract migration and fixture/pool teardown; non-E2E checks/build; black-box `missing -> wrong -> marked` guard proof; then browser E2E against marked `votegpt_e2e`. CI destroys all six F4 application databases after evidence. No F4 URL or disposable database instance passes to F5.
+
 ### 3. Fixture-only provider behavior
+
+After F4's status-only closeout merge, F5 inherits the approved guard/wrapper/marked-E2E interface and its code/configuration surfaces—not any F4 URL, disposable database, or F4-only integration test. F5 receives shared `integration/postgres-auth.test.ts` for its own contract resource, owns `integration/federal-official-cache.test.ts` on `F5_CONTRACT_DATABASE_URL`, and creates `integration/postgres-upgrade.test.ts` on `POSTGRES_UPGRADE_DATABASE_URL`; it provisions its own marked E2E resource, preserves the guard contract, and adds `e2e/trap-live-providers.mjs`, `e2e/fixture-policy.mts`, and `tests/e2e-fixture-policy.test.ts` without replacing or weakening the inherited guard.
 
 Playwright configuration explicitly blanks `CONGRESS_GOV_API_KEY`. The seed rejects a nonblank key independently, and server-side E2E provider construction fails if a live Congress/Clerk fetch is attempted. Browser interception alone is insufficient because these calls originate on the server.
 
@@ -241,7 +254,7 @@ The seed captures one test instant and derives current Congress, term years, fre
 
 Real PGlite migration boot moves to a named Node test project with one worker, no file parallelism, and isolated file-backed resources. The ordinary unit/jsdom project does not contend with it. Existing test-local timeout inflation is removed; if the isolated project still exceeds the normal bound, the cause is measured before a policy change.
 
-Hosted PostgreSQL gains a separate upgrade database. The rehearsal:
+Hosted F5 PostgreSQL gains a third, separate upgrade database. The rehearsal:
 
 1. applies only the F1 identity migrations;
 2. inserts representative user, account, session, and verification rows;
@@ -249,19 +262,21 @@ Hosted PostgreSQL gains a separate upgrade database. The rehearsal:
 4. proves identity rows, relationships, expiry, authentication, foreign keys, and cascades remain correct; and
 5. proves F4/F5 tables and ordered migration journal state.
 
-The upgrade database is separate from ordinary PostgreSQL contract and E2E databases. CI runs upgrade, PostgreSQL contracts, non-E2E checks, then E2E.
+The F5 upgrade database is separate from F5's own `votegpt_f5_contract` contract database and its separately provisioned marked `votegpt_e2e` E2E database. The bounded F5 CI/upgrade task adds `tests/ci-upgrade-database-contract.test.ts` and updates the inherited `tests/ci-e2e-database-contract.test.ts`; F5 CI runs upgrade, F5 PostgreSQL contracts, non-E2E checks, then E2E. No F4 resource is reused by F5.
 
 ## Ownership and execution order
 
 1. Coordinator merges this reviewed design and the later tests-first plan into the integration branch.
-2. F4 tasks run sequentially on `codex/f4-review-corrections`; each task uses a fresh implementer and separate reviewer.
-3. F4 reaches VERIFIED, passes hosted CI and independent whole-feature review, returns for Human Gate B, merges, receives post-merge verification, and closes through its status-only closeout PR.
-4. Coordinator integrates the F4 closeout into F5 and records the shared-surface handoff.
-5. F5 federal-only tasks may be prepared earlier where interfaces are frozen, but shared dashboard/database-test/E2E tasks begin only after the handoff. Each bounded task still uses a fresh implementer and separate reviewer.
-6. F5 repeats VERIFIED, CI, independent review, Human Gate B, feature merge, post-merge verification, and closeout.
-7. A cumulative integration-to-actual-`main` PR is presented for the user's final approval and is never merged autonomously.
+2. F4 tasks run sequentially on `codex/f4-review-corrections`; each task uses a fresh implementer and separate reviewer. F4 implements the destructive E2E guard, wrapper, seed/config/residence inspection wiring, marker states, six disposable application resources, and their ordered CI teardown before Gate B.
+3. F4 completes focused and full verification, feature PR, hosted CI, and independent whole-feature review; the coordinator then presents Human Gate B and pauses.
+4. After explicit F4 Gate B approval, the coordinator merges the F4 feature PR to the integration branch, runs post-merge checks, then creates, verifies, reviews, and merges the status-only F4 closeout PR/CI.
+5. Only after the F4 closeout, the coordinator integrates that head into F5 and records transfer of the exact shared surfaces: guard/wrapper/marked-E2E interface only, never F4 URLs or database instances. Dashboard page/test thaw for F5; global CSS does not.
+6. F5 federal-only tasks may be prepared earlier where interfaces are frozen. Shared dashboard, F5-owned database-test, inherited E2E interface, and CI tasks begin only after the handoff. Each bounded task still uses a fresh implementer and separate reviewer.
+7. F5 completes focused and full verification, feature PR, hosted CI, and independent whole-feature review; the coordinator then presents Human Gate B and pauses.
+8. After explicit F5 Gate B approval, the coordinator merges the F5 feature PR to the integration branch, runs post-merge checks, then creates, verifies, reviews, and merges the status-only F5 closeout PR/CI.
+9. Only after F5 closeout does the coordinator open a cumulative integration-to-actual-`main` PR. Final explicit user approval is required; actual `main` is never merged autonomously.
 
-No two implementers edit the same worktree concurrently. F4 owns its current correction surfaces; F5 owns federal-only surfaces and receives explicitly listed shared surfaces only after F4 closeout.
+No two implementers edit the same worktree concurrently. F4 owns its current correction and E2E/CI surfaces. F5 owns federal-only surfaces and receives the explicitly listed shared surfaces only after F4 closeout. `src/app/dashboard/page.tsx` and `src/app/dashboard/page.test.tsx` remain frozen until handoff; `src/app/globals.css` remains frozen throughout correction work.
 
 ## Error and recovery principles
 
@@ -292,9 +307,9 @@ No two implementers edit the same worktree concurrently. F4 owns its current cor
 - Live provider smoke tests in standard CI, retries, background federal refresh, or a new cache schema without measured need.
 - Visual redesign, new AI behavior, candidate work, or a generalized workflow framework.
 
-## Recommended Human Gate A choices
+## Approved design choices
 
-The design recommends these exact choices for approval:
+On 2026-07-17 the user approved these design choices:
 
 1. **Public member source:** use the official Biographical Directory page keyed by Bioguide ID; retain Congress.gov API URLs only as ingestion metadata.
 2. **Autofill:** keep `street-address` for accessibility and disclose that browser-managed autofill is outside voteGPT's app-storage boundary.
@@ -302,4 +317,4 @@ The design recommends these exact choices for approval:
 4. **Unreadable residence:** allow explicit ETag-guarded replacement as well as retry and deletion.
 5. **E2E guard:** require both a versioned opt-in and a database/path marker; an environment sentinel alone is insufficient.
 
-After the user approves or revises this design, the coordinator will write the separate tests-first implementation plan and complete task graph. RED and production work remain blocked until that plan is also reviewed at Human Gate A.
+The design approval does not approve the pending plan-level Congress roster or publisher-label refinements. The coordinator is writing the separate tests-first implementation plans and complete task graph. RED and production work remain blocked until those plans and refinements receive explicit plan-level Human Gate A approval.
