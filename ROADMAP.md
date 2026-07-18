@@ -479,7 +479,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** Pending successful post-merge verification.
 - **Next Human Gate:** Human Gate B — only after F4-R11 verification, feature PR/CI, mergeability, and independent review.
 
-## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F5 — Federal Officials [IN PROGRESS (RED)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
@@ -487,6 +487,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Review-correction authorization:** On 2026-07-17 the user explicitly approved the adversarial-review fixes, the hybrid district-validation direction, avoiding hardcoded policy values and magic numbers where authoritative data or named constants exist, and one fresh implementer subagent per bounded task. Human Gate A is required before RED or production work; its approved correction-plan evidence is recorded below and does not authorize a feature merge.
 - **Review-correction audit/setup:** The read-only audit admitted F4/F5 as `CONDITIONAL`. Inert `codex/f4-review-corrections` and `codex/f5-review-corrections` worktrees were created from integration commit `d2c856a206cd4a7b8cf71958da0465fe414dbac6`; no feature-design or production agent was dispatched. F5 may begin only federal-owned correction lanes and cannot reach final integration until the completed F4 correction closeout is integrated.
 - **Review-correction design approval evidence:** The reviewed [F4/F5 correction design](docs/superpowers/specs/2026-07-17-f4-f5-review-corrections-design.md) merged to the integration branch as `c5e12bbd7606f861ae353861e8c6fa29cd53a899`. On 2026-07-17 the user explicitly approved that overall design, including dynamic runtime district validation with generated Census fallback. Using one Congress state roster split by chamber and the exact `Biographical Directory of the United States Congress` publisher label were incorporated into the independently reviewed [F5 tests-first correction plan](docs/superpowers/plans/2026-07-17-f5-review-corrections.md), which then merged in [PR #12](https://github.com/Aheadboat/voteGPT/pull/12) as `d1cf4bfd5c9f474ba1c340cf59caf5eba266fb90`. **Plan-level Human Gate A approval evidence:** on 2026-07-18 the user replied `approve` to the Gate A packet, approving both reviewed tests-first plans. F5-R1 may enter RED after this coordinator record is merged and integrated into its feature worktree; F5-R4 and later remain blocked on the F4 closeout handoff, and no feature merge is authorized by this approval.
+- **F5-R1 RED evidence (2026-07-18):** The tests-only generator, policy, literal-audit, and jurisdiction changes define the checked-in Census/policy boundary. The coordinator replayed `npm.cmd test -- tests/generate-federal-policy.test.ts src/lib/federal-policy.test.ts src/lib/federal-officials.test.ts`; the new generator and policy suites fail solely because their planned modules do not exist, while the existing jurisdiction test proves the legacy parser still accepts California `0600` instead of rejecting it under generated Census policy. No production, data, provider, schema, or F4-owned file was created or changed before this recorded failure.
 - **Concurrency audit:** F5 may independently discover, design, and later implement approved federal-domain, Congress.gov adapter, fixture, source/freshness, and public-profile work in feature-owned files. Before handoff it cannot mutate F4's schema/residence/E2E/CI surfaces. Dashboard page/test are frozen rather than F4-owned until handoff; `src/app/globals.css` remains frozen throughout correction work.
 - **Activation merge evidence:** [Activation PR #3](https://github.com/Aheadboat/voteGPT/pull/3) merged reviewed head `602282284bef3cdabf9b92a699a66e68d478d574` to `main` as `f9e6420edcc4665d3f8f965f055148465ca9ec6a`; push CI 29482103398 and pull-request CI 29482118123 passed on the exact head. This branch integrated that merge before feature-lead dispatch.
 - **Post-activation branch baseline:** On `codex/f5-federal-officials`, the activation merge is an ancestor of `HEAD`; the focused foundation contract passed 14/14, the unchanged full suite passed 90/90, and `git diff --check` passed before feature-lead dispatch.
@@ -527,7 +528,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `RED`
 - **Branch:** `codex/f5-review-corrections`
 - **Base commit:** `d2c856a206cd4a7b8cf71958da0465fe414dbac6`
 - **Integrated-main commit:** `fbb7945a48d6887498da9116104422ebc565e42d`
