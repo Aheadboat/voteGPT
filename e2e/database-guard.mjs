@@ -1,5 +1,4 @@
-import { Pool } from "pg";
-import parseConnectionString from "pg-connection-string";
+import { Client, Pool } from "pg";
 
 export const E2E_DATABASE_MARKER_TABLE = "e2e_database_guard";
 export const E2E_DATABASE_MARKER_QUERY =
@@ -70,7 +69,7 @@ function normalizeDatabaseUrl(databaseUrl, environment) {
       parsed = new URL(databaseUrl);
       decodeURIComponent(parsed.hostname);
       decodeURI(parsed.pathname);
-      connection = parseConnectionString(databaseUrl);
+      connection = new Client({ connectionString: databaseUrl }).connectionParameters;
     } catch {
       throw new Error("E2E PostgreSQL database URL is invalid.");
     }
@@ -86,7 +85,7 @@ function normalizeDatabaseUrl(databaseUrl, environment) {
     const hostname = connection.host?.toLowerCase();
     const database = connection.database;
     const port = Number.parseInt(
-      connection.port || environment.PGPORT || "5432",
+      parsed.port || environment.PGPORT || connection.port || "5432",
       10,
     );
     if (!hostname || !database || !Number.isInteger(port)) {

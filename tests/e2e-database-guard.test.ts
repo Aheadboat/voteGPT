@@ -223,6 +223,15 @@ describe("destructive E2E database guard", () => {
     expect(readTargetMarker).not.toHaveBeenCalled();
   });
 
+  it("derives PostgreSQL routing identity through the declared pg package", () => {
+    const guard = repositoryFile("e2e/database-guard.mjs");
+
+    expect(guard).not.toMatch(/from\s+["']pg-connection-string["']/);
+    expect(guard).toMatch(
+      /new Client\(\{ connectionString: databaseUrl \}\)\.connectionParameters/,
+    );
+  });
+
   it.each([undefined, "different-marker"])(
     "rejects target-resident marker %s before migration or write",
     async (targetMarker) => {
