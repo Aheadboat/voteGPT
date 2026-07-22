@@ -198,6 +198,41 @@ describe("destructive E2E database guard", () => {
     },
   );
 
+  it.each([
+    [
+      "localhost and the IPv4 loopback address",
+      "postgresql://ambient:ambient-secret@localhost:5432/shared_db",
+      "postgresql://e2e:e2e-secret@127.0.0.1:5432/shared_db",
+    ],
+    [
+      "canonicalized 127/8 loopback aliases",
+      "postgresql://ambient:ambient-secret@127.0.0.1:5432/shared_db",
+      "postgresql://e2e:e2e-secret@127.1:5432/shared_db",
+    ],
+    [
+      "localhost and the IPv6 loopback address",
+      "postgresql://ambient:ambient-secret@localhost:5432/shared_db",
+      "postgresql://e2e:e2e-secret@[::1]:5432/shared_db",
+    ],
+  ])(
+    "rejects common loopback aliases expressed as %s before reading the marker",
+    async (_description, ambientDatabaseUrl, e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({
+            DATABASE_URL: ambientDatabaseUrl,
+            E2E_DATABASE_URL: e2eDatabaseUrl,
+          }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/ambient/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
   it("rejects an ambiguous PostgreSQL host before reading the marker", async () => {
     const { requireE2eDatabase } = await loadGuard();
     const readTargetMarker = vi.fn(async () => marker);
