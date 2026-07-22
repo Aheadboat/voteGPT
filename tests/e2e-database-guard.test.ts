@@ -140,6 +140,57 @@ describe("destructive E2E database guard", () => {
   );
 
   it.each([
+    [
+      "a DNS root-dot alias",
+      "postgresql://ambient:ambient-secret@localhost/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@localhost./votegpt_e2e",
+    ],
+    [
+      "a non-canonical IPv4 spelling accepted by pg",
+      "postgresql://ambient:ambient-secret@127.0.0.1/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@127.1/votegpt_e2e",
+    ],
+    [
+      "an expanded IPv6 spelling normalized by pg",
+      "postgresql://ambient:ambient-secret@[::1]/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@[0:0:0:0:0:0:0:1]/votegpt_e2e",
+    ],
+  ])(
+    "rejects equivalent PostgreSQL host identity expressed as %s before reading the marker",
+    async (_description, ambientDatabaseUrl, e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({
+            DATABASE_URL: ambientDatabaseUrl,
+            E2E_DATABASE_URL: e2eDatabaseUrl,
+          }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/ambient/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects an ambiguous PostgreSQL host before reading the marker", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          E2E_DATABASE_URL:
+            "postgresql://e2e:e2e-secret@localhost../votegpt_e2e",
+        }),
+        readTargetMarker,
+      ),
+    ).rejects.toThrow("E2E PostgreSQL database URL is invalid.");
+    expect(readTargetMarker).not.toHaveBeenCalled();
+  });
+
+  it.each([
     ["host", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?host=elsewhere"],
     ["port", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?port=5433"],
   ])(

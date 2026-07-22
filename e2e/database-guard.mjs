@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { Client, Pool } from "pg";
 
 export const E2E_DATABASE_MARKER_TABLE = "e2e_database_guard";
@@ -82,7 +83,7 @@ function normalizeDatabaseUrl(databaseUrl, environment) {
       );
     }
 
-    const hostname = connection.host?.toLowerCase();
+    const hostname = canonicalizeHost(connection.host);
     const database = connection.database;
     const port = Number.parseInt(
       parsed.port || environment.PGPORT || connection.port || "5432",
@@ -97,6 +98,39 @@ function normalizeDatabaseUrl(databaseUrl, environment) {
     return `postgresql://${hostname}:${port}/${database}`;
   }
   throw new Error("E2E database must use PostgreSQL only.");
+}
+
+function canonicalizeHost(hostname) {
+  const host = hostname?.toLowerCase();
+  if (!host) {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
+
+  if (host.startsWith("[") || host.endsWith("]")) {
+    const ipv6 = host.slice(1, -1);
+    if (!host.startsWith("[") || !host.endsWith("]") || isIP(ipv6) !== 6) {
+      throw new Error("E2E PostgreSQL database URL is invalid.");
+    }
+    return `[${ipv6}]`;
+  }
+
+  const withoutRootDot = host.endsWith(".") ? host.slice(0, -1) : host;
+  if (!withoutRootDot || withoutRootDot.endsWith(".")) {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
+  if (/^[0-9.]+$/.test(withoutRootDot)) {
+    try {
+      const canonicalIpv4 = new URL(`http://${withoutRootDot}`).hostname;
+      if (!withoutRootDot.includes(".") || isIP(canonicalIpv4) !== 4) {
+        throw new Error();
+      }
+      return canonicalIpv4;
+    } catch {
+      throw new Error("E2E PostgreSQL database URL is invalid.");
+    }
+  }
+
+  return withoutRootDot;
 }
 
 function singleMarker(rows) {
