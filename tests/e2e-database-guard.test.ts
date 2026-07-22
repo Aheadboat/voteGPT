@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -11,6 +12,13 @@ type GuardModule = {
 
 const marker = "0123456789abcdef0123456789abcdef";
 const target = "postgresql://e2e:e2e-secret@localhost/votegpt_e2e";
+const redactionSentinel = "task4-redaction-sentinel";
+const redactionUsername = `${redactionSentinel}-user`;
+const redactionPassword = `${redactionSentinel}-password`;
+
+function malformedDatabaseUrl(username = redactionUsername) {
+  return `postgresql://${username}:${redactionPassword}@[`;
+}
 
 async function loadGuard(): Promise<GuardModule> {
   const guardModule = "../e2e/database-guard.mjs";
@@ -163,6 +171,55 @@ describe("destructive E2E database guard", () => {
         readTargetMarker,
       ),
     ).rejects.toThrow(/invalid/i);
+    expect(readTargetMarker).not.toHaveBeenCalled();
+  });
+
+  it("redacts malformed target credentials from unhandled seed-style stderr", () => {
+    const malformedUrl = malformedDatabaseUrl();
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        "import { requireE2eDatabase } from './e2e/database-guard.mjs'; await requireE2eDatabase(process.env);",
+      ],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          DATABASE_URL: undefined,
+          E2E_DATABASE_MARKER: marker,
+          E2E_DATABASE_URL: malformedUrl,
+          E2E_DESTRUCTIVE_OPT_IN: "1",
+        },
+      },
+    );
+
+    expect(child.status).not.toBe(0);
+    expect(child.stderr).toContain("E2E PostgreSQL database URL is invalid.");
+    for (const secret of [
+      redactionSentinel,
+      redactionUsername,
+      redactionPassword,
+      malformedUrl,
+    ]) {
+      expect(child.stderr).not.toContain(secret);
+    }
+  });
+
+  it("redacts malformed ambient credentials before reading the marker", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          DATABASE_URL: malformedDatabaseUrl("task4-ambient-user"),
+        }),
+        readTargetMarker,
+      ),
+    ).rejects.toThrow("E2E PostgreSQL database URL is invalid.");
     expect(readTargetMarker).not.toHaveBeenCalled();
   });
 
