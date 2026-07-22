@@ -113,11 +113,14 @@ function canonicalizeHost(hostname) {
     if (!host.startsWith("[") || !host.endsWith("]") || isIP(ipv6) !== 6) {
       throw new Error("E2E PostgreSQL database URL is invalid.");
     }
-    return isLoopbackIpv6(ipv6) ? "loopback" : `[${ipv6}]`;
+    const canonicalIpv6 = canonicalizeIpv6(ipv6);
+    return isIP(canonicalIpv6) === 4 || canonicalIpv6 === "loopback"
+      ? canonicalIpv6
+      : `[${canonicalIpv6}]`;
   }
 
   if (isIP(host) === 6) {
-    return isLoopbackIpv6(host) ? "loopback" : host;
+    return canonicalizeIpv6(host);
   }
 
   const withoutRootDot = host.endsWith(".") ? host.slice(0, -1) : host;
@@ -125,28 +128,38 @@ function canonicalizeHost(hostname) {
     throw new Error("E2E PostgreSQL database URL is invalid.");
   }
   if (/^[0-9.]+$/.test(withoutRootDot)) {
-    try {
-      const canonicalIpv4 = new URL(`http://${withoutRootDot}`).hostname;
-      if (!withoutRootDot.includes(".") || isIP(canonicalIpv4) !== 4) {
-        throw new Error();
-      }
-      return canonicalIpv4.startsWith("127.") ? "loopback" : canonicalIpv4;
-    } catch {
-      throw new Error("E2E PostgreSQL database URL is invalid.");
-    }
+    return canonicalizeIpv4(withoutRootDot);
   }
 
   return withoutRootDot === "localhost" ? "loopback" : withoutRootDot;
 }
 
-function isLoopbackIpv6(ipv6) {
-  const mappedIpv4 = /^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/.exec(ipv6);
-  return (
-    ipv6 === "::1" ||
-    (mappedIpv4 !== null &&
-      Number.parseInt(mappedIpv4[1], 16) >= 0x7f00 &&
-      Number.parseInt(mappedIpv4[1], 16) <= 0x7fff)
+function canonicalizeIpv6(ipv6) {
+  if (ipv6 === "::1") {
+    return "loopback";
+  }
+  const mappedIpv4 = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(ipv6);
+  if (mappedIpv4 === null) {
+    return ipv6;
+  }
+  const [firstWord, secondWord] = mappedIpv4.slice(1).map((word) =>
+    Number.parseInt(word, 16),
   );
+  return canonicalizeIpv4(
+    `${firstWord >> 8}.${firstWord & 0xff}.${secondWord >> 8}.${secondWord & 0xff}`,
+  );
+}
+
+function canonicalizeIpv4(ipv4) {
+  try {
+    const canonicalIpv4 = new URL(`http://${ipv4}`).hostname;
+    if (!ipv4.includes(".") || isIP(canonicalIpv4) !== 4) {
+      throw new Error();
+    }
+    return canonicalIpv4.startsWith("127.") ? "loopback" : canonicalIpv4;
+  } catch {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
 }
 
 function singleMarker(rows) {
