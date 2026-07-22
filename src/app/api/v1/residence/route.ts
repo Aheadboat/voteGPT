@@ -1,5 +1,7 @@
 import { getRuntimeAuth } from "@/lib/auth";
+import { readBoundedJson } from "@/lib/bounded-json";
 import { verifyResolutionToken } from "@/lib/residence";
+import { SAVED_RESIDENCE_BODY_CAP_BYTES } from "@/lib/residence-policy";
 import {
   deleteSavedResidence,
   getSavedResidence,
@@ -68,7 +70,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const body = parseSaveResidenceRequest(
-    await request.json().catch(() => null),
+    await readBoundedJson(request, SAVED_RESIDENCE_BODY_CAP_BYTES),
   );
   if (body === null) {
     return privateJson(invalidRequest, 400);
@@ -81,6 +83,7 @@ export async function POST(request: Request): Promise<Response> {
   const verifiedResolution = verifyResolutionToken(
     body.resolutionToken,
     userId,
+    { kind: "address", address: body.address },
     secret,
     new Date(),
   );

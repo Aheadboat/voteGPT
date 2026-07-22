@@ -1,6 +1,10 @@
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import { lookupCensus } from "./census-geocoder";
 import { lookupGoogleAddress } from "./google-civic";
+import {
+  RESIDENCE_RESOLUTION_TOKEN_VERSION,
+  isV2ResolutionTokenGrammar,
+} from "./residence-policy";
 
 export type ResidenceInput =
   | { kind: "address"; address: string }
@@ -69,6 +73,7 @@ export type CreateResolutionToken = (
 export type VerifyResolutionToken = (
   token: string,
   userId: string,
+  expectedInput: ResidenceInput,
   secret: string,
   now: Date,
 ) => Extract<ResolutionOutcome, { status: "matched" | "partial" }> | null;
@@ -111,9 +116,9 @@ export type ResolveResidence = (
 
 const addressKeys = new Set(["kind", "address"]);
 const coordinateKeys = new Set(["kind", "latitude", "longitude"]);
-const tokenVersion = "v1";
+const tokenVersion = RESIDENCE_RESOLUTION_TOKEN_VERSION;
 const tokenLifetimeMilliseconds = 10 * 60 * 1_000;
-const tokenPurpose = "voteGPT/residence-resolution/v1";
+const tokenPurpose = `voteGPT/residence-resolution/${tokenVersion}`;
 const providerTimeoutMilliseconds = 5_000;
 const maximumPublicCollectionSize = 64;
 const maximumPublicTextLength = 2_048;
@@ -192,13 +197,17 @@ export const createResolutionToken: CreateResolutionToken = (
   secret,
   now,
 ) => {
+  const canonicalInput = parseResidenceInput(input);
+  if (canonicalInput === null) {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
   let normalizedResolution: ResolvedResidence;
   try {
     normalizedResolution = copyResolvedResidence(resolution);
   } catch {
     throw new Error("Cannot sign an invalid residence resolution.");
   }
-  if (!isPublicResidenceResolution(normalizedResolution, input)) {
+  if (!isPublicResidenceResolution(normalizedResolution, canonicalInput)) {
     throw new Error("Cannot sign an invalid residence resolution.");
   }
 
@@ -207,6 +216,7 @@ export const createResolutionToken: CreateResolutionToken = (
   ).toISOString();
   const payload = {
     version: tokenVersion,
+    input: canonicalInput,
     userId,
     issuedAt: now.toISOString(),
     expiresAt,
@@ -227,19 +237,16 @@ export const createResolutionToken: CreateResolutionToken = (
 export const verifyResolutionToken: VerifyResolutionToken = (
   token,
   userId,
+  expectedInput,
   secret,
   now,
 ) => {
+  if (!isV2ResolutionTokenGrammar(token)) {
+    return null;
+  }
+
   try {
-    const [version, encodedPayload, receivedSignature, extra] = token.split(".");
-    if (
-      version !== tokenVersion ||
-      !encodedPayload ||
-      !receivedSignature ||
-      extra !== undefined
-    ) {
-      return null;
-    }
+    const [version, encodedPayload, receivedSignature] = token.split(".");
 
     const expectedSignature = Buffer.from(
       sign(`${version}.${encodedPayload}`, secret),
@@ -256,7 +263,7 @@ export const verifyResolutionToken: VerifyResolutionToken = (
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as unknown;
-    if (!isResolutionTokenPayload(payload, userId, now)) {
+    if (!isResolutionTokenPayload(payload, userId, expectedInput, now)) {
       return null;
     }
 
@@ -412,9 +419,11 @@ function copyResolvedResidence(resolution: ResolvedResidence): ResolvedResidence
 function isResolutionTokenPayload(
   value: unknown,
   userId: string,
+  expectedInput: ResidenceInput,
   now: Date,
 ): value is {
-  version: "v1";
+  version: typeof RESIDENCE_RESOLUTION_TOKEN_VERSION;
+  input: ResidenceInput;
   userId: string;
   issuedAt: string;
   expiresAt: string;
@@ -424,10 +433,25 @@ function isResolutionTokenPayload(
     !isRecord(value) ||
     !hasExactKeys(
       value,
-      new Set(["version", "userId", "issuedAt", "expiresAt", "resolution"]),
+      new Set([
+        "version",
+        "input",
+        "userId",
+        "issuedAt",
+        "expiresAt",
+        "resolution",
+      ]),
     ) ||
-    value.version !== tokenVersion ||
+    value.version !== tokenVersion
+  ) {
+    return false;
+  }
+
+  const input = parseResidenceInput(value.input);
+  if (
+    input === null ||
     value.userId !== userId ||
+    !sameResidenceInput(input, expectedInput) ||
     !isIsoDate(value.issuedAt) ||
     !isIsoDate(value.expiresAt) ||
     Date.parse(value.issuedAt) > Date.parse(value.expiresAt) ||
@@ -435,12 +459,22 @@ function isResolutionTokenPayload(
     Date.parse(value.expiresAt) - Date.parse(value.issuedAt) !==
       tokenLifetimeMilliseconds ||
     Date.parse(value.expiresAt) <= now.getTime() ||
-    !isPublicResidenceResolution(value.resolution)
+    !isPublicResidenceResolution(value.resolution, input)
   ) {
     return false;
   }
 
   return true;
+}
+
+function sameResidenceInput(value: unknown, expected: ResidenceInput) {
+  const actualInput = parseResidenceInput(value);
+  const expectedInput = parseResidenceInput(expected);
+  return (
+    actualInput !== null &&
+    expectedInput !== null &&
+    JSON.stringify(actualInput) === JSON.stringify(expectedInput)
+  );
 }
 
 export function isPublicResidenceResolution(
@@ -557,22 +591,48 @@ function reflectsAddress(fields: PublicResolutionField[], address: string) {
     return true;
   }
 
-  for (const field of fields) {
-    const layers = decodePublicText(field.text);
+  const layers = fields.map((field) => decodePublicText(field.text));
+  return (
+    layers.some((fieldLayers) => fieldLayers === null) ||
+    containsAddressAcrossPublicFields(layers, normalizedAddress)
+  );
+}
+
+function containsAddressAcrossPublicFields(
+  layersByField: Array<string[] | null>,
+  target: string,
+) {
+  let carriedOffsets = new Set<number>();
+
+  for (const layers of layersByField) {
     if (layers === null) {
       return true;
     }
 
-    if (
-      layers.some((layer) =>
-        containsJoinedTokenSequence(
-          normalizeWordTokens(layer),
-          normalizedAddress,
-        ),
-      )
-    ) {
-      return true;
+    const nextOffsets = new Set<number>();
+    for (const layer of layers) {
+      let offsets = new Set([...carriedOffsets, 0]);
+      for (const token of normalizeWordTokens(layer)) {
+        const followingOffsets = new Set<number>();
+        for (const offset of offsets) {
+          if (!target.startsWith(token, offset)) {
+            continue;
+          }
+          const nextOffset = offset + token.length;
+          if (nextOffset === target.length) {
+            return true;
+          }
+          followingOffsets.add(nextOffset);
+        }
+        offsets = new Set([...followingOffsets, 0]);
+      }
+      for (const offset of offsets) {
+        if (offset !== 0) {
+          nextOffsets.add(offset);
+        }
+      }
     }
+    carriedOffsets = nextOffsets;
   }
 
   return false;
@@ -681,24 +741,6 @@ function normalizeWordTokens(value: string) {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
   return normalized.length === 0 ? [] : normalized.split(/\s+/u);
-}
-
-function containsJoinedTokenSequence(tokens: string[], target: string) {
-  for (let start = 0; start < tokens.length; start += 1) {
-    let offset = 0;
-    for (let end = start; end < tokens.length; end += 1) {
-      const token = tokens[end];
-      if (!target.startsWith(token, offset)) {
-        break;
-      }
-      offset += token.length;
-      if (offset === target.length) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 function normalizeUnicodeNumbers(value: string) {

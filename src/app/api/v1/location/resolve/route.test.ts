@@ -21,6 +21,7 @@ import {
 } from "../../../../../../tests/fixtures/residence-responses";
 import { getRuntimeAuth } from "@/lib/auth";
 import * as residenceModule from "@/lib/residence";
+import { RESIDENCE_PREVIEW_BODY_CAP_BYTES } from "@/lib/residence-policy";
 import { POST } from "./route";
 
 vi.mock("@/lib/auth", () => ({ getRuntimeAuth: vi.fn() }));
@@ -117,6 +118,26 @@ describe("POST /api/v1/location/resolve", () => {
     expect(providerFetch).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized preview body before auth, provider, signing, logging, or response work", async () => {
+    const body = `{"kind":"address","address":"x"}${" ".repeat(
+      RESIDENCE_PREVIEW_BODY_CAP_BYTES,
+    )}`;
+    const providerFetch = vi.fn<typeof globalThis.fetch>();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", providerFetch);
+
+    await expectPrivateJson(
+      await POST(resolveRequest(body, { raw: true })),
+      400,
+      invalidResidenceResponse,
+    );
+
+    expect(getRuntimeAuth).not.toHaveBeenCalled();
+    expect(getSession).not.toHaveBeenCalled();
+    expect(providerFetch).not.toHaveBeenCalled();
+    expect(logged).not.toHaveBeenCalled();
+  });
+
   it("returns a signed Google match without reflecting precise input", async () => {
     const privateAddress =
       "742 SENTINEL ROUTE ADDRESS, Example City, CA 90000";
@@ -150,6 +171,7 @@ describe("POST /api/v1/location/resolve", () => {
     const resolution = residenceModule.verifyResolutionToken(
       String(body.resolutionToken),
       userId,
+      { kind: "address", address: privateAddress },
       secret,
       now,
     );
@@ -160,7 +182,8 @@ describe("POST /api/v1/location/resolve", () => {
       coverageNotes: body.coverageNotes,
     });
     expect(decodedToken(String(body.resolutionToken))).toEqual({
-      version: "v1",
+      version: "v2",
+      input: { kind: "address", address: privateAddress },
       userId,
       issuedAt: now.toISOString(),
       expiresAt: "2026-07-14T20:10:00.000Z",
@@ -219,6 +242,7 @@ describe("POST /api/v1/location/resolve", () => {
       residenceModule.verifyResolutionToken(
         String(body.resolutionToken),
         userId,
+        { kind: "coordinates", ...censusFixtureCoordinates },
         secret,
         now,
       ),
@@ -286,7 +310,7 @@ describe("POST /api/v1/location/resolve", () => {
       /SENTINEL|12\.345678|-98\.765432|provider\.invalid|rawAddress|normalizedInput/,
     );
     expect(serializedToken).not.toMatch(
-      /SENTINEL|12\.345678|-98\.765432|provider\.invalid|rawAddress|normalizedInput/,
+      /12\.345678|-98\.765432|provider\.invalid|rawAddress|normalizedInput/,
     );
     expect(body).toMatchObject({
       status: "matched",

@@ -20,6 +20,11 @@ import {
   unavailableResidenceResponse,
 } from "../../tests/fixtures/residence-responses";
 import {
+  MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS,
+  MAX_RESOLUTION_TOKEN_SIGNATURE_CHARACTERS,
+  RESIDENCE_RESOLUTION_TOKEN_VERSION,
+} from "./residence-policy";
+import {
   createResolutionToken,
   parseResidenceInput,
   resolveResidence,
@@ -268,7 +273,7 @@ describe("resolution token", () => {
       now,
     );
 
-    expect(verifyResolutionToken(resolutionToken, userId, secret, now)).toEqual(
+    expect(verifyResolutionToken(resolutionToken, userId, input, secret, now)).toEqual(
       resolution ?? resolvedResidence,
     );
   });
@@ -634,7 +639,8 @@ describe("resolution token", () => {
 
   it("rejects a correctly signed token whose public resolution exceeds bounds", () => {
     const token = signResolutionPayload({
-      version: "v1",
+      version: "v2",
+      input: addressInput,
       userId,
       issuedAt: now.toISOString(),
       expiresAt: "2026-07-14T20:10:00.000Z",
@@ -644,7 +650,7 @@ describe("resolution token", () => {
       },
     });
 
-    expect(verifyResolutionToken(token, userId, secret, now)).toBeNull();
+    expect(verifyResolutionToken(token, userId, addressInput, secret, now)).toBeNull();
   });
 
   it.each([
@@ -660,14 +666,15 @@ describe("resolution token", () => {
     ],
   ])("rejects a correctly signed token with %s", (_case, issuedAt, expiresAt) => {
     const token = signResolutionPayload({
-      version: "v1",
+      version: "v2",
+      input: addressInput,
       userId,
       issuedAt,
       expiresAt,
       resolution: resolvedResidence,
     });
 
-    expect(verifyResolutionToken(token, userId, secret, now)).toBeNull();
+    expect(verifyResolutionToken(token, userId, addressInput, secret, now)).toBeNull();
   });
 
   it("creates a readable purpose-derived HMAC token with exact claims and expiry", () => {
@@ -697,12 +704,13 @@ describe("resolution token", () => {
 
     expect(expiresAt).toBe("2026-07-14T20:10:00.000Z");
     const [version, encodedPayload, signature] = resolutionToken.split(".");
-    expect(version).toBe("v1");
+    expect(version).toBe("v2");
 
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson) as Record<string, unknown>;
     expect(payload).toEqual({
-      version: "v1",
+      version: "v2",
+      input: addressInput,
       userId,
       issuedAt: now.toISOString(),
       expiresAt,
@@ -712,13 +720,13 @@ describe("resolution token", () => {
       /SENTINEL ADDRESS|12\.345678|-98\.765432|SENTINEL NORMALIZED INPUT|provider\.invalid/,
     );
 
-    const signingInput = `v1.${encodedPayload}`;
+    const signingInput = `v2.${encodedPayload}`;
     const purposeKey = Buffer.from(
       hkdfSync(
         "sha256",
         secret,
         Buffer.alloc(0),
-        "voteGPT/residence-resolution/v1",
+        "voteGPT/residence-resolution/v2",
         32,
       ),
     );
@@ -732,7 +740,7 @@ describe("resolution token", () => {
     );
   });
 
-  it("verifies only an untampered token for the same user before expiry", () => {
+  it("binds v2 tokens to user, issued time, input kind, and canonical input", () => {
     const { resolutionToken } = createResolutionToken(
       addressInput,
       resolvedResidence,
@@ -745,26 +753,83 @@ describe("resolution token", () => {
       verifyResolutionToken(
         resolutionToken,
         userId,
+        addressInput,
         secret,
         new Date("2026-07-14T20:09:59.999Z"),
       ),
     ).toEqual(resolvedResidence);
     expect(
-      verifyResolutionToken(resolutionToken, "another-user", secret, now),
+      verifyResolutionToken(resolutionToken, "another-user", addressInput, secret, now),
     ).toBeNull();
     expect(
       verifyResolutionToken(
         resolutionToken,
         userId,
+        { kind: "address", address: "123 Fixture Avenue, Other City, CA 90000" },
         secret,
         new Date("2026-07-14T20:10:00.000Z"),
+      ),
+    ).toBeNull();
+    expect(
+      verifyResolutionToken(
+        resolutionToken,
+        userId,
+        coordinateInput,
+        secret,
+        new Date("2026-07-14T20:09:59.999Z"),
+      ),
+    ).toBeNull();
+    expect(
+      verifyResolutionToken(
+        resolutionToken,
+        userId,
+        addressInput,
+        secret,
+        new Date("2026-07-14T19:59:59.999Z"),
       ),
     ).toBeNull();
 
     const parts = resolutionToken.split(".");
     parts[1] = `${parts[1].slice(0, -1)}${parts[1].endsWith("A") ? "B" : "A"}`;
-    expect(verifyResolutionToken(parts.join("."), userId, secret, now)).toBeNull();
-    expect(verifyResolutionToken("not-a-token", userId, secret, now)).toBeNull();
+    expect(verifyResolutionToken(parts.join("."), userId, addressInput, secret, now)).toBeNull();
+    expect(verifyResolutionToken("not-a-token", userId, addressInput, secret, now)).toBeNull();
+  });
+
+  it("rejects exact-location reconstruction split across rendered public fields", () => {
+    expect(() =>
+      createResolutionToken(
+        addressInput,
+        {
+          ...resolvedResidence,
+          coverageNotes: [
+            "Resolved for 123 Fixture",
+            "Avenue Example City CA 90000.",
+          ],
+        },
+        userId,
+        secret,
+        now,
+      ),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it("rejects invalid or oversized token grammar before verification", () => {
+    const invalidGrammar = `${RESIDENCE_RESOLUTION_TOKEN_VERSION}.${"A".repeat(
+      MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS + 1,
+    )}.${"A".repeat(MAX_RESOLUTION_TOKEN_SIGNATURE_CHARACTERS)}`;
+
+    expect(
+      verifyResolutionToken(invalidGrammar, userId, addressInput, secret, now),
+    ).toBeNull();
+    expect(
+      verifyResolutionToken(
+        `${RESIDENCE_RESOLUTION_TOKEN_VERSION}.payload.+`,
+        userId,
+        addressInput,
+        secret,
+        now,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -1131,13 +1196,13 @@ function signResolutionPayload(payload: unknown) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
     "base64url",
   );
-  const signingInput = `v1.${encodedPayload}`;
+  const signingInput = `v2.${encodedPayload}`;
   const purposeKey = Buffer.from(
     hkdfSync(
       "sha256",
       secret,
       Buffer.alloc(0),
-      "voteGPT/residence-resolution/v1",
+      "voteGPT/residence-resolution/v2",
       32,
     ),
   );

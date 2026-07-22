@@ -9,6 +9,7 @@ import { createDatabase } from "@/db";
 import { session, user } from "@/db/schema";
 import { createAuth, getRuntimeAuth } from "@/lib/auth";
 import * as residenceModule from "@/lib/residence";
+import { SAVED_RESIDENCE_BODY_CAP_BYTES } from "@/lib/residence-policy";
 import * as savedResidenceModule from "@/lib/saved-residence";
 import type {
   SavedResidenceResolution,
@@ -252,6 +253,26 @@ describe("/api/v1/residence request boundary", () => {
     expect(savedResidenceModule.saveSavedResidence).not.toHaveBeenCalled();
   });
 
+  it("rejects an oversized save body and invalid token grammar before crypto or persistence", async () => {
+    const oversized = `${JSON.stringify(validSaveBody())}${" ".repeat(
+      SAVED_RESIDENCE_BODY_CAP_BYTES,
+    )}`;
+    await expectPrivateJson(
+      await POST(residenceRequest("POST", oversized, { raw: true })),
+      400,
+      errors.invalidRequest,
+    );
+    expect(residenceModule.verifyResolutionToken).not.toHaveBeenCalled();
+    expect(savedResidenceModule.saveSavedResidence).not.toHaveBeenCalled();
+
+    await expectPrivateJson(
+      await POST(residenceRequest("POST", validSaveBody("v2.invalid.+"))),
+      422,
+      errors.invalidToken,
+    );
+    expect(savedResidenceModule.saveSavedResidence).not.toHaveBeenCalled();
+  });
+
   it("rejects malformed or non-exact DELETE bodies after authentication", async () => {
     const invalidBodies: unknown[] = [
       null,
@@ -283,7 +304,6 @@ describe("/api/v1/residence request boundary", () => {
 
   it("orders origin, JSON type, session, exact body, token, then POST operation", async () => {
     const request = residenceRequest("POST", validSaveBody());
-    const readBody = vi.spyOn(request, "json");
 
     await expectPrivateJson(
       await POST(request),
@@ -294,7 +314,6 @@ describe("/api/v1/residence request boundary", () => {
     expectStrictlyIncreasing([
       firstCall(vi.mocked(getRuntimeAuth)),
       firstCall(getSession),
-      firstCall(readBody),
       firstCall(vi.mocked(savedResidenceModule.parseSaveResidenceRequest)),
       firstCall(vi.mocked(residenceModule.verifyResolutionToken)),
       firstCall(vi.mocked(savedResidenceModule.saveSavedResidence)),
@@ -691,7 +710,7 @@ describe("/api/v1/residence fail-closed privacy", () => {
 
   it("keeps exact address and token out of URLs, logs, and error responses", async () => {
     const privateAddress = "742 SENTINEL PRIVATE ADDRESS, Example City";
-    const privateToken = signedToken(userId, now);
+    const privateToken = signedToken(userId, now, privateAddress);
     const logged = [
       vi.spyOn(console, "error").mockImplementation(() => undefined),
       vi.spyOn(console, "warn").mockImplementation(() => undefined),
@@ -786,9 +805,13 @@ function validBodyFor(method: "POST" | "DELETE") {
   return method === "POST" ? validSaveBody() : validDeleteBody();
 }
 
-function signedToken(ownerId: string, issuedAt: Date) {
+function signedToken(
+  ownerId: string,
+  issuedAt: Date,
+  address: string = savedResidenceView.address,
+) {
   return residenceModule.createResolutionToken(
-    { kind: "address", address: savedResidenceView.address },
+    { kind: "address", address },
     resolution,
     ownerId,
     secret,
