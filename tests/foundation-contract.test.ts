@@ -197,9 +197,12 @@ describe("development foundation", () => {
       "npx playwright install --with-deps chromium",
       "npm run test:e2e",
     ]
-    const executableCommands = [...workflow.matchAll(/^\s*run:\s*(.+?)\s*$/gm)].map(
-      ([, command]) => command,
-    )
+    const yamlBlockScalarIndicators = new Set(["|", ">-"])
+    const executableCommands = [
+      ...workflow.matchAll(/^\s*run:\s*(.+?)\s*$/gm),
+    ]
+      .map(([, command]) => command)
+      .filter((command) => !yamlBlockScalarIndicators.has(command))
 
     expect(executableCommands).toEqual(commands)
 
@@ -207,7 +210,19 @@ describe("development foundation", () => {
     expect(workflow).toMatch(/pull_request:\s*\n/)
     expect(workflow).toContain("node-version: 24")
     expect(workflow).not.toMatch(/^\s*continue-on-error\s*:/m)
-    expect(workflow).not.toMatch(/^\s*if\s*:/m)
+    expect(
+      [...workflow.matchAll(/^\s*if:\s*(.+?)\s*$/gm)].map(
+        ([, condition]) => condition,
+      ),
+    ).toEqual(["always()"])
+    expectTokensInOrder(workflow, [
+      "Provision marked destructive E2E database",
+      "Validate and apply database migrations",
+      "Run PostgreSQL auth contract",
+      "Run non-E2E checks",
+      "Run end-to-end tests",
+      "Destroy disposable databases",
+    ])
   })
 
   it("keeps the environment example free of configured values", () => {
@@ -221,6 +236,9 @@ describe("development foundation", () => {
         "BETTER_AUTH_SECRET=",
         "BETTER_AUTH_URL=",
         "DATABASE_URL=",
+        "E2E_DATABASE_MARKER=",
+        "E2E_DATABASE_URL=",
+        "E2E_DESTRUCTIVE_OPT_IN=",
         "EMAIL_FROM=",
         "EMAIL_SERVER=",
         "GOOGLE_CLIENT_ID=",
