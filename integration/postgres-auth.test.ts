@@ -1,9 +1,28 @@
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { account, authSchema, session, user, verification } from "@/db/schema";
+import {
+  account,
+  authSchema,
+  databaseSchema,
+  savedResidence,
+  savedResidenceDivision,
+  session,
+  user,
+  verification,
+} from "@/db/schema";
 import { deleteCurrentAccount } from "@/lib/account";
 import { createAuth } from "@/lib/auth";
+import {
+  createSavedResidenceRepository,
+  decryptSavedResidenceAddress,
+  encryptSavedResidenceAddress,
+  loadResidenceEncryptionKeyring,
+  type SavedResidenceResolution,
+} from "@/lib/saved-residence";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -25,6 +44,290 @@ afterAll(async () => {
 });
 
 describe("hosted PostgreSQL auth contract", () => {
+  it("allows only one of two stale residence mutations across PostgreSQL connections", async () => {
+    const firstPool = residenceRacePool();
+    const secondPool = residenceRacePool();
+    const firstDatabase = drizzle(firstPool, { schema: databaseSchema });
+    const secondDatabase = drizzle(secondPool, { schema: databaseSchema });
+    const transactionBarrier = twoPartyBarrier();
+    type RaceTransaction = Parameters<
+      Parameters<typeof firstDatabase.transaction>[0]
+    >[0];
+    const synchronizeTransaction = (database: typeof firstDatabase) =>
+      new Proxy(database, {
+        get(target, property, receiver) {
+          if (property === "transaction") {
+            return async <T>(
+              callback: (transaction: RaceTransaction) => Promise<T>,
+            ) =>
+              target.transaction(async (transaction) => {
+                await transactionBarrier.arrive();
+                return callback(transaction);
+              });
+          }
+          const value = Reflect.get(target, property, receiver) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    const firstRepository = createSavedResidenceRepository(
+      synchronizeTransaction(firstDatabase),
+    );
+    const secondRepository = createSavedResidenceRepository(
+      synchronizeTransaction(secondDatabase),
+    );
+    const userId = "postgres_residence_race_user";
+    const keyring = loadResidenceEncryptionKeyring({
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: "postgres-race",
+      RESIDENCE_ENCRYPTION_KEYS: JSON.stringify([
+        { key: encodedKey(7), version: "postgres-race" },
+      ]),
+    });
+    const firstResolution: SavedResidenceResolution = {
+      coverageNotes: ["Synthetic first-save coverage is partial."],
+      divisions: [
+        {
+          id: "ocd-division/country:us/state:aa/cd:1",
+          idScheme: "ocd",
+          name: "Synthetic Alpha Congressional District",
+          type: "congressional_district",
+        },
+      ],
+      source: {
+        checkedAt: "2026-07-16T20:10:00.000Z",
+        effectiveAt: null,
+        name: "Google Civic Information API",
+        url: "https://developers.google.com/civic-information",
+      },
+      status: "matched",
+    };
+    const secondResolution: SavedResidenceResolution = {
+      coverageNotes: ["Synthetic replacement coverage is partial."],
+      divisions: [
+        {
+          id: "ocd-division/country:us/state:bb",
+          idScheme: "ocd",
+          name: "Synthetic Beta State",
+          type: "state",
+        },
+        {
+          id: "0500000US00001",
+          idScheme: "geoid",
+          name: "Synthetic Beta County",
+          type: "county",
+        },
+      ],
+      source: {
+        benchmark: "Public_AR_Current",
+        checkedAt: "2026-07-16T20:10:01.000Z",
+        effectiveAt: "2026-01-01T00:00:00.000Z",
+        name: "U.S. Census Geocoder",
+        url: "https://geocoding.geo.census.gov/geocoder/",
+        vintage: "Current_Current",
+      },
+      status: "partial",
+    };
+
+    try {
+      const [firstBackend, secondBackend] = await Promise.all([
+        firstPool.query<{ pid: number }>("select pg_backend_pid() as pid"),
+        secondPool.query<{ pid: number }>("select pg_backend_pid() as pid"),
+      ]);
+      expect(firstBackend.rows[0]?.pid).toBeTypeOf("number");
+      expect(secondBackend.rows[0]?.pid).toBeTypeOf("number");
+      expect(firstBackend.rows[0]?.pid).not.toBe(secondBackend.rows[0]?.pid);
+
+      await firstDatabase.insert(user).values({
+        email: "postgres-residence-race@example.invalid",
+        id: userId,
+        name: "PostgreSQL Residence Race Voter",
+      });
+
+      const initial = await createSavedResidenceRepository(firstDatabase).save(
+        userId,
+        {
+          address: "100 Initial Residence Way",
+          consent: { accepted: true, version: "saved-residence-v1" },
+          resolutionToken: "synthetic.initial",
+        },
+        firstResolution,
+        new Date("2026-07-16T20:09:00.000Z"),
+        keyring,
+        null,
+      );
+      expect(initial?.revision).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+
+      const results = await withinMilliseconds(
+        Promise.all([
+          firstRepository.save(
+            userId,
+            {
+              address: "101 Synthetic Alpha Avenue",
+              consent: { accepted: true, version: "saved-residence-v1" },
+              resolutionToken: "synthetic.alpha",
+            },
+            firstResolution,
+            new Date("2026-07-16T20:10:00.000Z"),
+            keyring,
+            initial!.revision,
+          ),
+          secondRepository.save(
+            userId,
+            {
+              address: "202 Synthetic Beta Boulevard",
+              consent: { accepted: true, version: "saved-residence-v1" },
+              resolutionToken: "synthetic.beta",
+            },
+            secondResolution,
+            new Date("2026-07-16T20:10:01.000Z"),
+            keyring,
+            initial!.revision,
+          ),
+        ]),
+        10_000,
+      );
+
+      expect(results.filter((result) => result !== null)).toHaveLength(1);
+      expect(results.filter((result) => result === null)).toHaveLength(1);
+      expect(transactionBarrier.arrivals()).toBe(2);
+      const replacement = results.find((result) => result !== null);
+      expect(replacement).toBeDefined();
+
+      const storedResidence = await firstRepository.get(userId, keyring);
+      expect(storedResidence).toEqual({
+        residence: replacement?.residence,
+        revision: replacement?.revision,
+      });
+      expect(
+        await firstDatabase
+          .select({ userId: savedResidence.userId })
+          .from(savedResidence)
+          .where(eq(savedResidence.userId, userId)),
+      ).toEqual([{ userId }]);
+      expect(
+        await firstDatabase
+          .select({
+            displayOrder: savedResidenceDivision.displayOrder,
+            id: savedResidenceDivision.divisionId,
+            idScheme: savedResidenceDivision.idScheme,
+            name: savedResidenceDivision.name,
+            type: savedResidenceDivision.type,
+          })
+          .from(savedResidenceDivision)
+          .where(eq(savedResidenceDivision.userId, userId))
+          .orderBy(savedResidenceDivision.displayOrder),
+      ).toEqual(
+        replacement?.residence.resolution.divisions.map(
+          ({ id, idScheme, name, type }, displayOrder) => ({
+            displayOrder,
+            id,
+            idScheme,
+            name,
+            type,
+          }),
+        ),
+      );
+    } finally {
+      await Promise.all([firstPool.end(), secondPool.end()]);
+    }
+  }, 20_000);
+
+  it("runs one-shot residence rotation with count-only output and a committed fresh envelope", async () => {
+    const userId = "postgres_rotation_user";
+    const address = "901 PostgreSQL Private Residence Lane";
+    const serializedKeys = JSON.stringify([
+      { version: "2026-01", key: encodedKey(1) },
+      { version: "2026-07", key: encodedKey(2) },
+    ]);
+    const legacyKeyring = loadResidenceEncryptionKeyring({
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-01",
+      RESIDENCE_ENCRYPTION_KEYS: serializedKeys,
+    });
+    const activeKeyring = loadResidenceEncryptionKeyring({
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-07",
+      RESIDENCE_ENCRYPTION_KEYS: serializedKeys,
+    });
+    const before = encryptSavedResidenceAddress(address, userId, legacyKeyring);
+    const now = new Date("2026-07-16T20:00:00.000Z");
+    const revision = "33333333-3333-4333-8333-333333333333";
+    await db.insert(user).values({
+      email: "postgres-rotation@example.com",
+      id: userId,
+      name: "PostgreSQL Rotation Voter",
+    });
+    await db.insert(savedResidence).values({
+      ciphertext: before.ciphertext,
+      consentVersion: "saved-residence-v1",
+      consentedAt: now,
+      coverageNotes: [],
+      createdAt: now,
+      envelopeVersion: before.version,
+      iv: before.iv,
+      keyVersion: before.keyVersion,
+      resolutionStatus: "matched",
+      revision,
+      sourceCheckedAt: now,
+      sourceName: "PostgreSQL fixture civic source",
+      sourceUrl: "https://example.com/postgres-civic-source",
+      tag: before.tag,
+      updatedAt: now,
+      userId,
+    });
+
+    const command = await runRotationCommand({
+      DATABASE_URL: connectionString,
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-07",
+      RESIDENCE_ENCRYPTION_KEYS: serializedKeys,
+    });
+    expect(command).toEqual({
+      code: 0,
+      stderr: "",
+      stdout: '{"rotated":1,"skipped":0,"remaining":0}\n',
+    });
+
+    const [stored] = await db
+      .select({
+        ciphertext: savedResidence.ciphertext,
+        envelopeVersion: savedResidence.envelopeVersion,
+        iv: savedResidence.iv,
+        keyVersion: savedResidence.keyVersion,
+        revision: savedResidence.revision,
+        tag: savedResidence.tag,
+      })
+      .from(savedResidence)
+      .where(eq(savedResidence.userId, userId));
+    expect(stored).toBeDefined();
+    expect(stored?.keyVersion).toBe(activeKeyring.activeVersion);
+    expect(stored?.revision).toBe(revision);
+    expect(stored?.iv).not.toBe(before.iv);
+    expect(stored?.ciphertext).not.toBe(before.ciphertext);
+    expect(stored?.tag).not.toBe(before.tag);
+    expect(
+      decryptSavedResidenceAddress(
+        {
+          ciphertext: stored?.ciphertext,
+          iv: stored?.iv,
+          keyVersion: stored?.keyVersion,
+          tag: stored?.tag,
+          version: stored?.envelopeVersion,
+        },
+        userId,
+        activeKeyring,
+      ),
+    ).toBe(address);
+    for (const secret of [
+      address,
+      userId,
+      "2026-01",
+      "2026-07",
+      encodedKey(1),
+      encodedKey(2),
+    ]) {
+      expect(`${command.stdout}${command.stderr}`).not.toContain(secret);
+    }
+  }, 20_000);
+
   it("hashes and atomically consumes a one-use email link", async () => {
     const deliveries: Array<{ email: string; token: string; url: string }> = [];
     const auth = createAuth({
@@ -93,6 +396,35 @@ describe("hosted PostgreSQL auth contract", () => {
       providerId: "google",
       userId: currentUser.id,
     });
+    const residenceNow = new Date("2026-07-16T20:00:00.000Z");
+    await db.insert(savedResidence).values({
+      ciphertext: "postgres-fixture-ciphertext",
+      consentVersion: "saved-residence-v1",
+      consentedAt: residenceNow,
+      coverageNotes: [],
+      createdAt: residenceNow,
+      envelopeVersion: "v1",
+      iv: "postgres-fixture-iv",
+      keyVersion: "postgres-fixture-key",
+      revision: "44444444-4444-4444-8444-444444444444",
+      resolutionStatus: "matched",
+      sourceCheckedAt: residenceNow,
+      sourceName: "PostgreSQL fixture civic source",
+      sourceUrl: "https://example.com/postgres-civic-source",
+      tag: "postgres-fixture-tag",
+      updatedAt: residenceNow,
+      userId: currentUser.id,
+    });
+    await db.insert(savedResidenceDivision).values({
+      displayOrder: 0,
+      divisionId: "ocd-division/country:us/state:ex",
+      idScheme: "ocd",
+      name: "Example State",
+      type: "state",
+      userId: currentUser.id,
+    });
+    expect(await db.select().from(savedResidence)).toHaveLength(1);
+    expect(await db.select().from(savedResidenceDivision)).toHaveLength(1);
     await requestLink("Voter@Example.com");
     await requestLink("other@example.com");
     await db.insert(verification).values({
@@ -110,8 +442,94 @@ describe("hosted PostgreSQL auth contract", () => {
     expect(await db.select().from(user)).toHaveLength(0);
     expect(await db.select().from(account)).toHaveLength(0);
     expect(await db.select().from(session)).toHaveLength(0);
+    expect(await db.select().from(savedResidence)).toHaveLength(0);
+    expect(await db.select().from(savedResidenceDivision)).toHaveLength(0);
     expect(
       (await db.select().from(verification)).map(({ value }) => value).sort(),
     ).toEqual(["not-json", '{"email":"other@example.com"}']);
   });
 });
+
+function encodedKey(fill: number) {
+  return Buffer.alloc(32, fill).toString("base64url");
+}
+
+function residenceRacePool() {
+  return new Pool({
+    connectionString,
+    connectionTimeoutMillis: 4_000,
+    lock_timeout: 5_000,
+    max: 1,
+    query_timeout: 8_000,
+    statement_timeout: 7_000,
+  });
+}
+
+function twoPartyBarrier() {
+  let arrivalCount = 0;
+  const ready = Promise.withResolvers<void>();
+  return {
+    arrivals: () => arrivalCount,
+    async arrive() {
+      arrivalCount += 1;
+      if (arrivalCount > 2) {
+        throw new Error("PostgreSQL transaction barrier over-subscribed");
+      }
+      if (arrivalCount === 2) {
+        ready.resolve();
+      }
+      await withinMilliseconds(ready.promise, 5_000);
+    },
+  };
+}
+
+async function withinMilliseconds<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+) {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("PostgreSQL operation timed out")),
+          milliseconds,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function runRotationCommand(environment: Readonly<Record<string, string>>) {
+  return new Promise<{ code: number; stderr: string; stdout: string }>(
+    (resolveCommand, rejectCommand) => {
+      const child = spawn(
+        process.execPath,
+        [resolve(process.cwd(), "scripts/rotate-saved-residence-keys.mts")],
+        {
+          cwd: process.cwd(),
+          env: { ...process.env, ...environment },
+          stdio: ["ignore", "pipe", "pipe"],
+          timeout: 15_000,
+        },
+      );
+      let stderr = "";
+      let stdout = "";
+      child.stderr.setEncoding("utf8");
+      child.stdout.setEncoding("utf8");
+      child.stderr.on("data", (chunk: string) => {
+        stderr += chunk;
+      });
+      child.stdout.on("data", (chunk: string) => {
+        stdout += chunk;
+      });
+      child.once("error", rejectCommand);
+      child.once("close", (code) => {
+        resolveCommand({ code: code ?? 1, stderr, stdout });
+      });
+    },
+  );
+}

@@ -1,4 +1,5 @@
 import { getRuntimeAuth } from "@/lib/auth";
+import { readBoundedJson } from "@/lib/bounded-json";
 import {
   createResolutionToken,
   parseResidenceInput,
@@ -7,6 +8,7 @@ import {
   type ResolutionErrorResponse,
   type ResolutionResponse,
 } from "@/lib/residence";
+import { RESIDENCE_PREVIEW_BODY_CAP_BYTES } from "@/lib/residence-policy";
 
 const invalidRequest: ResolutionErrorResponse = {
   status: "invalid_request",
@@ -33,6 +35,12 @@ export async function POST(request: Request): Promise<Response> {
     return privateJson(invalidRequest, 400);
   }
 
+  const body = await readBoundedJson(request, RESIDENCE_PREVIEW_BODY_CAP_BYTES);
+  const input = parseResidenceInput(body);
+  if (!input) {
+    return privateJson(invalidRequest, 400);
+  }
+
   let authenticatedUserId: string;
   try {
     const auth = await getRuntimeAuth();
@@ -50,17 +58,12 @@ export async function POST(request: Request): Promise<Response> {
     return privateJson(unavailable, 503);
   }
 
-  const body = await request.json().catch(() => null);
-  const input = parseResidenceInput(body);
-  if (!input) {
-    return privateJson(invalidRequest, 400);
-  }
-
   try {
     const outcome = await resolveResidence(input);
     if (outcome.status === "matched" || outcome.status === "partial") {
       const issuedAt = new Date();
       const token = createResolutionToken(
+        input,
         outcome,
         authenticatedUserId,
         secret,
@@ -69,6 +72,7 @@ export async function POST(request: Request): Promise<Response> {
       const canonicalOutcome = verifyResolutionToken(
         token.resolutionToken,
         authenticatedUserId,
+        input,
         secret,
         issuedAt,
       );

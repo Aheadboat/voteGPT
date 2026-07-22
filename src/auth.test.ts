@@ -66,7 +66,7 @@ describe("identity dependencies", () => {
     }
 
     for (const line of exampleEnvironment.trim().split(/\r?\n/)) {
-      expect(line).toMatch(/^[A-Z_]+=$/);
+      expect(line).toMatch(/^[A-Z_][A-Z0-9_]*=$/);
     }
   });
 
