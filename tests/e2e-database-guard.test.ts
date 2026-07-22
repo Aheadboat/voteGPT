@@ -10,7 +10,7 @@ type GuardModule = {
 };
 
 const marker = "0123456789abcdef0123456789abcdef";
-const target = "pglite://.data/e2e-guard-contract";
+const target = "postgresql://e2e:e2e-secret@localhost/votegpt_e2e";
 
 async function loadGuard(): Promise<GuardModule> {
   const guardModule = "../e2e/database-guard.mjs";
@@ -53,7 +53,10 @@ describe("destructive E2E database guard", () => {
 
     await expect(
       requireE2eDatabase(
-        validEnvironment({ DATABASE_URL: "pglite://.data/./e2e-guard-contract" }),
+        validEnvironment({
+          DATABASE_URL:
+            "postgres://ambient:ambient-secret@LOCALHOST/votegpt_e2e",
+        }),
         readTargetMarker,
       ),
     ).rejects.toThrow(/ambient/i);
@@ -138,18 +141,24 @@ describe("destructive E2E database guard", () => {
     expect(readTargetMarker).toHaveBeenCalledOnce();
   });
 
-  it("rejects PGlite targets outside this worktree's ignored test-data area", async () => {
-    const { requireE2eDatabase } = await loadGuard();
-    const readTargetMarker = vi.fn(async () => marker);
+  it.each([
+    "pglite://.data/e2e-guard-contract",
+    "pglite://.data/link-shaped/../../outside",
+  ])(
+    "rejects PGlite target %s before reading the marker",
+    async (e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
 
-    await expect(
-      requireE2eDatabase(
-        validEnvironment({ E2E_DATABASE_URL: "pglite://../outside" }),
-        readTargetMarker,
-      ),
-    ).rejects.toThrow(/\.data/i);
-    expect(readTargetMarker).not.toHaveBeenCalled();
-  });
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({ E2E_DATABASE_URL: e2eDatabaseUrl }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/PostgreSQL only/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
 
   it("guards seed, app, browser inspection, and E2E rotation before destructive work", () => {
     const config = repositoryFile("playwright.config.ts");

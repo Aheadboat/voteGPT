@@ -1,6 +1,3 @@
-import { stat } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "pg";
 
 export const E2E_DATABASE_MARKER_TABLE = "e2e_database_guard";
@@ -47,21 +44,6 @@ export async function requireE2eDatabase(
 }
 
 export async function readE2eDatabaseMarker(databaseUrl) {
-  if (databaseUrl.startsWith("pglite://")) {
-    const dataDirectory = pgliteDirectory(databaseUrl);
-    const target = await stat(dataDirectory);
-    if (!target.isDirectory()) {
-      throw new Error("E2E PGlite target is not a directory.");
-    }
-    const client = new PGlite(dataDirectory);
-    try {
-      const result = await client.query(E2E_DATABASE_MARKER_QUERY);
-      return singleMarker(result.rows);
-    } finally {
-      await client.close();
-    }
-  }
-
   if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
     const pool = new Pool({ connectionString: databaseUrl, max: 1 });
     const client = await pool.connect();
@@ -76,13 +58,10 @@ export async function readE2eDatabaseMarker(databaseUrl) {
     }
   }
 
-  throw new Error("E2E database must use PostgreSQL or PGlite.");
+  throw new Error("E2E database must use PostgreSQL only.");
 }
 
 function normalizeDatabaseUrl(databaseUrl) {
-  if (databaseUrl.startsWith("pglite://")) {
-    return `pglite://${pgliteDirectory(databaseUrl)}`;
-  }
   if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
     const parsed = new URL(databaseUrl);
     if (
@@ -104,27 +83,7 @@ function normalizeDatabaseUrl(databaseUrl) {
 
     return `postgresql://${hostname}:${parsed.port || "5432"}/${database}`;
   }
-  throw new Error("E2E database must use PostgreSQL or PGlite.");
-}
-
-function pgliteDirectory(databaseUrl) {
-  const directory = databaseUrl.slice("pglite://".length);
-  if (!directory || directory === "memory") {
-    throw new Error("E2E PGlite database must be file-backed.");
-  }
-
-  const dataRoot = resolve(process.cwd(), ".data");
-  const target = resolve(process.cwd(), directory);
-  const fromDataRoot = relative(dataRoot, target);
-  if (
-    !fromDataRoot ||
-    fromDataRoot === ".." ||
-    fromDataRoot.startsWith(`..${sep}`) ||
-    isAbsolute(fromDataRoot)
-  ) {
-    throw new Error("E2E PGlite database must be inside .data.");
-  }
-  return process.platform === "win32" ? target.toLowerCase() : target;
+  throw new Error("E2E database must use PostgreSQL only.");
 }
 
 function singleMarker(rows) {
