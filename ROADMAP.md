@@ -406,7 +406,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F4 — Consented Saved Residence [IN PROGRESS (GREEN)]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
@@ -421,13 +421,14 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Recovery setup evidence:** The coordinator created inert `codex/f4-main-recovery` and `codex/f5-main-recovery` worktrees from current `main@4c5fd46106013fe3a104f20de4bfcf51f2508710`. Each remains clean and passed the unchanged 13-file/90-test baseline after dependency installation; npm reported the same two high-severity findings already recorded for current `main`. Neither contains production changes. F5 stays inert and receives no feature dispatch until F4's closeout merge is integrated.
 - **Lean recovery record GREEN evidence:** After only the approved design/plan links, recovery branch/base/lead/gate fields, conditional R2 dependency wording, matching README status, and inert-worktree evidence were updated, the focused contract passed 14/14. F4/F5 production remained unchanged.
 - **Recovery-record merge evidence:** Coordinator PR #15 merged to actual `main` as `3212eaa330012e0d0c12ecce248e44065ac59a2e` after both hosted CI jobs passed and independent review reported no unresolved Critical or Important finding. The merge is reachable from `main` and integrated into this branch. On that exact merged tree, the clean worktree passed 13 files/90 tests, type generation and strict TypeScript, zero-warning lint, production build, and 11/11 Chromium journeys.
+- **F4-T1 recovery evidence:** Fresh implementation subagent commit `5f42de963ced92bad9689d75c168771d6d11678f` restored exactly the 34 approved final-state paths from the recorded F4 and bounded-input refs; the unchanged baseline passed 90/90 and the recovered focused suite passed 218/218. The full suite then produced the expected coordinator-contract RED at 269/270 because `.env.example` added two required blank encryption-key names. Coordinator-only commit `df53ae67d1bef84ae316a1c3b02d5a5d03cae77d` added only those names to the value-free environment contract; focused verification passed 14/14 and the full suite passed 270/270. Independent task review proved exact source blobs, no F5/governance import, and no unresolved Critical, Important, or Minor finding. Task 2 owns the recorded token-binding, bounded-body, named-policy, and aggregate-reflection REDs.
 - **Tests first:** Consent required, authorized decrypt only, separately queryable divisions, cascading deletion, and encryption-key rotation.
 - **Done:** Versioned AES-256-GCM encryption, one-home constraint, consent version/time, and account controls pass; exact location never reaches logs, URLs, analytics, search, or LLM inputs; GPS is never stored.
 - **Non-goals:** Multiple homes, household sharing, or location history.
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `GREEN`
 - **Branch:** `codex/f4-main-recovery`
 - **Base commit:** `4c5fd46106013fe3a104f20de4bfcf51f2508710`
 - **Integrated-main commit:** `3212eaa330012e0d0c12ecce248e44065ac59a2e`
