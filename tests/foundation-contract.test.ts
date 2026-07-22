@@ -195,7 +195,6 @@ describe("development foundation", () => {
       "npm run test:postgres",
       "npm run check",
       "npx playwright install --with-deps chromium",
-      "npm run test:e2e",
     ]
     const yamlBlockScalarIndicators = new Set(["|", ">-"])
     const executableCommands = [
@@ -205,6 +204,7 @@ describe("development foundation", () => {
       .filter((command) => !yamlBlockScalarIndicators.has(command))
 
     expect(executableCommands).toEqual(commands)
+    expect(workflow).toContain("npm run test:e2e")
 
     expect(workflow).toMatch(/push:\s*\n/)
     expect(workflow).toMatch(/pull_request:\s*\n/)
@@ -216,11 +216,11 @@ describe("development foundation", () => {
       ),
     ).toEqual(["always()"])
     expectTokensInOrder(workflow, [
-      "Provision marked destructive E2E database",
       "Validate and apply database migrations",
       "Run PostgreSQL auth contract",
       "Run non-E2E checks",
-      "Run end-to-end tests",
+      "Install Chromium",
+      "Provision and run marked destructive E2E tests",
       "Destroy disposable databases",
     ])
   })
