@@ -1,6 +1,6 @@
 # F4/F5 Lean Main-Recovery Design
 
-**Status:** Human Gate A approved in conversation on 2026-07-21; written-spec review pending.
+**Status:** Human Gate A and written specification approved on 2026-07-21.
 
 ## Outcome
 
@@ -100,7 +100,7 @@ The local 48-commit F5 correction range is preserved as source evidence but redu
 
 ## Human gates
 
-- Gate A: approved for this design in conversation; written-spec approval is still required before the implementation plan.
+- Gate A: approved for this design and written specification on 2026-07-21.
 - F4 Gate B: after exact-head verification, hosted CI, mergeability, and independent review.
 - F5 Gate B: separately, after F4 is `DONE` and the final F5 candidate passes the same conditions.
 - Any material product, privacy, security, data-retention, vendor, credential, scope, or architecture change returns to the appropriate gate.
