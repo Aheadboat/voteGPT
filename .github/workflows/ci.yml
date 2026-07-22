@@ -65,7 +65,12 @@ jobs:
         run: |
           marker="$(openssl rand -hex 32)"
           echo "::add-mask::$marker"
-          e2e_database_url="postgresql://postgres:${PGPASSWORD}@127.0.0.1:5432/votegpt_e2e"
+          database_scheme="postgresql"
+          database_user="postgres"
+          database_host="127.0.0.1"
+          database_port="5432"
+          database_name="votegpt_e2e"
+          e2e_database_url="${database_scheme}://${database_user}:${PGPASSWORD}@${database_host}:${database_port}/${database_name}"
           echo "::add-mask::$e2e_database_url"
           psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE votegpt_e2e'
           psql -h 127.0.0.1 -U postgres -d votegpt_e2e -v ON_ERROR_STOP=1 -v marker="$marker" <<'SQL'

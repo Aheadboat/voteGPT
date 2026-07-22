@@ -415,11 +415,17 @@ describe("destructive E2E database guard", () => {
     expect(e2eStep.indexOf('echo "::add-mask::$marker"')).toBeLessThan(
       e2eStep.indexOf("psql -h 127.0.0.1 -U postgres -d postgres"),
     );
-    expect(e2eStep).not.toMatch(
-      /postgres(?:ql)?:\/\/[^\s/:]+:[^$\s/@]+@/,
-    );
+    expect(e2eStep).not.toContain("postgresql://");
+    expect(e2eStep).not.toMatch(/postgres(?:ql)?:\/\/[^\s/:]+:[^\s/@]+@/);
     expect(e2eStep).toContain(
-      'e2e_database_url="postgresql://postgres:${PGPASSWORD}@127.0.0.1:5432/votegpt_e2e"',
+      'database_scheme="postgresql"',
+    );
+    expect(e2eStep).toContain('database_user="postgres"');
+    expect(e2eStep).toContain('database_host="127.0.0.1"');
+    expect(e2eStep).toContain('database_port="5432"');
+    expect(e2eStep).toContain('database_name="votegpt_e2e"');
+    expect(e2eStep).toContain(
+      'e2e_database_url="${database_scheme}://${database_user}:${PGPASSWORD}@${database_host}:${database_port}/${database_name}"',
     );
     expect(e2eStep).toContain('echo "::add-mask::$e2e_database_url"');
     expect(e2eStep.indexOf('echo "::add-mask::$e2e_database_url"')).toBeLessThan(
