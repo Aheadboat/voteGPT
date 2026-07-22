@@ -623,7 +623,7 @@ function containsAddressAcrossPublicFields(
   layersByField: Array<{ aggregateOnly: boolean; layers: string[] | null }>,
   target: string,
 ) {
-  let carriedMatches: Array<{ offset: number; startedAt: number }> = [];
+  const carriedMatches = new Map<string, { offset: number; startedAt: number }>();
 
   for (const [fieldIndex, field] of layersByField.entries()) {
     const { aggregateOnly, layers } = field;
@@ -631,12 +631,13 @@ function containsAddressAcrossPublicFields(
       return true;
     }
 
-    const nextMatches = new Map<string, { offset: number; startedAt: number }>();
     for (const layer of layers) {
-      let matches = carriedMatches;
       for (const token of normalizeWordTokens(layer)) {
         const followingMatches = new Map<string, { offset: number; startedAt: number }>();
-        for (const match of [...matches, { offset: 0, startedAt: fieldIndex }]) {
+        for (const match of [
+          ...carriedMatches.values(),
+          { offset: 0, startedAt: fieldIndex },
+        ]) {
           if (!target.startsWith(token, match.offset)) {
             continue;
           }
@@ -652,15 +653,11 @@ function containsAddressAcrossPublicFields(
             startedAt: match.startedAt,
           });
         }
-        matches = [...followingMatches.values()];
-      }
-      for (const match of matches) {
-        if (match.offset !== 0) {
-          nextMatches.set(`${match.offset}:${match.startedAt}`, match);
+        for (const match of followingMatches.values()) {
+          carriedMatches.set(`${match.offset}:${match.startedAt}`, match);
         }
       }
     }
-    carriedMatches = [...nextMatches.values()];
   }
 
   return false;

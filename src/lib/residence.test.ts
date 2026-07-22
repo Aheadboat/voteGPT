@@ -854,6 +854,25 @@ describe("resolution token", () => {
     ).toThrow("Cannot sign an invalid residence resolution.");
   });
 
+  it("rejects exact-location reconstruction across public fields with an unrelated field between segments", () => {
+    expect(() =>
+      createResolutionToken(
+        addressInput,
+        {
+          ...resolvedResidence,
+          coverageNotes: [
+            "Resolved for 123 Fixture",
+            "Local coverage may be unavailable.",
+            "Avenue Example City CA 90000.",
+          ],
+        },
+        userId,
+        secret,
+        now,
+      ),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
   it.each([
     "ＡＰＩ — https://developers.google.com/civic-information",
     "https://developers.google.com/civic-information — 2026-07-14T20:00:00.000Z",

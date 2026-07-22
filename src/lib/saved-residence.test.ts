@@ -1459,6 +1459,18 @@ describe("saved residence persistence", () => {
         },
       },
       {
+        address: "123 Fixture Avenue Example City CA 90000",
+        label: "address reconstructed across interrupted coverage notes",
+        resolution: {
+          ...replacementResolution,
+          coverageNotes: [
+            "Resolved for 123 Fixture",
+            "Local coverage may be unavailable.",
+            "Avenue Example City CA 90000.",
+          ],
+        },
+      },
+      {
         address,
         label: "division name",
         resolution: {
