@@ -374,7 +374,7 @@ describe("destructive E2E database guard", () => {
     expect(workflow).toContain("votegpt_test");
     expect(workflow).toContain("votegpt_e2e");
     expect(workflow).toContain('E2E_DESTRUCTIVE_OPT_IN="1"');
-    expect(workflow).toContain("E2E_DATABASE_URL=postgresql://");
+    expect(workflow).toContain('E2E_DATABASE_URL="$e2e_database_url"');
     expect(workflow).toContain('E2E_DATABASE_MARKER="$marker"');
     expect(workflow).toMatch(/randomBytes|openssl rand/);
     expect(workflow).toMatch(/CREATE TABLE.*e2e_database_guard/i);
@@ -415,12 +415,25 @@ describe("destructive E2E database guard", () => {
     expect(e2eStep.indexOf('echo "::add-mask::$marker"')).toBeLessThan(
       e2eStep.indexOf("psql -h 127.0.0.1 -U postgres -d postgres"),
     );
+    expect(e2eStep).not.toMatch(
+      /postgres(?:ql)?:\/\/[^\s/:]+:[^$\s/@]+@/,
+    );
+    expect(e2eStep).toContain(
+      'e2e_database_url="postgresql://postgres:${PGPASSWORD}@127.0.0.1:5432/votegpt_e2e"',
+    );
+    expect(e2eStep).toContain('echo "::add-mask::$e2e_database_url"');
+    expect(e2eStep.indexOf('echo "::add-mask::$e2e_database_url"')).toBeLessThan(
+      e2eStep.indexOf("psql -h 127.0.0.1 -U postgres -d postgres"),
+    );
+    expect(e2eStep.indexOf('echo "::add-mask::$e2e_database_url"')).toBeLessThan(
+      e2eStep.indexOf('E2E_DATABASE_URL="$e2e_database_url"'),
+    );
     expect(e2eStep.indexOf('echo "::add-mask::$marker"')).toBeLessThan(
       e2eStep.indexOf("E2E_DATABASE_MARKER=\"$marker\""),
     );
     expect(e2eStep).toMatch(/-v ON_ERROR_STOP=1 -v marker="\$marker"\s*<<'SQL'/);
-    expect(e2eStep).toMatch(
-      /E2E_DATABASE_MARKER="\$marker"\s+E2E_DATABASE_URL=postgresql:\/\/postgres:postgres@127\.0\.0\.1:5432\/votegpt_e2e\s+E2E_DESTRUCTIVE_OPT_IN="1"\s+npm run test:e2e/,
+    expect(e2eStep).toContain(
+      'E2E_DATABASE_MARKER="$marker" E2E_DATABASE_URL="$e2e_database_url" E2E_DESTRUCTIVE_OPT_IN="1" npm run test:e2e',
     );
     expect(e2eStep).not.toMatch(/^\s+E2E_DATABASE_(?:MARKER|URL):/m);
   });
