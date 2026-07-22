@@ -85,8 +85,24 @@ function normalizeDatabaseUrl(databaseUrl) {
   }
   if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
     const parsed = new URL(databaseUrl);
-    parsed.protocol = "postgresql:";
-    return parsed.toString();
+    if (
+      parsed.searchParams.has("host") ||
+      parsed.searchParams.has("port")
+    ) {
+      throw new Error(
+        "E2E PostgreSQL database URL must not use routing parameters.",
+      );
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    const database = decodeURI(parsed.pathname.slice(1));
+    if (!hostname || !database) {
+      throw new Error(
+        "E2E PostgreSQL database URL must specify a host and database.",
+      );
+    }
+
+    return `postgresql://${hostname}:${parsed.port || "5432"}/${database}`;
   }
   throw new Error("E2E database must use PostgreSQL or PGlite.");
 }

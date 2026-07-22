@@ -60,6 +60,60 @@ describe("destructive E2E database guard", () => {
     expect(readTargetMarker).not.toHaveBeenCalled();
   });
 
+  it.each([
+    [
+      "protocol aliases and credentials",
+      "postgres://ambient:ambient-secret@localhost/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@LOCALHOST/votegpt_e2e",
+    ],
+    [
+      "an omitted and explicit default port",
+      "postgresql://e2e:e2e-secret@localhost/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e",
+    ],
+    [
+      "non-routing connection options",
+      "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e?application_name=browser&sslmode=disable",
+      "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e?application_name=e2e&sslmode=require",
+    ],
+  ])(
+    "rejects reviewer PostgreSQL identity bypass example with %s before reading the marker",
+    async (_description, ambientDatabaseUrl, e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({
+            DATABASE_URL: ambientDatabaseUrl,
+            E2E_DATABASE_URL: e2eDatabaseUrl,
+          }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/ambient/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["host", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?host=elsewhere"],
+    ["port", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?port=5433"],
+  ])(
+    "rejects PostgreSQL %s routing overrides before reading the marker",
+    async (_parameter, e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({ E2E_DATABASE_URL: e2eDatabaseUrl }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/routing parameters/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([undefined, "different-marker"])(
     "rejects target-resident marker %s before migration or write",
     async (targetMarker) => {
