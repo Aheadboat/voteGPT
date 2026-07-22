@@ -13,7 +13,7 @@ This thread remains the coordinator. It owns branch records, plans, gates, revie
 1. A coordinator-only recovery record replaces the stale feature-branch references while keeping R2 queued and F6 inactive.
 2. `codex/f4-main-recovery` starts from current dependency-complete `main` and receives a path-filtered transplant of the accepted F4 production/test state plus the completed bounded-input correction.
 3. F4 receives fresh TDD evidence, review, hosted CI, Human Gate B, a feature merge to `main`, post-merge verification, and a status-only closeout merge.
-4. Only after F4 is `DONE`, `codex/f5-main-recovery` starts from current `main` and receives the accepted F5 production/test state plus a reduced final snapshot of the completed Census/policy correction.
+4. `codex/f5-main-recovery` remains inert at the recorded recovery base. Only after F4 is `DONE` does the coordinator integrate current `main` and dispatch the accepted F5 production/test state plus a reduced final snapshot of the completed Census/policy correction.
 5. F5 receives the same verification, Gate B, merge, and closeout sequence.
 
 Old staging and correction refs remain untouched as historical evidence. Do not merge/rebase the staging branch or replay its interleaved commit history. Do not carry old F4/F5-specific `README.md` or `AGENTS.md` changes. `ROADMAP.md` receives only the authority and evidence required by the repository contract.
@@ -40,7 +40,7 @@ Old staging and correction refs remain untouched as historical evidence. Do not 
 ### F4-3 — Guard destructive verification
 
 - Require explicit E2E opt-in and one validated `E2E_DATABASE_URL` shared by seed, app, browser inspection, and rotation.
-- Reject an E2E database that equals the ambient runtime database and require an externally provisioned marker before any migration or write.
+- Reject an E2E database that equals the ambient runtime database and require an exact match against a per-resource marker already provisioned inside the target database before any migration or write. Environment input alone cannot establish the marker.
 - Use two disposable CI databases: contract/migration and marked E2E.
 - Keep key-operation guidance concise; defer full-table locked-key preflight until real key retirement exists.
 - **Expected RED:** missing opt-in/marker or a runtime-equivalent database can still be seeded, or CI exposes one database to both contract and destructive E2E work.
@@ -51,7 +51,7 @@ Run focused tests, deterministic full tests when host contention appears, databa
 
 ## F5 task graph
 
-F5 starts only after the F4 closeout merge is on `main`.
+F5 feature work starts only after the F4 closeout merge is on `main` and integrated into the inert F5 recovery branch.
 
 ### F5-1 — Provider correctness and provenance
 

@@ -4,7 +4,7 @@
 
 **Goal:** Deliver sourced current federal officials on actual `main` after F4 closes, using the accepted F5 implementation plus only the approved provider, provenance, cache-integrity, and same-page handoff corrections.
 
-**Architecture:** Start a fresh F5 recovery branch from the F4 closeout commit, transplant only the reviewed F5 final tree and the reduced Census/policy final state, then complete three vertical TDD tasks. Provider work shares one snapshot/deadline, cache work preserves global identity coherence, and acceptance proves one real residence-to-officials journey without live providers.
+**Architecture:** Keep the fresh F5 recovery branch inert at the recovery base, integrate the F4 closeout commit before dispatch, transplant only the reviewed F5 final tree and the reduced Census/policy final state, then complete three vertical TDD tasks. Provider work shares one snapshot/deadline, cache work preserves global identity coherence, and acceptance proves one real residence-to-officials journey without live providers.
 
 **Tech Stack:** Next.js 16, React 19, TypeScript 5.9, Drizzle ORM, PostgreSQL/PGlite, Vitest, Testing Library, Playwright, Node 24 fetch/AbortController.
 
@@ -34,7 +34,7 @@
 
 - [ ] **Step 1: Confirm the F4 handoff baseline**
 
-Run:
+The coordinator first integrates current `main` containing the F4 closeout into the inert F5 branch, records that exact integrated-main SHA in `ROADMAP.md`, and only then dispatches this task. Run:
 
 ```powershell
 $f4CloseoutCommit = (git rev-parse main).Trim()
@@ -61,10 +61,7 @@ Expected: offline policy state is internally consistent and tests either pass or
 
 - [ ] **Step 4: Commit one reviewed final-state recovery**
 
-```powershell
-git add -- .env.example .gitattributes data drizzle e2e integration scripts src tests
-git commit -m "feat(f5): recover federal officials"
-```
+Stage every source path listed for this task individually; never stage a directory root. Confirm `git diff --cached --name-only` matches that allowlist exactly, then run `git commit -m "feat(f5): recover federal officials"`.
 
 Stop for coordinator replay and independent task review.
 
@@ -143,9 +140,9 @@ npm.cmd test -- tests/federal-policy-literal-audit.test.ts src/lib/federal-polic
 npm.cmd run typecheck
 npm.cmd run lint
 git diff --check
-git add -- src tests
-git commit -m "fix(f5): unify provider evidence"
 ```
+
+Stage only the exact files named by this task, confirm `git diff --cached --name-only` matches that allowlist, then commit with `fix(f5): unify provider evidence`.
 
 Stop for coordinator replay and independent provider/domain review.
 
@@ -298,9 +295,6 @@ If default-parallel tests show PGlite host contention, rerun `npm.cmd test -- --
 
 - [ ] **Step 6: Commit and stop at Gate B preparation**
 
-```powershell
-git add -- e2e tests/e2e-fixture-policy.test.ts src/app/dashboard/page.test.tsx src/app/dashboard/page.tsx
-git commit -m "test(f5): prove residence official handoff"
-```
+Stage only the exact files named by this task, confirm `git diff --cached --name-only` matches that allowlist, then commit with `test(f5): prove residence official handoff`.
 
 The coordinator generates the whole-branch review package, obtains independent review with no unresolved Critical/Important finding, opens the feature PR, waits for hosted CI and mergeability, and presents F5 Human Gate B. No agent merges or changes roadmap status.

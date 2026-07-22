@@ -61,10 +61,7 @@ Expected: only listed F4/runtime-test paths appear, no stale staging authority a
 
 - [ ] **Step 4: Commit the recovered tree**
 
-```powershell
-git add -- .env.example drizzle e2e integration package.json playwright.config.ts scripts src vitest.config.mts
-git commit -m "feat(f4): recover saved residence"
-```
+Stage every source path listed for this task individually; never stage a directory root. Confirm `git diff --cached --name-only` matches that allowlist exactly, then run `git commit -m "feat(f4): recover saved residence"`.
 
 Stop for coordinator verification and independent task review.
 
@@ -210,9 +207,9 @@ npm.cmd run db:check
 npm.cmd run typecheck
 npm.cmd run lint
 git diff --check
-git add -- drizzle src/db/schema.ts src/lib/saved-residence.ts src/lib/saved-residence.test.ts integration/postgres-auth.test.ts src/app/api/v1/residence/route.ts src/app/api/v1/residence/route.test.ts src/components/residence-preview.tsx src/components/residence-preview.test.tsx
-git commit -m "fix(f4): protect residence revisions"
 ```
+
+Stage only the exact files named by this task, confirm `git diff --cached --name-only` matches that allowlist, then commit with `fix(f4): protect residence revisions`.
 
 Stop for coordinator replay and independent task review.
 
@@ -229,12 +226,15 @@ Stop for coordinator replay and independent task review.
 **Interface:**
 
 ```js
-export function requireE2eDatabase(environment = process.env) {
-  // Return the one validated E2E_DATABASE_URL or throw before I/O.
+export async function requireE2eDatabase(
+  environment = process.env,
+  readTargetMarker,
+) {
+  // Return the validated E2E_DATABASE_URL only after a read-only target check.
 }
 ```
 
-Required environment contract: `E2E_DESTRUCTIVE_OPT_IN=1`, explicit `E2E_DATABASE_URL`, and `E2E_DATABASE_MARKER=voteGPT-e2e`. The guard captures ambient `DATABASE_URL` before assignment and rejects normalized equality.
+Required environment contract: `E2E_DESTRUCTIVE_OPT_IN=1`, explicit `E2E_DATABASE_URL`, and a per-resource unpredictable `E2E_DATABASE_MARKER`. The guard captures ambient `DATABASE_URL` before assignment, rejects normalized equality, then performs one read-only query against the target database's externally provisioned marker table and requires an exact marker match. Application, migration, seed, and rotation code cannot create or repair this marker.
 
 - [ ] **Step 1: Write RED guard and CI tests**
 
@@ -243,6 +243,7 @@ Add:
 ```text
 requires explicit opt-in, URL, and externally supplied marker
 rejects an E2E database equal to the ambient runtime database
+rejects a missing or mismatched target-resident marker before migration or write
 returns one validated URL for seed, app, browser, and rotation
 keeps contract and destructive E2E databases separate in CI
 ```
@@ -253,13 +254,13 @@ keeps contract and destructive E2E databases separate in CI
 npm.cmd test -- tests/e2e-database-guard.test.ts tests/foundation-contract.test.ts
 ```
 
-Expected: missing opt-in/marker still permits seed setup, runtime-equivalent URLs are accepted, and CI exposes one database to contract and destructive E2E work.
+Expected: missing opt-in/marker still permits seed setup, runtime-equivalent URLs and environment-only markers are accepted, and CI exposes one database to contract and destructive E2E work.
 
 - [ ] **Step 3: Implement one fail-closed guard**
 
-- Validate opt-in, explicit URL, ambient inequality, safe repo-local PGlite containment, and external PostgreSQL marker before migration/write.
+- Validate opt-in, explicit URL, ambient inequality, safe repo-local PGlite containment, and the exact target-resident PostgreSQL marker before migration/write.
 - Make Playwright, seed, browser inspection, and rotation consume the same validated URL.
-- Keep two disposable CI databases only: contract/migration and marked E2E. Provision the marker outside application/seeder code and destroy both resources after their jobs.
+- Keep two disposable CI databases only: contract/migration and marked E2E. Generate a unique marker for the E2E resource, provision its marker table outside application/migration/seeder code, verify it read-only through the guard, and destroy both resources after their jobs.
 - Add only empty example variables and concise key-operation notes; do not add secrets or a full deployment-preflight service.
 
 - [ ] **Step 4: Run focused GREEN**
@@ -287,9 +288,6 @@ If default-parallel tests show PGlite host contention, rerun `npm.cmd test -- --
 
 - [ ] **Step 6: Commit and stop at Gate B preparation**
 
-```powershell
-git add -- e2e tests/e2e-database-guard.test.ts playwright.config.ts scripts/rotate-saved-residence-keys.mts .github/workflows/ci.yml .env.example
-git commit -m "test(f4): guard destructive residence checks"
-```
+Stage only the exact files named by this task, confirm `git diff --cached --name-only` matches that allowlist, then commit with `test(f4): guard destructive residence checks`.
 
 The coordinator generates the whole-branch review package, obtains independent review with no unresolved Critical/Important finding, opens the feature PR, waits for hosted CI and mergeability, and presents F4 Human Gate B. No agent merges or changes roadmap status.

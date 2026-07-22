@@ -795,12 +795,16 @@ describe("concurrent roadmap delivery contract", () => {
     if (f4Status === "DONE") {
       expect(readme).toMatch(/F4[^.\n]*complete/i)
     } else {
-      expect(readme).toContain("F4 and F5 have approved lean recovery plans")
+      expect(readme).toContain(
+        "F4 and F5 remain active under approved lean recovery plans.",
+      )
     }
     if (f5Status === "DONE") {
       expect(readme).toMatch(/F5[^.\n]*complete/i)
     } else {
-      expect(readme).toMatch(/F5[^.\n]*active/i)
+      expect(readme).toContain(
+        "F4 and F5 remain active under approved lean recovery plans.",
+      )
     }
     expect(readme).toContain(
       "R2 is queued as the next roadmap step after F4 and F5 are `DONE`",
@@ -857,14 +861,16 @@ describe("concurrent roadmap delivery contract", () => {
     }
     expect(f4Ownership).toContain("shared PostgreSQL schema/migration history")
     expect(f4Ownership).toContain(
-      "F4 exclusively owns the encryption-key configuration external resource",
+      "F4 exclusively owns the encryption-key configuration and the externally provisioned E2E-database marker resource",
+    )
+    expect(f4Ownership).toContain(".github/workflows/ci.yml")
+    expect(f4Ownership).toContain(
+      "externally provisioned E2E-database marker resource",
     )
     expect(f5Ownership).toContain(
       "F5 exclusively owns the Congress.gov request/configuration external resource",
     )
-    expect(f4Ownership).toContain(
-      "shared CI configuration and generated artifacts remain frozen",
-    )
+    expect(f4Ownership).toContain("other generated artifacts remain frozen")
     expect(f5Ownership).toContain(
       "shared CI configuration and generated artifacts remain frozen",
     )
