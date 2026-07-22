@@ -144,9 +144,9 @@ describe("destructive E2E database guard", () => {
 
     expect(workflow).toContain("votegpt_test");
     expect(workflow).toContain("votegpt_e2e");
-    expect(workflow).toContain('E2E_DESTRUCTIVE_OPT_IN: "1"');
-    expect(workflow).toContain("E2E_DATABASE_URL:");
-    expect(workflow).toContain("E2E_DATABASE_MARKER:");
+    expect(workflow).toContain('E2E_DESTRUCTIVE_OPT_IN="1"');
+    expect(workflow).toContain("E2E_DATABASE_URL=postgresql://");
+    expect(workflow).toContain('E2E_DATABASE_MARKER="$marker"');
     expect(workflow).toMatch(/randomBytes|openssl rand/);
     expect(workflow).toMatch(/CREATE TABLE.*e2e_database_guard/i);
     expect(workflow).toMatch(/DROP DATABASE.*votegpt_e2e/i);
@@ -155,7 +155,7 @@ describe("destructive E2E database guard", () => {
   it("provisions the marker through psql stdin substitution and stops on SQL errors", () => {
     const workflow = repositoryFile(".github/workflows/ci.yml");
     const provision = workflow.match(
-      /- name: Provision marked destructive E2E database([\s\S]*?)(?=\n\s*- name:)/,
+      /- name: Provision and run marked destructive E2E tests([\s\S]*?)(?=\n\s*- name:)/,
     )?.[1];
 
     expect(provision).toBeDefined();
@@ -163,6 +163,37 @@ describe("destructive E2E database guard", () => {
     expect(provision).toMatch(/-v marker="\$marker"\s*<<'SQL'/);
     expect(provision).toContain("VALUES (1, :'marker');");
     expect(provision).not.toMatch(/-v marker="\$marker"\s+-c/);
+  });
+
+  it("keeps the CI marker masked and command-scoped within the E2E step", () => {
+    const workflow = repositoryFile(".github/workflows/ci.yml");
+    const e2e = workflow.match(
+      /- name: Provision and run marked destructive E2E tests([\s\S]*?)(?=\n\s*- name:)/,
+    )?.[1];
+
+    expect(e2e).toBeDefined();
+    const e2eStep = e2e ?? "";
+    expect(workflow).not.toContain("GITHUB_OUTPUT");
+    expect(workflow).not.toContain("steps.e2e_database.outputs.marker");
+    expect(workflow).not.toMatch(
+      /^\s+E2E_DATABASE_(?:MARKER|URL|DESTRUCTIVE_OPT_IN):/m,
+    );
+    expect(e2eStep).toMatch(/marker="\$\(openssl rand -hex 32\)"/);
+    expect(e2eStep).toMatch(/echo "::add-mask::\$marker"/);
+    expect(e2eStep.match(/echo [^\r\n]*\$marker[^\r\n]*/g)).toEqual([
+      'echo "::add-mask::$marker"',
+    ]);
+    expect(e2eStep.indexOf('echo "::add-mask::$marker"')).toBeLessThan(
+      e2eStep.indexOf("psql -h 127.0.0.1 -U postgres -d postgres"),
+    );
+    expect(e2eStep.indexOf('echo "::add-mask::$marker"')).toBeLessThan(
+      e2eStep.indexOf("E2E_DATABASE_MARKER=\"$marker\""),
+    );
+    expect(e2eStep).toMatch(/-v ON_ERROR_STOP=1 -v marker="\$marker"\s*<<'SQL'/);
+    expect(e2eStep).toMatch(
+      /E2E_DATABASE_MARKER="\$marker"\s+E2E_DATABASE_URL=postgresql:\/\/postgres:postgres@127\.0\.0\.1:5432\/votegpt_e2e\s+E2E_DESTRUCTIVE_OPT_IN="1"\s+npm run test:e2e/,
+    );
+    expect(e2eStep).not.toMatch(/^\s+E2E_DATABASE_(?:MARKER|URL):/m);
   });
 
   it("drops each disposable CI database in its own psql invocation", () => {

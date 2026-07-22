@@ -46,20 +46,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Provision marked destructive E2E database
-        id: e2e_database
-        shell: bash
-        env:
-          PGPASSWORD: postgres
-        run: |
-          marker="$(openssl rand -hex 32)"
-          psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE votegpt_e2e'
-          psql -h 127.0.0.1 -U postgres -d votegpt_e2e -v ON_ERROR_STOP=1 -v marker="$marker" <<'SQL'
-          CREATE TABLE e2e_database_guard (id integer PRIMARY KEY, marker text NOT NULL);
-          INSERT INTO e2e_database_guard (id, marker) VALUES (1, :'marker');
-          SQL
-          echo "marker=$marker" >> "$GITHUB_OUTPUT"
-
       - name: Validate and apply database migrations
         run: npm run db:check && npm run db:migrate
 
@@ -72,12 +58,19 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run end-to-end tests
+      - name: Provision and run marked destructive E2E tests
+        shell: bash
         env:
-          E2E_DATABASE_MARKER: ${{ steps.e2e_database.outputs.marker }}
-          E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/votegpt_e2e
-          E2E_DESTRUCTIVE_OPT_IN: "1"
-        run: npm run test:e2e
+          PGPASSWORD: postgres
+        run: |
+          marker="$(openssl rand -hex 32)"
+          echo "::add-mask::$marker"
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE votegpt_e2e'
+          psql -h 127.0.0.1 -U postgres -d votegpt_e2e -v ON_ERROR_STOP=1 -v marker="$marker" <<'SQL'
+          CREATE TABLE e2e_database_guard (id integer PRIMARY KEY, marker text NOT NULL);
+          INSERT INTO e2e_database_guard (id, marker) VALUES (1, :'marker');
+          SQL
+          E2E_DATABASE_MARKER="$marker" E2E_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/votegpt_e2e E2E_DESTRUCTIVE_OPT_IN="1" npm run test:e2e
 
       - name: Destroy disposable databases
         if: always()
