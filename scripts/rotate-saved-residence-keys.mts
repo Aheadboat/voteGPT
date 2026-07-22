@@ -42,6 +42,25 @@ function resolveSourceModule(path: string) {
 }
 
 try {
+  if (
+    [
+      "E2E_DESTRUCTIVE_OPT_IN",
+      "E2E_DATABASE_URL",
+      "E2E_DATABASE_MARKER",
+    ].some((name) => process.env[name] !== undefined)
+  ) {
+    const guardModule = "../e2e/database-guard.mjs";
+    const { readE2eDatabaseMarker, requireE2eDatabase } = await import(
+      guardModule
+    );
+    const databaseUrl = await requireE2eDatabase(
+      process.env,
+      readE2eDatabaseMarker,
+    );
+    process.env.DATABASE_URL = databaseUrl;
+  }
+
+  // Keep inactive keys configured until rotation reports zero remaining rows.
   registerHooks({
     resolve(specifier, context, nextResolve) {
       if (specifier.startsWith("@/")) {

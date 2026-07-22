@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePostgres } from "drizzle-orm/node-postgres";
@@ -6,14 +6,16 @@ import { migrate as migratePostgres } from "drizzle-orm/node-postgres/migrator";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { Pool } from "pg";
+import {
+  readE2eDatabaseMarker,
+  requireE2eDatabase,
+} from "./database-guard.mjs";
 
-const fallbackDatabaseUrl = "pglite://.data/e2e";
-const hosted =
-  process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
-const databaseUrl =
-  process.env.E2E_DATABASE_URL?.trim() ||
-  (hosted ? process.env.DATABASE_URL?.trim() : undefined) ||
-  fallbackDatabaseUrl;
+const databaseUrl = await requireE2eDatabase(
+  process.env,
+  readE2eDatabaseMarker,
+);
+process.env.DATABASE_URL = databaseUrl;
 const migrationsFolder = resolve(process.cwd(), "drizzle");
 const identities = [
   {
@@ -36,26 +38,11 @@ const identities = [
   },
 ];
 
-const postgres = /^postgres(?:ql)?:\/\//i.test(databaseUrl);
 const pgliteDirectory = databaseUrl.startsWith("pglite://")
   ? databaseUrl.slice("pglite://".length)
   : null;
 
-if (pgliteDirectory === "memory") {
-  throw new Error("E2E database must be shared and file-backed.");
-}
-if (hosted && !postgres) {
-  throw new Error("Hosted E2E requires a dedicated PostgreSQL database.");
-}
-if (!postgres && (!pgliteDirectory || !pgliteDirectory.trim())) {
-  throw new Error("E2E database must use PostgreSQL or file-backed PGlite.");
-}
-
-process.env.E2E_DATABASE_URL = databaseUrl;
-process.env.DATABASE_URL = databaseUrl;
-
 if (pgliteDirectory) {
-  await mkdir(".data", { recursive: true });
   const client = new PGlite(pgliteDirectory);
 
   try {
@@ -78,6 +65,10 @@ if (pgliteDirectory) {
   } finally {
     await pool.end();
   }
+}
+
+if (process.argv.includes("--start-server")) {
+  await startApplication(databaseUrl);
 }
 
 async function seedIdentities(query) {
@@ -123,4 +114,33 @@ async function seedIdentities(query) {
     await query("ROLLBACK");
     throw error;
   }
+}
+
+async function startApplication(validatedDatabaseUrl) {
+  const child = spawn(
+    process.execPath,
+    [
+      resolve(process.cwd(), "node_modules/next/dist/bin/next"),
+      "start",
+      "--hostname",
+      "127.0.0.1",
+    ],
+    {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: validatedDatabaseUrl },
+      shell: false,
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
+  const stop = () => child.kill();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  await new Promise((resolveExit, rejectExit) => {
+    child.once("error", rejectExit);
+    child.once("close", (code) => {
+      process.exitCode = code ?? 1;
+      resolveExit();
+    });
+  });
 }

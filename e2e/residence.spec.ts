@@ -26,6 +26,11 @@ import {
   unavailableResidenceResponse,
 } from "../tests/fixtures/residence-responses";
 
+const e2eDatabaseUrl = process.env.E2E_DATABASE_URL?.trim();
+if (!e2eDatabaseUrl) {
+  throw new Error("Residence E2E requires the Playwright-validated database.");
+}
+
 type ResolvedResidence = Extract<
   ResolutionOutcome,
   { status: "matched" | "partial" }
@@ -1298,7 +1303,7 @@ async function measureContrast(
 }
 
 async function openPostgresInspection(): Promise<PostgresInspection | null> {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = e2eDatabaseUrl;
   const hosted =
     process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
   if (!connectionString || connectionString.startsWith("pglite://")) {
@@ -1395,7 +1400,7 @@ async function runRotation(connectionString: string): Promise<{
         cwd: process.cwd(),
         env: {
           ...process.env,
-          DATABASE_URL: connectionString,
+          E2E_DATABASE_URL: connectionString,
           RESIDENCE_ENCRYPTION_ACTIVE_KEY: currentKeyVersion,
           RESIDENCE_ENCRYPTION_KEYS: encryptionKeys,
         },
