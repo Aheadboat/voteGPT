@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Do not create or dispatch `codex/f5-main-recovery` until the F4 closeout merge places F4 `DONE` on actual `main`.
+- Do not dispatch `codex/f5-main-recovery` until the F4 closeout merge places F4 `DONE` on actual `main` and the coordinator integrates that merge into the already-inert branch.
 - This thread remains coordinator. A fresh subagent implements each task; separate subagents review specification compliance and code quality.
 - Preserve deterministic current-office facts, equal official-card treatment, adjacent provenance/freshness, explicit partial/stale/conflict/unavailable states, normalized-location-only input, provider-free cached public profiles, and UX-01 through UX-09.
 - Reuse the checked-in Census/policy bundle and its strict offline check. No local refresh writer, magic Congress/year/cache values, or duplicate provider limits.

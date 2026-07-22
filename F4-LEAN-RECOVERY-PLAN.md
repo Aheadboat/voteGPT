@@ -258,9 +258,9 @@ Expected: missing opt-in/marker still permits seed setup, runtime-equivalent URL
 
 - [ ] **Step 3: Implement one fail-closed guard**
 
-- Validate opt-in, explicit URL, ambient inequality, safe repo-local PGlite containment, and the exact target-resident PostgreSQL marker before migration/write.
+- Validate opt-in, explicit URL, ambient inequality, safe repo-local PGlite containment when applicable, and the same exact target-resident marker for every supported E2E database backend before any migration or write.
 - Make Playwright, seed, browser inspection, and rotation consume the same validated URL.
-- Keep two disposable CI databases only: contract/migration and marked E2E. Generate a unique marker for the E2E resource, provision its marker table outside application/migration/seeder code, verify it read-only through the guard, and destroy both resources after their jobs.
+- Keep two disposable CI databases only: contract/migration and marked E2E. Generate a unique marker for the E2E resource, provision its marker table outside application/migration/seeder code for PostgreSQL or PGlite, verify it read-only through the guard, and destroy both resources after their jobs.
 - Add only empty example variables and concise key-operation notes; do not add secrets or a full deployment-preflight service.
 
 - [ ] **Step 4: Run focused GREEN**
