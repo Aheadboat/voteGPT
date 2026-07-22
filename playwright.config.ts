@@ -4,6 +4,7 @@ delete process.env.NO_COLOR
 
 const databaseMarker = process.env.E2E_DATABASE_MARKER ?? ""
 const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ?? ""
+const destructiveOptIn = process.env.E2E_DESTRUCTIVE_OPT_IN
 const residenceEncryptionKeys = JSON.stringify([
   {
     key: Buffer.alloc(32, 17).toString("base64url"),
@@ -36,7 +37,9 @@ export default defineConfig({
       BETTER_AUTH_URL: "http://127.0.0.1:3000",
       E2E_DATABASE_URL: databaseUrl,
       E2E_DATABASE_MARKER: databaseMarker,
-      E2E_DESTRUCTIVE_OPT_IN: "1",
+      ...(destructiveOptIn === undefined
+        ? {}
+        : { E2E_DESTRUCTIVE_OPT_IN: destructiveOptIn }),
       EMAIL_FROM: "test@example.invalid",
       EMAIL_SERVER: "smtp://127.0.0.1:2525",
       GOOGLE_CIVIC_API_KEY: "",

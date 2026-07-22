@@ -127,6 +127,18 @@ describe("destructive E2E database guard", () => {
     expect(rotation).toContain("process.env.DATABASE_URL = databaseUrl");
   });
 
+  it("passes the caller's destructive opt-in through to Playwright unchanged", () => {
+    const config = repositoryFile("playwright.config.ts");
+
+    expect(config).toContain(
+      "const destructiveOptIn = process.env.E2E_DESTRUCTIVE_OPT_IN",
+    );
+    expect(config).toMatch(
+      /\.\.\.\(destructiveOptIn === undefined\s*\? \{\}\s*:\s*\{ E2E_DESTRUCTIVE_OPT_IN: destructiveOptIn \}\),/,
+    );
+    expect(config).not.toMatch(/E2E_DESTRUCTIVE_OPT_IN:\s*[\"']1[\"']/);
+  });
+
   it("keeps contract and marked destructive E2E databases separate in CI", () => {
     const workflow = repositoryFile(".github/workflows/ci.yml");
 
