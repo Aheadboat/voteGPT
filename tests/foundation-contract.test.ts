@@ -226,6 +226,8 @@ describe("development foundation", () => {
         "GOOGLE_CLIENT_ID=",
         "GOOGLE_CLIENT_SECRET=",
         "GOOGLE_CIVIC_API_KEY=",
+        "RESIDENCE_ENCRYPTION_ACTIVE_KEY=",
+        "RESIDENCE_ENCRYPTION_KEYS=",
       ].sort(),
     )
   })
