@@ -2,7 +2,12 @@ import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import { lookupCensus } from "./census-geocoder";
 import { lookupGoogleAddress } from "./google-civic";
 import {
+  MAX_LATITUDE_ABSOLUTE_DEGREES,
+  MAX_LONGITUDE_ABSOLUTE_DEGREES,
+  MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS,
   RESIDENCE_RESOLUTION_TOKEN_VERSION,
+  canonicalizeResidenceCoordinate,
+  isResidenceAddressGrammar,
   isV2ResolutionTokenGrammar,
 } from "./residence-policy";
 
@@ -164,27 +169,30 @@ export const parseResidenceInput: ParseResidenceInput = (value) => {
     }
 
     const address = value.address.trim();
-    return address.length >= 1 && address.length <= 300
+    return isResidenceAddressGrammar(address)
       ? { kind: "address", address }
       : null;
   }
 
   if (value.kind === "coordinates" && hasExactKeys(value, coordinateKeys)) {
     const { latitude, longitude } = value;
-    if (
-      typeof latitude !== "number" ||
-      typeof longitude !== "number" ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
+    const canonicalLatitude = canonicalizeResidenceCoordinate(
+      latitude,
+      MAX_LATITUDE_ABSOLUTE_DEGREES,
+    );
+    const canonicalLongitude = canonicalizeResidenceCoordinate(
+      longitude,
+      MAX_LONGITUDE_ABSOLUTE_DEGREES,
+    );
+    if (canonicalLatitude === null || canonicalLongitude === null) {
       return null;
     }
 
-    return { kind: "coordinates", latitude, longitude };
+    return {
+      kind: "coordinates",
+      latitude: Number(canonicalLatitude),
+      longitude: Number(canonicalLongitude),
+    };
   }
 
   return null;
@@ -225,6 +233,9 @@ export const createResolutionToken: CreateResolutionToken = (
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
     "base64url",
   );
+  if (encodedPayload.length > MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS) {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
   const signingInput = `${tokenVersion}.${encodedPayload}`;
   const signature = sign(signingInput, secret);
 
@@ -248,11 +259,14 @@ export const verifyResolutionToken: VerifyResolutionToken = (
   try {
     const [version, encodedPayload, receivedSignature] = token.split(".");
 
+    const actualSignature = Buffer.from(receivedSignature, "base64url");
+    if (actualSignature.toString("base64url") !== receivedSignature) {
+      return null;
+    }
     const expectedSignature = Buffer.from(
       sign(`${version}.${encodedPayload}`, secret),
       "base64url",
     );
-    const actualSignature = Buffer.from(receivedSignature, "base64url");
     if (
       actualSignature.length !== expectedSignature.length ||
       !timingSafeEqual(actualSignature, expectedSignature)
@@ -558,6 +572,7 @@ function reflectsResidenceInput(
 }
 
 type PublicResolutionField = {
+  aggregateOnly?: boolean;
   kind: "identifier" | "prose" | "timestamp";
   text: string;
 };
@@ -566,12 +581,14 @@ function publicResolutionFields(
   resolution: ResolvedResidence,
 ): PublicResolutionField[] {
   return [
-    ...resolution.coverageNotes.map((text) => ({ kind: "prose" as const, text })),
-    ...resolution.divisions.flatMap(({ id, idScheme, name }) => [
+    ...resolution.divisions.flatMap(({ id, idScheme, name, type }) => [
+      { kind: "prose" as const, text: name },
+      { kind: "prose" as const, text: type.replaceAll("_", " ") },
       { kind: "identifier" as const, text: id },
       { kind: "identifier" as const, text: idScheme },
-      { kind: "prose" as const, text: name },
     ]),
+    { aggregateOnly: true, kind: "prose", text: resolution.source.name },
+    { aggregateOnly: true, kind: "identifier", text: resolution.source.url },
     { kind: "timestamp", text: resolution.source.checkedAt },
     ...(resolution.source.effectiveAt === null
       ? []
@@ -582,6 +599,7 @@ function publicResolutionFields(
     ...(resolution.source.vintage === undefined
       ? []
       : [{ kind: "identifier" as const, text: resolution.source.vintage }]),
+    ...resolution.coverageNotes.map((text) => ({ kind: "prose" as const, text })),
   ];
 }
 
@@ -591,7 +609,10 @@ function reflectsAddress(fields: PublicResolutionField[], address: string) {
     return true;
   }
 
-  const layers = fields.map((field) => decodePublicText(field.text));
+  const layers = fields.map((field) => ({
+    aggregateOnly: field.aggregateOnly ?? false,
+    layers: decodePublicText(field.text),
+  }));
   return (
     layers.some((fieldLayers) => fieldLayers === null) ||
     containsAddressAcrossPublicFields(layers, normalizedAddress)
@@ -599,40 +620,47 @@ function reflectsAddress(fields: PublicResolutionField[], address: string) {
 }
 
 function containsAddressAcrossPublicFields(
-  layersByField: Array<string[] | null>,
+  layersByField: Array<{ aggregateOnly: boolean; layers: string[] | null }>,
   target: string,
 ) {
-  let carriedOffsets = new Set<number>();
+  let carriedMatches: Array<{ offset: number; startedAt: number }> = [];
 
-  for (const layers of layersByField) {
+  for (const [fieldIndex, field] of layersByField.entries()) {
+    const { aggregateOnly, layers } = field;
     if (layers === null) {
       return true;
     }
 
-    const nextOffsets = new Set<number>();
+    const nextMatches = new Map<string, { offset: number; startedAt: number }>();
     for (const layer of layers) {
-      let offsets = new Set([...carriedOffsets, 0]);
+      let matches = carriedMatches;
       for (const token of normalizeWordTokens(layer)) {
-        const followingOffsets = new Set<number>();
-        for (const offset of offsets) {
-          if (!target.startsWith(token, offset)) {
+        const followingMatches = new Map<string, { offset: number; startedAt: number }>();
+        for (const match of [...matches, { offset: 0, startedAt: fieldIndex }]) {
+          if (!target.startsWith(token, match.offset)) {
             continue;
           }
-          const nextOffset = offset + token.length;
+          const nextOffset = match.offset + token.length;
           if (nextOffset === target.length) {
-            return true;
+            if (match.startedAt !== fieldIndex || !aggregateOnly) {
+              return true;
+            }
+            continue;
           }
-          followingOffsets.add(nextOffset);
+          followingMatches.set(`${nextOffset}:${match.startedAt}`, {
+            offset: nextOffset,
+            startedAt: match.startedAt,
+          });
         }
-        offsets = new Set([...followingOffsets, 0]);
+        matches = [...followingMatches.values()];
       }
-      for (const offset of offsets) {
-        if (offset !== 0) {
-          nextOffsets.add(offset);
+      for (const match of matches) {
+        if (match.offset !== 0) {
+          nextMatches.set(`${match.offset}:${match.startedAt}`, match);
         }
       }
     }
-    carriedOffsets = nextOffsets;
+    carriedMatches = [...nextMatches.values()];
   }
 
   return false;

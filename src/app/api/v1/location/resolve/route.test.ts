@@ -462,13 +462,13 @@ describe("POST /api/v1/location/resolve", () => {
       leak: "Resolved for 123\u200bMain\u200bStreet",
     },
     {
-      case: "scientific-coordinate decimal equivalent",
+      case: "canonical-coordinate decimal equivalent",
       input: {
         kind: "coordinates" as const,
-        latitude: 1e-7,
+        latitude: 0.000001,
         longitude: 45,
       },
-      leak: "Latitude 0.0000001",
+      leak: "Latitude 0.000001",
     },
   ])("fails closed on $case in otherwise public facts", async ({ input, leak }) => {
     vi.spyOn(residenceModule, "resolveResidence").mockResolvedValue({

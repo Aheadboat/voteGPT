@@ -20,9 +20,12 @@ import {
   unavailableResidenceResponse,
 } from "../../tests/fixtures/residence-responses";
 import {
+  MAX_LATITUDE_ABSOLUTE_DEGREES,
+  MAX_LONGITUDE_ABSOLUTE_DEGREES,
   MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS,
   MAX_RESOLUTION_TOKEN_SIGNATURE_CHARACTERS,
   RESIDENCE_RESOLUTION_TOKEN_VERSION,
+  RESOLUTION_TOKEN_SIGNATURE_BYTES,
 } from "./residence-policy";
 import {
   createResolutionToken,
@@ -126,6 +129,7 @@ describe("residence contract", () => {
       { kind: "address", address: "" },
       { kind: "address", address: "   " },
       { kind: "address", address: "a".repeat(301) },
+      { kind: "address", address: "😀".repeat(257) },
       { kind: "address", address: 100 },
       { kind: "address", address: "100 Main St", extra: true },
       {
@@ -141,11 +145,37 @@ describe("residence contract", () => {
 
   it("accepts only finite in-range coordinates with the exact request shape", () => {
     expect(
-      parseResidenceInput({ kind: "coordinates", latitude: -90, longitude: 180 }),
-    ).toEqual({ kind: "coordinates", latitude: -90, longitude: 180 });
+      parseResidenceInput({
+        kind: "coordinates",
+        latitude: -MAX_LATITUDE_ABSOLUTE_DEGREES,
+        longitude: MAX_LONGITUDE_ABSOLUTE_DEGREES,
+      }),
+    ).toEqual({
+      kind: "coordinates",
+      latitude: -MAX_LATITUDE_ABSOLUTE_DEGREES,
+      longitude: MAX_LONGITUDE_ABSOLUTE_DEGREES,
+    });
     expect(
-      parseResidenceInput({ kind: "coordinates", latitude: 90, longitude: -180 }),
-    ).toEqual({ kind: "coordinates", latitude: 90, longitude: -180 });
+      parseResidenceInput({
+        kind: "coordinates",
+        latitude: MAX_LATITUDE_ABSOLUTE_DEGREES,
+        longitude: -MAX_LONGITUDE_ABSOLUTE_DEGREES,
+      }),
+    ).toEqual({
+      kind: "coordinates",
+      latitude: MAX_LATITUDE_ABSOLUTE_DEGREES,
+      longitude: -MAX_LONGITUDE_ABSOLUTE_DEGREES,
+    });
+    const negativeZero = parseResidenceInput({
+      kind: "coordinates",
+      latitude: -0,
+      longitude: -0,
+    });
+    expect(negativeZero).toEqual({ kind: "coordinates", latitude: 0, longitude: 0 });
+    if (negativeZero?.kind !== "coordinates") {
+      throw new Error("Coordinates did not parse.");
+    }
+    expect(Object.is(negativeZero.latitude, -0)).toBe(false);
 
     for (const value of [
       null,
@@ -154,6 +184,8 @@ describe("residence contract", () => {
       { kind: "coordinates", latitude: Number.POSITIVE_INFINITY, longitude: 1 },
       { kind: "coordinates", latitude: 91, longitude: 1 },
       { kind: "coordinates", latitude: 1, longitude: -181 },
+      { kind: "coordinates", latitude: 1.0000001, longitude: 2 },
+      { kind: "coordinates", latitude: 1e-7, longitude: 2 },
       { kind: "coordinates", latitude: "1", longitude: 2 },
       { kind: "coordinates", latitude: 1, longitude: 2, extra: true },
       { kind: "unknown", latitude: 1, longitude: 2 },
@@ -278,7 +310,7 @@ describe("resolution token", () => {
     );
   });
 
-  it("validates a non-reflecting resolution at every public bound", () => {
+  it("rejects a non-reflecting resolution that exceeds the token payload bound", () => {
     const boundedText = "z".repeat(2_048);
     const maximumResolution = {
       ...resolvedResidence,
@@ -307,7 +339,7 @@ describe("resolution token", () => {
         secret,
         now,
       ),
-    ).not.toThrow();
+    ).toThrow("Cannot sign an invalid residence resolution.");
   });
 
   it.each([
@@ -704,12 +736,12 @@ describe("resolution token", () => {
 
     expect(expiresAt).toBe("2026-07-14T20:10:00.000Z");
     const [version, encodedPayload, signature] = resolutionToken.split(".");
-    expect(version).toBe("v2");
+    expect(version).toBe(RESIDENCE_RESOLUTION_TOKEN_VERSION);
 
     const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
     const payload = JSON.parse(payloadJson) as Record<string, unknown>;
     expect(payload).toEqual({
-      version: "v2",
+      version: RESIDENCE_RESOLUTION_TOKEN_VERSION,
       input: addressInput,
       userId,
       issuedAt: now.toISOString(),
@@ -720,14 +752,14 @@ describe("resolution token", () => {
       /SENTINEL ADDRESS|12\.345678|-98\.765432|SENTINEL NORMALIZED INPUT|provider\.invalid/,
     );
 
-    const signingInput = `v2.${encodedPayload}`;
+    const signingInput = `${RESIDENCE_RESOLUTION_TOKEN_VERSION}.${encodedPayload}`;
     const purposeKey = Buffer.from(
       hkdfSync(
         "sha256",
         secret,
         Buffer.alloc(0),
-        "voteGPT/residence-resolution/v2",
-        32,
+        `voteGPT/residence-resolution/${RESIDENCE_RESOLUTION_TOKEN_VERSION}`,
+        RESOLUTION_TOKEN_SIGNATURE_BYTES,
       ),
     );
     expect(signature).toBe(
@@ -767,9 +799,18 @@ describe("resolution token", () => {
         userId,
         { kind: "address", address: "123 Fixture Avenue, Other City, CA 90000" },
         secret,
-        new Date("2026-07-14T20:10:00.000Z"),
+        new Date("2026-07-14T20:09:59.999Z"),
       ),
     ).toBeNull();
+    expect(
+      verifyResolutionToken(
+        resolutionToken,
+        userId,
+        { kind: "address", address: `  ${addressInput.address}  ` },
+        secret,
+        new Date("2026-07-14T20:09:59.999Z"),
+      ),
+    ).toEqual(resolvedResidence);
     expect(
       verifyResolutionToken(
         resolutionToken,
@@ -811,6 +852,67 @@ describe("resolution token", () => {
         now,
       ),
     ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it.each([
+    "ＡＰＩ — https://developers.google.com/civic-information",
+    "https://developers.google.com/civic-information — 2026-07-14T20:00:00.000Z",
+  ])("rejects exact-location reconstruction across rendered source fields: %s", (address) => {
+    expect(() =>
+      createResolutionToken(
+        { kind: "address", address },
+        resolvedResidence,
+        userId,
+        secret,
+        now,
+      ),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it("keeps creators and verifiers compatible at the bounded token payload edge", () => {
+    const { compatible, oversized } = resolutionPayloadBoundaries();
+    const token = createResolutionToken(
+      addressInput,
+      compatible,
+      userId,
+      secret,
+      now,
+    );
+
+    expect(token.resolutionToken.split(".")[1]).toHaveLength(
+      MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS,
+    );
+    expect(
+      verifyResolutionToken(token.resolutionToken, userId, addressInput, secret, now),
+    ).toEqual(compatible);
+    expect(() =>
+      createResolutionToken(addressInput, oversized, userId, secret, now),
+    ).toThrow("Cannot sign an invalid residence resolution.");
+  });
+
+  it("rejects a canonical HMAC with alternate base64url padding bits", () => {
+    const { resolutionToken } = createResolutionToken(
+      addressInput,
+      resolvedResidence,
+      userId,
+      secret,
+      now,
+    );
+    const [version, payload, signature] = resolutionToken.split(".");
+    const alternate = alternateBase64urlFinalCharacter(signature);
+
+    expect(Buffer.from(alternate, "base64url")).toEqual(
+      Buffer.from(signature, "base64url"),
+    );
+    expect(
+      verifyResolutionToken(
+        `${version}.${payload}.${alternate}`,
+        userId,
+        addressInput,
+        secret,
+        now,
+      ),
+    ).toBeNull();
   });
 
   it("rejects invalid or oversized token grammar before verification", () => {
@@ -1196,18 +1298,65 @@ function signResolutionPayload(payload: unknown) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
     "base64url",
   );
-  const signingInput = `v2.${encodedPayload}`;
+  const signingInput = `${RESIDENCE_RESOLUTION_TOKEN_VERSION}.${encodedPayload}`;
   const purposeKey = Buffer.from(
     hkdfSync(
       "sha256",
       secret,
       Buffer.alloc(0),
-      "voteGPT/residence-resolution/v2",
-      32,
+      `voteGPT/residence-resolution/${RESIDENCE_RESOLUTION_TOKEN_VERSION}`,
+      RESOLUTION_TOKEN_SIGNATURE_BYTES,
     ),
   );
   const signature = createHmac("sha256", purposeKey)
     .update(signingInput)
     .digest("base64url");
   return `${signingInput}.${signature}`;
+}
+
+function resolutionPayloadBoundaries() {
+  const fixedCoverage = "x".repeat(2_048);
+  let compatible: Extract<
+    ResolutionOutcome,
+    { status: "matched" | "partial" }
+  > | null = null;
+
+  for (let length = 1; length <= 2_048; length += 1) {
+    const resolution = {
+      ...resolvedResidence,
+      coverageNotes: [fixedCoverage, fixedCoverage, "x".repeat(length)],
+    };
+    const encodedPayload = Buffer.from(
+      JSON.stringify({
+        version: RESIDENCE_RESOLUTION_TOKEN_VERSION,
+        input: addressInput,
+        userId,
+        issuedAt: now.toISOString(),
+        expiresAt: "2026-07-14T20:10:00.000Z",
+        resolution,
+      }),
+    ).toString("base64url");
+    if (encodedPayload.length <= MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS) {
+      compatible = resolution;
+      continue;
+    }
+    if (compatible === null) {
+      throw new Error("No token-compatible fixture was found.");
+    }
+    return { compatible, oversized: resolution };
+  }
+
+  throw new Error("No oversized token fixture was found.");
+}
+
+function alternateBase64urlFinalCharacter(signature: string) {
+  const decoded = Buffer.from(signature, "base64url");
+  const prefix = signature.slice(0, -1);
+  for (const character of "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") {
+    const alternate = `${prefix}${character}`;
+    if (alternate !== signature && Buffer.from(alternate, "base64url").equals(decoded)) {
+      return alternate;
+    }
+  }
+  throw new Error("No alternate base64url spelling was found.");
 }
