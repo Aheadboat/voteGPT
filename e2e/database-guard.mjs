@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import parseConnectionString from "pg-connection-string";
 
 export const E2E_DATABASE_MARKER_TABLE = "e2e_database_guard";
 export const E2E_DATABASE_MARKER_QUERY =
@@ -22,10 +23,10 @@ export async function requireE2eDatabase(
     throw new Error("E2E database marker must be an unpredictable value.");
   }
 
-  const normalizedTarget = normalizeDatabaseUrl(databaseUrl);
+  const normalizedTarget = normalizeDatabaseUrl(databaseUrl, environment);
   if (
     ambientDatabaseUrl &&
-    normalizeDatabaseUrl(ambientDatabaseUrl) === normalizedTarget
+    normalizeDatabaseUrl(ambientDatabaseUrl, environment) === normalizedTarget
   ) {
     throw new Error("E2E database must differ from the ambient database.");
   }
@@ -61,9 +62,18 @@ export async function readE2eDatabaseMarker(databaseUrl) {
   throw new Error("E2E database must use PostgreSQL only.");
 }
 
-function normalizeDatabaseUrl(databaseUrl) {
+function normalizeDatabaseUrl(databaseUrl, environment) {
   if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
-    const parsed = new URL(databaseUrl);
+    let parsed;
+    let connection;
+    try {
+      parsed = new URL(databaseUrl);
+      decodeURIComponent(parsed.hostname);
+      decodeURI(parsed.pathname);
+      connection = parseConnectionString(databaseUrl);
+    } catch {
+      throw new Error("E2E PostgreSQL database URL is invalid.");
+    }
     if (
       parsed.searchParams.has("host") ||
       parsed.searchParams.has("port")
@@ -73,15 +83,19 @@ function normalizeDatabaseUrl(databaseUrl) {
       );
     }
 
-    const hostname = parsed.hostname.toLowerCase();
-    const database = decodeURI(parsed.pathname.slice(1));
-    if (!hostname || !database) {
+    const hostname = connection.host?.toLowerCase();
+    const database = connection.database;
+    const port = Number.parseInt(
+      connection.port || environment.PGPORT || "5432",
+      10,
+    );
+    if (!hostname || !database || !Number.isInteger(port)) {
       throw new Error(
         "E2E PostgreSQL database URL must specify a host and database.",
       );
     }
 
-    return `postgresql://${hostname}:${parsed.port || "5432"}/${database}`;
+    return `postgresql://${hostname}:${port}/${database}`;
   }
   throw new Error("E2E database must use PostgreSQL only.");
 }

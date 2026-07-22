@@ -99,6 +99,39 @@ describe("destructive E2E database guard", () => {
   );
 
   it.each([
+    [
+      "an omitted target port resolved through PGPORT",
+      "postgresql://ambient:ambient-secret@localhost:6543/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@localhost/votegpt_e2e",
+      { PGPORT: "6543" },
+    ],
+    [
+      "a percent-encoded target host",
+      "postgresql://ambient:ambient-secret@localhost/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@%6cocalhost/votegpt_e2e",
+      {},
+    ],
+  ])(
+    "rejects PostgreSQL client routing parity bypass with %s before reading the marker",
+    async (_description, ambientDatabaseUrl, e2eDatabaseUrl, environment) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({
+            DATABASE_URL: ambientDatabaseUrl,
+            E2E_DATABASE_URL: e2eDatabaseUrl,
+            ...environment,
+          }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/ambient/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
     ["host", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?host=elsewhere"],
     ["port", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?port=5433"],
   ])(
@@ -116,6 +149,22 @@ describe("destructive E2E database guard", () => {
       expect(readTargetMarker).not.toHaveBeenCalled();
     },
   );
+
+  it("rejects invalid PostgreSQL path encoding before reading the marker", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          E2E_DATABASE_URL:
+            "postgresql://e2e:e2e-secret@localhost/votegpt%ZZ_e2e",
+        }),
+        readTargetMarker,
+      ),
+    ).rejects.toThrow(/invalid/i);
+    expect(readTargetMarker).not.toHaveBeenCalled();
+  });
 
   it.each([undefined, "different-marker"])(
     "rejects target-resident marker %s before migration or write",
