@@ -139,4 +139,35 @@ describe("destructive E2E database guard", () => {
     expect(workflow).toMatch(/CREATE TABLE.*e2e_database_guard/i);
     expect(workflow).toMatch(/DROP DATABASE.*votegpt_e2e/i);
   });
+
+  it("provisions the marker through psql stdin substitution and stops on SQL errors", () => {
+    const workflow = repositoryFile(".github/workflows/ci.yml");
+    const provision = workflow.match(
+      /- name: Provision marked destructive E2E database([\s\S]*?)(?=\n\s*- name:)/,
+    )?.[1];
+
+    expect(provision).toBeDefined();
+    expect(provision).toMatch(/-v ON_ERROR_STOP=1/);
+    expect(provision).toMatch(/-v marker="\$marker"\s*<<'SQL'/);
+    expect(provision).toContain("VALUES (1, :'marker');");
+    expect(provision).not.toMatch(/-v marker="\$marker"\s+-c/);
+  });
+
+  it("drops each disposable CI database in its own psql invocation", () => {
+    const workflow = repositoryFile(".github/workflows/ci.yml");
+    const cleanup = workflow.match(
+      /- name: Destroy disposable databases([\s\S]*)/,
+    )?.[1];
+
+    expect(cleanup).toBeDefined();
+    expect(cleanup).toMatch(
+      /psql[^\n]*-c 'DROP DATABASE IF EXISTS votegpt_e2e WITH \(FORCE\);'/,
+    );
+    expect(cleanup).toMatch(
+      /psql[^\n]*-c 'DROP DATABASE IF EXISTS votegpt_test WITH \(FORCE\);'/,
+    );
+    expect(cleanup).not.toMatch(
+      /DROP DATABASE IF EXISTS votegpt_e2e WITH \(FORCE\);\s*DROP DATABASE IF EXISTS votegpt_test WITH \(FORCE\);/,
+    );
+  });
 });
