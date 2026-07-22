@@ -32,8 +32,7 @@ vi.mock("@/lib/residence", async (importOriginal) => {
 });
 
 vi.mock("@/lib/saved-residence", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/lib/saved-residence")>();
+  const actual = await importOriginal<typeof import("@/lib/saved-residence")>();
   return {
     ...actual,
     deleteSavedResidence: vi.fn(),
@@ -50,6 +49,8 @@ const now = new Date("2026-07-16T20:00:00.000Z");
 const secret = "route-secret-at-least-thirty-two-characters";
 const userId = "user_route_owner";
 const otherUserId = "user_route_other";
+const revision = "11111111-1111-4111-8111-111111111111";
+const replacementRevision = "22222222-2222-4222-8222-222222222222";
 const getSession = vi.fn();
 const providerFetch = vi.fn<typeof globalThis.fetch>();
 
@@ -102,6 +103,10 @@ const errors = {
     status: "invalid_token",
     message: "Preview your voting residence again before saving.",
   },
+  preconditionFailed: {
+    status: "precondition_failed",
+    message: "Saved residence changed. Reload the latest state and try again.",
+  },
   unavailable: {
     status: "unavailable",
     message: "Saved residence is temporarily unavailable. Try again later.",
@@ -124,8 +129,11 @@ beforeEach(() => {
   vi.mocked(savedResidenceModule.saveSavedResidence).mockResolvedValue({
     replaced: true,
     residence: savedResidenceView,
+    revision: replacementRevision,
   });
-  vi.mocked(savedResidenceModule.deleteSavedResidence).mockResolvedValue(false);
+  vi.mocked(savedResidenceModule.deleteSavedResidence).mockResolvedValue(
+    "empty",
+  );
   vi.mocked(
     savedResidenceModule.loadResidenceEncryptionKeyring,
   ).mockImplementation(() => {
@@ -161,7 +169,9 @@ describe("/api/v1/residence request boundary", () => {
 
     expect(getRuntimeAuth).not.toHaveBeenCalled();
     expect(getSession).not.toHaveBeenCalled();
-    expect(savedResidenceModule.parseSaveResidenceRequest).not.toHaveBeenCalled();
+    expect(
+      savedResidenceModule.parseSaveResidenceRequest,
+    ).not.toHaveBeenCalled();
     expect(residenceModule.verifyResolutionToken).not.toHaveBeenCalled();
     expect(savedResidenceModule.saveSavedResidence).not.toHaveBeenCalled();
     expect(providerFetch).not.toHaveBeenCalled();
@@ -169,7 +179,11 @@ describe("/api/v1/residence request boundary", () => {
 
   it("rejects non-JSON POST and DELETE before auth, body, or operation work", async () => {
     for (const method of ["POST", "DELETE"] as const) {
-      for (const contentType of [null, "text/plain", "application/problem+json"]) {
+      for (const contentType of [
+        null,
+        "text/plain",
+        "application/problem+json",
+      ]) {
         const request = residenceRequest(method, validBodyFor(method), {
           contentType,
         });
@@ -225,7 +239,10 @@ describe("/api/v1/residence request boundary", () => {
       { ...valid, address: "x".repeat(301) },
       { ...valid, resolutionToken: 42 },
       { ...valid, consent: { ...valid.consent, accepted: false } },
-      { ...valid, consent: { ...valid.consent, version: "saved-residence-v2" } },
+      {
+        ...valid,
+        consent: { ...valid.consent, version: "saved-residence-v2" },
+      },
       { ...valid, consent: { ...valid.consent, extra: true } },
       { ...valid, latitude: 34.0522 },
       { ...valid, longitude: -118.2437 },
@@ -234,11 +251,7 @@ describe("/api/v1/residence request boundary", () => {
     ];
 
     const malformed = residenceRequest("POST", "{", { raw: true });
-    await expectPrivateJson(
-      await POST(malformed),
-      400,
-      errors.invalidRequest,
-    );
+    await expectPrivateJson(await POST(malformed), 400, errors.invalidRequest);
 
     for (const body of invalidBodies) {
       await expectPrivateJson(
@@ -305,11 +318,7 @@ describe("/api/v1/residence request boundary", () => {
   it("orders origin, JSON type, session, exact body, token, then POST operation", async () => {
     const request = residenceRequest("POST", validSaveBody());
 
-    await expectPrivateJson(
-      await POST(request),
-      200,
-      savedResponse(true),
-    );
+    await expectPrivateJson(await POST(request), 200, savedResponse(true));
 
     expectStrictlyIncreasing([
       firstCall(vi.mocked(getRuntimeAuth)),
@@ -323,23 +332,116 @@ describe("/api/v1/residence request boundary", () => {
       validSaveBody(),
       resolution,
       now,
+      null,
     );
   });
 });
 
 describe("/api/v1/residence owner behavior", () => {
+  it("returns an ETag-backed generic recovery state for an unreadable owner row", async () => {
+    vi.mocked(savedResidenceModule.getSavedResidence).mockResolvedValue({
+      residence: null,
+      revision,
+    });
+
+    const response = await GET(residenceRequest("GET"));
+    expect(response.headers.get("etag")).toBe(`"${revision}"`);
+    await expectPrivateJson(response, 200, {
+      status: "saved",
+      residence: null,
+    });
+  });
+
+  it("returns strong ETags and requires matching If-Match for replacement and deletion", async () => {
+    vi.mocked(savedResidenceModule.getSavedResidence).mockResolvedValue({
+      residence: savedResidenceView,
+      revision,
+    });
+
+    const getResponse = await GET(residenceRequest("GET"));
+    expect(getResponse.headers.get("etag")).toBe(`"${revision}"`);
+    await expectPrivateJson(getResponse, 200, {
+      status: "saved",
+      residence: savedResidenceView,
+    });
+
+    const postResponse = await POST(
+      residenceRequest("POST", validSaveBody(), { ifMatch: `"${revision}"` }),
+    );
+    expect(postResponse.headers.get("etag")).toBe(`"${replacementRevision}"`);
+    await expectPrivateJson(postResponse, 200, savedResponse(true));
+    expect(savedResidenceModule.saveSavedResidence).toHaveBeenLastCalledWith(
+      userId,
+      validSaveBody(),
+      resolution,
+      now,
+      revision,
+    );
+
+    vi.mocked(savedResidenceModule.saveSavedResidence).mockResolvedValueOnce(
+      null,
+    );
+    await expectPrivateJson(
+      await POST(residenceRequest("POST", validSaveBody())),
+      412,
+      errors.preconditionFailed,
+    );
+    for (const ifMatch of [
+      `W/"${revision}"`,
+      "*",
+      revision,
+      `"${revision}", "${replacementRevision}"`,
+      '"not-a-uuid"',
+    ]) {
+      await expectPrivateJson(
+        await POST(residenceRequest("POST", validSaveBody(), { ifMatch })),
+        412,
+        errors.preconditionFailed,
+      );
+    }
+
+    vi.mocked(savedResidenceModule.deleteSavedResidence).mockResolvedValueOnce(
+      "deleted",
+    );
+    await expectPrivateJson(
+      await DELETE(
+        residenceRequest("DELETE", validDeleteBody(), {
+          ifMatch: `"${replacementRevision}"`,
+        }),
+      ),
+      200,
+      { status: "deleted" },
+    );
+    expect(savedResidenceModule.deleteSavedResidence).toHaveBeenLastCalledWith(
+      userId,
+      replacementRevision,
+    );
+
+    for (const ifMatch of [null, `W/"${revision}"`, "*", '"bad"']) {
+      await expectPrivateJson(
+        await DELETE(
+          residenceRequest("DELETE", validDeleteBody(), { ifMatch }),
+        ),
+        412,
+        errors.preconditionFailed,
+      );
+    }
+  });
+
   it("returns exact GET, POST, and DELETE success DTOs with no-store and fresh sessions", async () => {
     vi.mocked(savedResidenceModule.getSavedResidence)
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(savedResidenceView);
+      .mockResolvedValueOnce({ residence: savedResidenceView, revision });
     vi.mocked(savedResidenceModule.deleteSavedResidence)
-      .mockResolvedValueOnce(false)
-      .mockResolvedValueOnce(true);
+      .mockResolvedValueOnce("empty")
+      .mockResolvedValueOnce("deleted");
 
     await expectPrivateJson(
       await GET(residenceRequest("GET", undefined, { origin: null })),
       200,
-      { status: "empty" },
+      {
+        status: "empty",
+      },
     );
     await expectPrivateJson(
       await GET(
@@ -358,13 +460,15 @@ describe("/api/v1/residence owner behavior", () => {
     );
     await expectPrivateJson(
       await DELETE(residenceRequest("DELETE", validDeleteBody())),
-      200,
-      { status: "empty" },
+      412,
+      errors.preconditionFailed,
     );
     await expectPrivateJson(
       await DELETE(residenceRequest("DELETE", validDeleteBody())),
       200,
-      { status: "deleted" },
+      {
+        status: "deleted",
+      },
     );
 
     expect(getSession).toHaveBeenCalledTimes(5);
@@ -388,10 +492,7 @@ describe("/api/v1/residence owner behavior", () => {
       },
       {
         name: "expired",
-        token: signedToken(
-          userId,
-          new Date(now.getTime() - 10 * 60 * 1000),
-        ),
+        token: signedToken(userId, new Date(now.getTime() - 10 * 60 * 1000)),
       },
       { name: "wrong user", token: signedToken(otherUserId, now) },
     ];
@@ -414,14 +515,14 @@ describe("/api/v1/residence owner behavior", () => {
   });
 
   it("passes only the current session user to reads and deletes", async () => {
-    const homes = new Map<string, SavedResidenceView>([
-      [userId, savedResidenceView],
+    const homes = new Map([
+      [userId, { residence: savedResidenceView, revision }],
     ]);
     vi.mocked(savedResidenceModule.getSavedResidence).mockImplementation(
       async (ownerId) => homes.get(ownerId) ?? null,
     );
     vi.mocked(savedResidenceModule.deleteSavedResidence).mockImplementation(
-      async (ownerId) => homes.delete(ownerId),
+      async (ownerId) => (homes.delete(ownerId) ? "deleted" : "empty"),
     );
     getSession
       .mockResolvedValueOnce(sessionFor(userId))
@@ -438,13 +539,15 @@ describe("/api/v1/residence owner behavior", () => {
     });
     await expectPrivateJson(
       await DELETE(residenceRequest("DELETE", validDeleteBody())),
-      200,
-      { status: "empty" },
+      412,
+      errors.preconditionFailed,
     );
     await expectPrivateJson(
       await DELETE(residenceRequest("DELETE", validDeleteBody())),
       200,
-      { status: "deleted" },
+      {
+        status: "deleted",
+      },
     );
 
     expect(savedResidenceModule.getSavedResidence).toHaveBeenNthCalledWith(
@@ -458,199 +561,198 @@ describe("/api/v1/residence owner behavior", () => {
     expect(savedResidenceModule.deleteSavedResidence).toHaveBeenNthCalledWith(
       1,
       otherUserId,
+      revision,
     );
     expect(savedResidenceModule.deleteSavedResidence).toHaveBeenNthCalledWith(
       2,
       userId,
+      revision,
     );
   });
 
-  it(
-    "enforces owner boundaries with real file-backed sessions and residences",
-    async () => {
-      vi.useRealTimers();
-      const root = await mkdtemp(join(tmpdir(), "votegpt-route-owner-"));
-      const connectionString = pgliteConnection(join(root, "database"));
-      const keyVersion = "2026-07";
-      const encodedKey = Buffer.alloc(32, 7).toString("base64url");
-      let db: Awaited<ReturnType<typeof createDatabase>> | undefined;
+  it("enforces owner boundaries with real file-backed sessions and residences", async () => {
+    vi.useRealTimers();
+    const root = await mkdtemp(join(tmpdir(), "votegpt-route-owner-"));
+    const connectionString = pgliteConnection(join(root, "database"));
+    const keyVersion = "2026-07";
+    const encodedKey = Buffer.alloc(32, 7).toString("base64url");
+    let db: Awaited<ReturnType<typeof createDatabase>> | undefined;
 
-      vi.stubEnv("DATABASE_URL", connectionString);
-      vi.stubEnv("RESIDENCE_ENCRYPTION_ACTIVE_KEY", keyVersion);
-      vi.stubEnv(
-        "RESIDENCE_ENCRYPTION_KEYS",
-        JSON.stringify([{ version: keyVersion, key: encodedKey }]),
+    vi.stubEnv("DATABASE_URL", connectionString);
+    vi.stubEnv("RESIDENCE_ENCRYPTION_ACTIVE_KEY", keyVersion);
+    vi.stubEnv(
+      "RESIDENCE_ENCRYPTION_KEYS",
+      JSON.stringify([{ version: keyVersion, key: encodedKey }]),
+    );
+
+    try {
+      db = await createDatabase(connectionString);
+      const deliveries: Array<{
+        email: string;
+        token: string;
+        url: string;
+      }> = [];
+      const auth = createAuth({
+        baseURL: appOrigin,
+        database: db,
+        secret,
+        sendMagicLink: async (delivery) => {
+          deliveries.push(delivery);
+        },
+      });
+      const signIn = async (email: string) => {
+        const sent = await auth.handler(
+          new Request(`${appOrigin}/api/auth/sign-in/magic-link`, {
+            body: JSON.stringify({ email }),
+            headers: {
+              "content-type": "application/json",
+              origin: appOrigin,
+            },
+            method: "POST",
+          }),
+        );
+        expect(sent.status).toBe(200);
+        const delivery = deliveries.at(-1);
+        expect(delivery?.email).toBe(email);
+        const signedIn = await auth.handler(new Request(delivery!.url));
+        expect(signedIn.status).toBe(302);
+        const cookie = signedIn.headers.get("set-cookie")?.split(";", 1)[0];
+        expect(cookie).toMatch(/^better-auth\.session_token=/);
+        return cookie!;
+      };
+
+      const firstEmail = "route-owner-one@example.test";
+      const secondEmail = "route-owner-two@example.test";
+      const firstCookie = await signIn(firstEmail);
+      const secondCookie = await signIn(secondEmail);
+      expect(secondCookie).not.toBe(firstCookie);
+
+      const [firstUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.email, firstEmail));
+      const [secondUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.email, secondEmail));
+      expect(firstUser).toBeDefined();
+      expect(secondUser).toBeDefined();
+      if (!firstUser || !secondUser) {
+        throw new Error("Expected both signed-in users.");
+      }
+      expect(
+        new Set((await db.select().from(session)).map((row) => row.userId)),
+      ).toEqual(new Set([firstUser.id, secondUser.id]));
+
+      const actualSavedResidence = await vi.importActual<
+        typeof import("@/lib/saved-residence")
+      >("@/lib/saved-residence");
+      const repository =
+        actualSavedResidence.createSavedResidenceRepository(db);
+      const keyring = actualSavedResidence.loadResidenceEncryptionKeyring();
+      const secondResolution = {
+        ...resolution,
+        divisions: [
+          {
+            ...resolution.divisions[0],
+            id: "ocd-division/country:us/state:ex/cd:13",
+            name: "Example Congressional District 13",
+          },
+        ],
+      } satisfies SavedResidenceResolution;
+      const firstStored = await repository.save(
+        firstUser.id,
+        validSaveBody("unused", "111 First Owner Lane"),
+        resolution,
+        now,
+        keyring,
+      );
+      const secondStored = await repository.save(
+        secondUser.id,
+        validSaveBody("unused", "222 Second Owner Road"),
+        secondResolution,
+        now,
+        keyring,
+      );
+      vi.mocked(savedResidenceModule.getSavedResidence).mockImplementation(
+        actualSavedResidence.getSavedResidence,
+      );
+      vi.mocked(savedResidenceModule.deleteSavedResidence).mockImplementation(
+        actualSavedResidence.deleteSavedResidence,
+      );
+      vi.mocked(getRuntimeAuth).mockResolvedValue(auth);
+
+      await expectPrivateJson(
+        await GET(residenceRequest("GET", undefined, { cookie: firstCookie })),
+        200,
+        { status: "saved", residence: firstStored!.residence },
+      );
+      await expectPrivateJson(
+        await GET(residenceRequest("GET", undefined, { cookie: secondCookie })),
+        200,
+        { status: "saved", residence: secondStored!.residence },
       );
 
-      try {
-        db = await createDatabase(connectionString);
-        const deliveries: Array<{
-          email: string;
-          token: string;
-          url: string;
-        }> = [];
-        const auth = createAuth({
-          baseURL: appOrigin,
-          database: db,
-          secret,
-          sendMagicLink: async (delivery) => {
-            deliveries.push(delivery);
-          },
-        });
-        const signIn = async (email: string) => {
-          const sent = await auth.handler(
-            new Request(`${appOrigin}/api/auth/sign-in/magic-link`, {
-              body: JSON.stringify({ email }),
-              headers: {
-                "content-type": "application/json",
-                origin: appOrigin,
-              },
-              method: "POST",
-            }),
-          );
-          expect(sent.status).toBe(200);
-          const delivery = deliveries.at(-1);
-          expect(delivery?.email).toBe(email);
-          const signedIn = await auth.handler(new Request(delivery!.url));
-          expect(signedIn.status).toBe(302);
-          const cookie = signedIn.headers.get("set-cookie")?.split(";", 1)[0];
-          expect(cookie).toMatch(/^better-auth\.session_token=/);
-          return cookie!;
-        };
+      await expectPrivateJson(
+        await DELETE(
+          residenceRequest("DELETE", validDeleteBody(), {
+            cookie: firstCookie,
+            ifMatch: `"${firstStored!.revision}"`,
+          }),
+        ),
+        200,
+        { status: "deleted" },
+      );
+      expect(await repository.get(firstUser.id, keyring)).toBeNull();
+      expect(await repository.get(secondUser.id, keyring)).toEqual({
+        residence: secondStored!.residence,
+        revision: secondStored!.revision,
+      });
 
-        const firstEmail = "route-owner-one@example.test";
-        const secondEmail = "route-owner-two@example.test";
-        const firstCookie = await signIn(firstEmail);
-        const secondCookie = await signIn(secondEmail);
-        expect(secondCookie).not.toBe(firstCookie);
-
-        const [firstUser] = await db
-          .select()
-          .from(user)
-          .where(eq(user.email, firstEmail));
-        const [secondUser] = await db
-          .select()
-          .from(user)
-          .where(eq(user.email, secondEmail));
-        expect(firstUser).toBeDefined();
-        expect(secondUser).toBeDefined();
-        if (!firstUser || !secondUser) {
-          throw new Error("Expected both signed-in users.");
-        }
-        expect(
-          new Set(
-            (await db.select().from(session)).map((row) => row.userId),
-          ),
-        ).toEqual(new Set([firstUser.id, secondUser.id]));
-
-        const actualSavedResidence = await vi.importActual<
-          typeof import("@/lib/saved-residence")
-        >("@/lib/saved-residence");
-        const repository =
-          actualSavedResidence.createSavedResidenceRepository(db);
-        const keyring = actualSavedResidence.loadResidenceEncryptionKeyring();
-        const secondResolution = {
-          ...resolution,
-          divisions: [
-            {
-              ...resolution.divisions[0],
-              id: "ocd-division/country:us/state:ex/cd:13",
-              name: "Example Congressional District 13",
-            },
-          ],
-        } satisfies SavedResidenceResolution;
-        const firstStored = await repository.save(
-          firstUser.id,
-          validSaveBody("unused", "111 First Owner Lane"),
-          resolution,
-          now,
-          keyring,
-        );
-        const secondStored = await repository.save(
-          secondUser.id,
-          validSaveBody("unused", "222 Second Owner Road"),
-          secondResolution,
-          now,
-          keyring,
-        );
-        vi.mocked(savedResidenceModule.getSavedResidence).mockImplementation(
-          actualSavedResidence.getSavedResidence,
-        );
-        vi.mocked(savedResidenceModule.deleteSavedResidence).mockImplementation(
-          actualSavedResidence.deleteSavedResidence,
-        );
-        vi.mocked(getRuntimeAuth).mockResolvedValue(auth);
-
-        await expectPrivateJson(
-          await GET(
-            residenceRequest("GET", undefined, { cookie: firstCookie }),
-          ),
-          200,
-          { status: "saved", residence: firstStored.residence },
-        );
-        await expectPrivateJson(
-          await GET(
-            residenceRequest("GET", undefined, { cookie: secondCookie }),
-          ),
-          200,
-          { status: "saved", residence: secondStored.residence },
-        );
-
-        await expectPrivateJson(
-          await DELETE(
-            residenceRequest("DELETE", validDeleteBody(), {
-              cookie: firstCookie,
-            }),
-          ),
-          200,
-          { status: "deleted" },
-        );
-        expect(await repository.get(firstUser.id, keyring)).toBeNull();
-        expect(await repository.get(secondUser.id, keyring)).toEqual(
-          secondStored.residence,
-        );
-
-        await db
-          .delete(session)
-          .where(eq(session.userId, secondUser.id));
-        vi.mocked(savedResidenceModule.deleteSavedResidence).mockClear();
-        const revokedRequest = residenceRequest("DELETE", validDeleteBody(), {
-          cookie: secondCookie,
-        });
-        const readBody = vi.spyOn(revokedRequest, "json");
-        await expectPrivateJson(
-          await DELETE(revokedRequest),
-          401,
-          errors.unauthenticated,
-        );
-        expect(readBody).not.toHaveBeenCalled();
-        expect(savedResidenceModule.deleteSavedResidence).not.toHaveBeenCalled();
-        expect(await repository.get(secondUser.id, keyring)).toEqual(
-          secondStored.residence,
-        );
-      } finally {
-        if (db) {
-          await closeDatabase(db);
-        }
-        await rm(root, { force: true, recursive: true });
+      await db.delete(session).where(eq(session.userId, secondUser.id));
+      vi.mocked(savedResidenceModule.deleteSavedResidence).mockClear();
+      const revokedRequest = residenceRequest("DELETE", validDeleteBody(), {
+        cookie: secondCookie,
+        ifMatch: `"${secondStored!.revision}"`,
+      });
+      const readBody = vi.spyOn(revokedRequest, "json");
+      await expectPrivateJson(
+        await DELETE(revokedRequest),
+        401,
+        errors.unauthenticated,
+      );
+      expect(readBody).not.toHaveBeenCalled();
+      expect(savedResidenceModule.deleteSavedResidence).not.toHaveBeenCalled();
+      expect(await repository.get(secondUser.id, keyring)).toEqual({
+        residence: secondStored!.residence,
+        revision: secondStored!.revision,
+      });
+    } finally {
+      if (db) {
+        await closeDatabase(db);
       }
-    },
-    30_000,
-  );
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 30_000);
 
   it("deletes without loading or decrypting an address key", async () => {
     vi.stubEnv("RESIDENCE_ENCRYPTION_ACTIVE_KEY", "");
     vi.stubEnv("RESIDENCE_ENCRYPTION_KEYS", "");
-    vi.mocked(savedResidenceModule.deleteSavedResidence).mockResolvedValue(true);
+    vi.mocked(savedResidenceModule.deleteSavedResidence).mockResolvedValue(
+      "deleted",
+    );
 
     await expectPrivateJson(
       await DELETE(residenceRequest("DELETE", validDeleteBody())),
       200,
-      { status: "deleted" },
+      {
+        status: "deleted",
+      },
     );
 
     expect(savedResidenceModule.deleteSavedResidence).toHaveBeenCalledWith(
       userId,
+      revision,
     );
     expect(savedResidenceModule.getSavedResidence).not.toHaveBeenCalled();
     expect(
@@ -749,6 +851,7 @@ type RequestOptions = {
   cookie?: string;
   contentType?: string | null;
   origin?: string | null;
+  ifMatch?: string | null;
   raw?: boolean;
 };
 
@@ -758,17 +861,25 @@ function residenceRequest(
   options: RequestOptions = {},
 ) {
   const headers = new Headers({
-    cookie:
-      options.cookie ?? "better-auth.session_token=synthetic-session",
+    cookie: options.cookie ?? "better-auth.session_token=synthetic-session",
   });
   const contentType =
-    options.contentType === undefined ? "application/json" : options.contentType;
+    options.contentType === undefined
+      ? "application/json"
+      : options.contentType;
   const origin = options.origin === undefined ? appOrigin : options.origin;
   if (method !== "GET" && contentType !== null) {
     headers.set("content-type", contentType);
   }
   if (origin !== null) {
     headers.set("origin", origin);
+  }
+  const ifMatch =
+    options.ifMatch === undefined && method === "DELETE"
+      ? `"${revision}"`
+      : options.ifMatch;
+  if (ifMatch !== null && ifMatch !== undefined) {
+    headers.set("if-match", ifMatch);
   }
 
   return new Request(endpoint, {

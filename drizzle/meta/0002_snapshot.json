@@ -132,12 +132,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -157,6 +153,13 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
         },
         "envelope_version": {
           "name": "envelope_version",
@@ -267,12 +270,8 @@
           "name": "saved_residence_user_id_user_id_fk",
           "tableFrom": "saved_residence",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -402,12 +401,8 @@
           "name": "saved_residence_division_user_id_saved_residence_user_id_fk",
           "tableFrom": "saved_residence_division",
           "tableTo": "saved_residence",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["user_id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -415,12 +410,7 @@
       "compositePrimaryKeys": {
         "saved_residence_division_pk": {
           "name": "saved_residence_division_pk",
-          "columns": [
-            "user_id",
-            "type",
-            "id_scheme",
-            "division_id"
-          ]
+          "columns": ["user_id", "type", "id_scheme", "division_id"]
         }
       },
       "uniqueConstraints": {},
@@ -520,12 +510,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

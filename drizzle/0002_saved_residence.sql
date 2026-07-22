@@ -1,5 +1,6 @@
 CREATE TABLE "saved_residence" (
 	"user_id" text PRIMARY KEY NOT NULL,
+	"revision" uuid DEFAULT gen_random_uuid() NOT NULL,
 	"envelope_version" text NOT NULL,
 	"key_version" text NOT NULL,
 	"iv" text NOT NULL,

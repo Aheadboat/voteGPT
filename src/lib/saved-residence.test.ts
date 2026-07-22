@@ -9,11 +9,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { count, eq } from "drizzle-orm";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { createDatabase } from "@/db";
-import {
-  savedResidence,
-  savedResidenceDivision,
-  user,
-} from "@/db/schema";
+import { savedResidence, savedResidenceDivision, user } from "@/db/schema";
 import type { ResolutionResponse } from "./residence";
 import {
   SAVED_RESIDENCE_CONSENT_VERSION,
@@ -35,6 +31,7 @@ import {
   type SavedResidenceMutationResult,
   type SavedResidenceResolution,
   type SavedResidenceView,
+  type VersionedSavedResidence,
 } from "./saved-residence";
 
 type ExpectedSavedResidenceResolution = Readonly<
@@ -70,7 +67,12 @@ type ExpectedSavedResidenceView = {
 
 type ExpectedGetSavedResidenceResponse =
   | { status: "empty" }
-  | { status: "saved"; residence: ExpectedSavedResidenceView };
+  | { status: "saved"; residence: ExpectedSavedResidenceView | null };
+
+type ExpectedVersionedSavedResidence = {
+  residence: ExpectedSavedResidenceView | null;
+  revision: string;
+};
 
 type ExpectedSaveResidenceResponse = {
   status: "saved";
@@ -84,8 +86,7 @@ type ExpectedSavedResidenceMutationResult = {
 };
 
 type ExpectedDeleteSavedResidenceResponse =
-  | { status: "deleted" }
-  | { status: "empty" };
+  { status: "deleted" } | { status: "empty" };
 
 type ExpectedSavedResidenceErrorResponse = {
   status:
@@ -93,6 +94,7 @@ type ExpectedSavedResidenceErrorResponse = {
     | "unauthenticated"
     | "forbidden"
     | "invalid_token"
+    | "precondition_failed"
     | "unavailable";
   message: string;
 };
@@ -135,7 +137,10 @@ describe("saved residence contract", () => {
       unauthenticated: "Sign in again before managing a saved residence.",
       forbidden: "This saved residence request was not accepted.",
       invalid_token: "Preview your voting residence again before saving.",
-      unavailable: "Saved residence is temporarily unavailable. Try again later.",
+      precondition_failed:
+        "Saved residence changed. Reload the latest state and try again.",
+      unavailable:
+        "Saved residence is temporarily unavailable. Try again later.",
     });
 
     expectTypeOf<SavedResidenceResolution>().toEqualTypeOf<ExpectedSavedResidenceResolution>();
@@ -143,6 +148,7 @@ describe("saved residence contract", () => {
     expectTypeOf<SaveResidenceRequest>().toEqualTypeOf<ExpectedSaveResidenceRequest>();
     expectTypeOf<SavedResidenceView>().toEqualTypeOf<ExpectedSavedResidenceView>();
     expectTypeOf<GetSavedResidenceResponse>().toEqualTypeOf<ExpectedGetSavedResidenceResponse>();
+    expectTypeOf<VersionedSavedResidence>().toEqualTypeOf<ExpectedVersionedSavedResidence>();
     expectTypeOf<SaveResidenceResponse>().toEqualTypeOf<ExpectedSaveResidenceResponse>();
     expectTypeOf<SavedResidenceMutationResult>().toEqualTypeOf<ExpectedSavedResidenceMutationResult>();
     expectTypeOf<DeleteSavedResidenceResponse>().toEqualTypeOf<ExpectedDeleteSavedResidenceResponse>();
@@ -172,12 +178,16 @@ describe("saved residence contract", () => {
       ...request,
       address: "123 Main Street",
     } satisfies SaveResidenceRequest);
-    expect(
-      parseSaveResidenceRequest({ ...request, address: "a" }),
-    ).toEqual({ ...request, address: "a" });
+    expect(parseSaveResidenceRequest({ ...request, address: "a" })).toEqual({
+      ...request,
+      address: "a",
+    });
     expect(
       parseSaveResidenceRequest({ ...request, address: "a".repeat(300) }),
-    ).toEqual({ ...request, address: "a".repeat(300) });
+    ).toEqual({
+      ...request,
+      address: "a".repeat(300),
+    });
   });
 
   it("rejects malformed, extra, coordinate-bearing, or unconsented requests recursively (UX-04, UX-06)", () => {
@@ -243,17 +253,11 @@ describe("saved residence encryption keyring", () => {
 
   it.each([
     ["missing active version", { RESIDENCE_ENCRYPTION_KEYS: "[]" }],
-    [
-      "missing key list",
-      { RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-07" },
-    ],
+    ["missing key list", { RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-07" }],
     ["invalid JSON", environmentWithKeys("not-json")],
     ["non-array JSON", environmentWithKeys("{}")],
     ["empty key list", environmentWithKeys("[]")],
-    [
-      "unknown active version",
-      validEnvironment({ activeVersion: "2027-01" }),
-    ],
+    ["unknown active version", validEnvironment({ activeVersion: "2027-01" })],
     [
       "duplicate version",
       validEnvironment({
@@ -263,27 +267,24 @@ describe("saved residence encryption keyring", () => {
         ],
       }),
     ],
-    [
-      "missing object field",
-      environmentWithEntries([{ version: "2026-07" }]),
-    ],
+    ["missing object field", environmentWithEntries([{ version: "2026-07" }])],
     [
       "extra object field",
       environmentWithEntries([
         { version: "2026-07", key: encodedKey(1), purpose: "other" },
       ]),
     ],
-    [
-      "non-object entry",
-      environmentWithEntries([null]),
-    ],
+    ["non-object entry", environmentWithEntries([null])],
     [
       "uppercase version",
       environmentWithEntries([{ version: "JULY", key: encodedKey(1) }], "JULY"),
     ],
     [
       "invalid version punctuation",
-      environmentWithEntries([{ version: "-july", key: encodedKey(1) }], "-july"),
+      environmentWithEntries(
+        [{ version: "-july", key: encodedKey(1) }],
+        "-july",
+      ),
     ],
     [
       "overlong version",
@@ -338,8 +339,16 @@ describe("saved residence authenticated encryption", () => {
     const keyring = loadResidenceEncryptionKeyring(validEnvironment());
     const address = "123 Main Street, Apt 2, Example City, CA 90000";
 
-    const first = encryptSavedResidenceAddress(address, "user_fixture", keyring);
-    const second = encryptSavedResidenceAddress(address, "user_fixture", keyring);
+    const first = encryptSavedResidenceAddress(
+      address,
+      "user_fixture",
+      keyring,
+    );
+    const second = encryptSavedResidenceAddress(
+      address,
+      "user_fixture",
+      keyring,
+    );
 
     expect(first).toEqual({
       version: "v1",
@@ -354,9 +363,9 @@ describe("saved residence authenticated encryption", () => {
     expectCanonicalBase64url(first.iv, 12);
     expectCanonicalBase64url(first.ciphertext);
     expectCanonicalBase64url(first.tag, 16);
-    expect(
-      decryptSavedResidenceAddress(first, "user_fixture", keyring),
-    ).toBe(address);
+    expect(decryptSavedResidenceAddress(first, "user_fixture", keyring)).toBe(
+      address,
+    );
   });
 
   it("lets independent Node crypto decrypt production output only with fixed-purpose, version, key-version, user AAD in canonical order (UX-04)", () => {
@@ -409,7 +418,9 @@ describe("saved residence authenticated encryption", () => {
       "aes-256-gcm",
       Buffer.from(encodedKey(2), "base64url"),
       iv,
-      { authTagLength: 16 },
+      {
+        authTagLength: 16,
+      },
     );
     cipher.setAAD(aad);
     const ciphertext = Buffer.concat([
@@ -457,16 +468,8 @@ describe("saved residence authenticated encryption", () => {
       ],
       [{ ...envelope, tag: alter(envelope.tag) }, "user_fixture", keyring],
       [{ ...envelope, version: "v2" }, "user_fixture", keyring],
-      [
-        { ...envelope, keyVersion: "2027-01" },
-        "user_fixture",
-        keyring,
-      ],
-      [
-        { ...envelope, keyVersion: "2026-01" },
-        "user_fixture",
-        keyring,
-      ],
+      [{ ...envelope, keyVersion: "2027-01" }, "user_fixture", keyring],
+      [{ ...envelope, keyVersion: "2026-01" }, "user_fixture", keyring],
     ] as const) {
       expectCryptoFailure(candidate, candidateUser, candidateKeyring);
     }
@@ -505,7 +508,7 @@ describe("saved residence authenticated encryption", () => {
 });
 
 describe("saved residence key rotation", () => {
-  it("preflights every referenced key version for presence before writing", async () => {
+  it("skips an unknown key row without a full-table preflight and resumes safely", async () => {
     const { db, repository } = await rotationFixture(["alpha", "bravo"]);
     const entries = [
       { version: "2025-01", key: encodedKey(3) },
@@ -535,8 +538,8 @@ describe("saved residence key rotation", () => {
       );
       const before = await encryptedRows(db);
 
-      await expect(
-        repository.rotateKeys(
+      expect(
+        await repository.rotateKeys(
           {
             activeVersion: "2026-07",
             keys: new Map([
@@ -551,10 +554,16 @@ describe("saved residence key rotation", () => {
             },
           },
         ),
-      ).rejects.toThrow("Saved residence key rotation failed.");
+      ).toEqual({ rotated: 1, skipped: 1, remaining: 1 });
 
-      expect(attemptedWrites).toBe(0);
-      expect(await encryptedRows(db)).toEqual(before);
+      expect(attemptedWrites).toBe(1);
+      expect((await encryptedRows(db))[0]).not.toEqual(before[0]);
+      expect(
+        await repository.rotateKeys(
+          loadResidenceEncryptionKeyring(environmentWithEntries(entries)),
+          { batchSize: 1 },
+        ),
+      ).toEqual({ rotated: 1, skipped: 0, remaining: 0 });
     } finally {
       await closeDatabase(db);
     }
@@ -591,8 +600,8 @@ describe("saved residence key rotation", () => {
         secondKeyring,
       );
 
-      await expect(
-        repository.rotateKeys(
+      expect(
+        await repository.rotateKeys(
           {
             activeVersion: "2026-07",
             keys: new Map([
@@ -603,7 +612,7 @@ describe("saved residence key rotation", () => {
           },
           { batchSize: 1 },
         ),
-      ).rejects.toThrow("Saved residence key rotation failed.");
+      ).toEqual({ rotated: 1, skipped: 1, remaining: 1 });
       const afterFailure = await encryptedRows(db);
       expect(afterFailure.map(({ keyVersion }) => keyVersion)).toEqual([
         correctedKeyring.activeVersion,
@@ -613,7 +622,11 @@ describe("saved residence key rotation", () => {
 
       expect(
         await repository.rotateKeys(correctedKeyring, { batchSize: 1 }),
-      ).toEqual({ rotated: 1, skipped: 0, remaining: 0 });
+      ).toEqual({
+        rotated: 1,
+        skipped: 0,
+        remaining: 0,
+      });
       expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
     } finally {
       await closeDatabase(db);
@@ -651,10 +664,7 @@ describe("saved residence key rotation", () => {
                 .select({ userId: savedResidence.userId })
                 .from(savedResidence)
                 .where(
-                  eq(
-                    savedResidence.keyVersion,
-                    rotationKeyring.activeVersion,
-                  ),
+                  eq(savedResidence.keyVersion, rotationKeyring.activeVersion),
                 )
                 .orderBy(savedResidence.userId)
             ).map(({ userId }) => userId),
@@ -708,9 +718,7 @@ describe("saved residence key rotation", () => {
           })
           .from(savedResidence)
           .groupBy(savedResidence.keyVersion),
-      ).toEqual([
-        { keyVersion: rotationKeyring.activeVersion, residences: 4 },
-      ]);
+      ).toEqual([{ keyVersion: rotationKeyring.activeVersion, residences: 4 }]);
     } finally {
       await closeDatabase(db);
     }
@@ -816,6 +824,8 @@ describe("saved residence key rotation", () => {
         "202 Bravo Boulevard",
         legacyKeyring,
       );
+      const bravoRevision = (await repository.get("user_bravo", legacyKeyring))!
+        .revision;
       const [alpha] = await db
         .select({
           ciphertext: savedResidence.ciphertext,
@@ -832,24 +842,35 @@ describe("saved residence key rotation", () => {
         .set(alpha)
         .where(eq(savedResidence.userId, "user_bravo"));
 
-      await expect(
-        repository.rotateKeys(rotationKeyring, { batchSize: 1 }),
-      ).rejects.toThrow("Saved residence key rotation failed.");
-      const afterFailure = await encryptedRows(db);
       expect(
-        afterFailure.map(({ keyVersion }) => keyVersion),
-      ).toEqual([rotationKeyring.activeVersion, legacyKeyring.activeVersion]);
+        await repository.rotateKeys(rotationKeyring, { batchSize: 1 }),
+      ).toEqual({
+        rotated: 1,
+        skipped: 1,
+        remaining: 1,
+      });
+      const afterFailure = await encryptedRows(db);
+      expect(afterFailure.map(({ keyVersion }) => keyVersion)).toEqual([
+        rotationKeyring.activeVersion,
+        legacyKeyring.activeVersion,
+      ]);
       const committedAlpha = afterFailure[0];
 
-      await saveRotationResidence(
-        repository,
+      await repository.save(
         "user_bravo",
-        "202 Bravo Boulevard",
+        saveRequest("202 Bravo Boulevard", "unused-by-persistence"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
         legacyKeyring,
+        bravoRevision,
       );
       expect(
         await repository.rotateKeys(rotationKeyring, { batchSize: 1 }),
-      ).toEqual({ rotated: 1, skipped: 0, remaining: 0 });
+      ).toEqual({
+        rotated: 1,
+        skipped: 0,
+        remaining: 0,
+      });
       expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
     } finally {
       await closeDatabase(db);
@@ -884,9 +905,7 @@ describe("saved residence key rotation", () => {
         }),
       ).rejects.toThrow("Saved residence key rotation failed.");
       const afterFailure = await encryptedRows(db);
-      expect(
-        afterFailure.map(({ keyVersion }) => keyVersion),
-      ).toEqual([
+      expect(afterFailure.map(({ keyVersion }) => keyVersion)).toEqual([
         rotationKeyring.activeVersion,
         legacyKeyring.activeVersion,
         legacyKeyring.activeVersion,
@@ -895,7 +914,11 @@ describe("saved residence key rotation", () => {
 
       expect(
         await repository.rotateKeys(rotationKeyring, { batchSize: 2 }),
-      ).toEqual({ rotated: 2, skipped: 0, remaining: 0 });
+      ).toEqual({
+        rotated: 2,
+        skipped: 0,
+        remaining: 0,
+      });
       expect((await encryptedRows(db))[0]).toEqual(committedAlpha);
     } finally {
       await closeDatabase(db);
@@ -968,9 +991,9 @@ describe("saved residence key rotation", () => {
         }),
       });
       expect(failed).toEqual({
-        code: 1,
-        stderr: "Saved residence key rotation failed.\n",
-        stdout: "",
+        code: 0,
+        stderr: "",
+        stdout: '{"rotated":0,"skipped":1,"remaining":1}\n',
       });
 
       const first = await runRotationCommand({
@@ -1055,32 +1078,31 @@ describe("saved residence persistence", () => {
         ({ table_name: tableName }) => tableName,
       );
 
-      expect(columns.saved_residence?.map(({ column_name }) => column_name)).toEqual(
-        [
-          "ciphertext",
-          "consent_version",
-          "consented_at",
-          "coverage_notes",
-          "created_at",
-          "envelope_version",
-          "iv",
-          "key_version",
-          "resolution_status",
-          "source_benchmark",
-          "source_checked_at",
-          "source_effective_at",
-          "source_name",
-          "source_url",
-          "source_vintage",
-          "tag",
-          "updated_at",
-          "user_id",
-        ],
-      );
       expect(
-        columns.saved_residence_division?.map(
-          ({ column_name }) => column_name,
-        ),
+        columns.saved_residence?.map(({ column_name }) => column_name),
+      ).toEqual([
+        "ciphertext",
+        "consent_version",
+        "consented_at",
+        "coverage_notes",
+        "created_at",
+        "envelope_version",
+        "iv",
+        "key_version",
+        "resolution_status",
+        "revision",
+        "source_benchmark",
+        "source_checked_at",
+        "source_effective_at",
+        "source_name",
+        "source_url",
+        "source_vintage",
+        "tag",
+        "updated_at",
+        "user_id",
+      ]);
+      expect(
+        columns.saved_residence_division?.map(({ column_name }) => column_name),
       ).toEqual([
         "display_order",
         "division_id",
@@ -1106,11 +1128,119 @@ describe("saved residence persistence", () => {
       expect(migration).toContain(
         'CONSTRAINT "saved_residence_consent_version_check" CHECK ("saved_residence"."consent_version" = \'saved-residence-v1\')',
       );
+      expect(migration).toContain(
+        '"revision" uuid DEFAULT gen_random_uuid() NOT NULL',
+      );
       expect(migration).toContain("ON DELETE cascade");
       expect(migration).toContain(
         'CREATE INDEX "saved_residence_division_lookup_idx" ON "saved_residence_division" USING btree ("id_scheme","type","division_id","user_id")',
       );
       expect(migration).not.toMatch(/address|token|hash|latitude|longitude/i);
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("atomically rejects stale replacement and deletion revisions", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+
+    try {
+      const created = await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "private.first"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+        null,
+      );
+      expect(created?.revision).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+
+      expect(
+        await repository.save(
+          "user_one",
+          saveRequest("456 Oak Avenue", "private.no-precondition"),
+          replacementResolution,
+          new Date("2026-07-16T19:00:00.000Z"),
+          keyring,
+          null,
+        ),
+      ).toBeNull();
+
+      const replaced = await repository.save(
+        "user_one",
+        saveRequest("456 Oak Avenue", "private.replacement"),
+        replacementResolution,
+        new Date("2026-07-16T19:00:00.000Z"),
+        keyring,
+        created!.revision,
+      );
+      expect(replaced?.revision).not.toBe(created?.revision);
+      expect(replaced?.residence.address).toBe("456 Oak Avenue");
+
+      expect(
+        await repository.save(
+          "user_one",
+          saveRequest("789 Pine Road", "private.stale"),
+          resolution,
+          new Date("2026-07-16T20:00:00.000Z"),
+          keyring,
+          created!.revision,
+        ),
+      ).toBeNull();
+      expect(await repository.delete("user_one", created!.revision)).toBe(
+        "precondition_failed",
+      );
+      expect(
+        (await repository.get("user_one", keyring))?.residence?.address,
+      ).toBe("456 Oak Avenue");
+      expect(await repository.delete("user_one", replaced!.revision)).toBe(
+        "deleted",
+      );
+    } finally {
+      await closeDatabase(db);
+    }
+  });
+
+  it("keeps an unreadable owner row replaceable and deletable without decrypting it", async () => {
+    const { db, keyring, repository } = await persistenceFixture();
+
+    try {
+      const created = await repository.save(
+        "user_one",
+        saveRequest("123 Main Street", "private.first"),
+        resolution,
+        new Date("2026-07-16T18:00:00.000Z"),
+        keyring,
+        null,
+      );
+      await db
+        .update(savedResidence)
+        .set({ ciphertext: "unreadable" })
+        .where(eq(savedResidence.userId, "user_one"));
+
+      expect(await repository.get("user_one", keyring)).toEqual({
+        residence: null,
+        revision: created!.revision,
+      });
+      const replaced = await repository.save(
+        "user_one",
+        saveRequest("456 Oak Avenue", "private.recovery"),
+        replacementResolution,
+        new Date("2026-07-16T19:00:00.000Z"),
+        keyring,
+        created!.revision,
+      );
+      expect(replaced?.residence.address).toBe("456 Oak Avenue");
+
+      await db
+        .update(savedResidence)
+        .set({ ciphertext: "unreadable-again" })
+        .where(eq(savedResidence.userId, "user_one"));
+      expect(await repository.delete("user_one", replaced!.revision)).toBe(
+        "deleted",
+      );
     } finally {
       await closeDatabase(db);
     }
@@ -1132,6 +1262,9 @@ describe("saved residence persistence", () => {
       expect(created).toEqual({
         replaced: false,
         residence: residenceView,
+        revision: expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
       });
 
       const replaced = await repository.save(
@@ -1140,9 +1273,11 @@ describe("saved residence persistence", () => {
         replacementResolution,
         secondNow,
         keyring,
+        created!.revision,
       );
       expect(replaced).toEqual({
         replaced: true,
+        revision: expect.not.stringMatching(created!.revision),
         residence: {
           address: "456 Oak Avenue",
           consent: {
@@ -1154,9 +1289,10 @@ describe("saved residence persistence", () => {
           updatedAt: secondNow.toISOString(),
         },
       });
-      expect(await repository.get("user_one", keyring)).toEqual(
-        replaced.residence,
-      );
+      expect(await repository.get("user_one", keyring)).toEqual({
+        residence: replaced!.residence,
+        revision: replaced!.revision,
+      });
       expect(await db.select().from(savedResidence)).toHaveLength(1);
       expect(
         await db
@@ -1197,11 +1333,12 @@ describe("saved residence persistence", () => {
         keyring,
       );
 
-      expect(saved.replaced).toBe(false);
-      expect(saved.residence.address).toBe("API");
-      expect(await repository.get("user_one", keyring)).toEqual(
-        saved.residence,
-      );
+      expect(saved!.replaced).toBe(false);
+      expect(saved!.residence.address).toBe("API");
+      expect(await repository.get("user_one", keyring)).toEqual({
+        residence: saved!.residence,
+        revision: saved!.revision,
+      });
     } finally {
       await closeDatabase(db);
     }
@@ -1326,9 +1463,7 @@ describe("saved residence persistence", () => {
         label: "division name",
         resolution: {
           ...replacementResolution,
-          divisions: [
-            { ...replacementResolution.divisions[0], name: address },
-          ],
+          divisions: [{ ...replacementResolution.divisions[0], name: address }],
         },
       },
       {
@@ -1519,9 +1654,7 @@ describe("saved residence persistence", () => {
       },
       {
         ...replacementResolution,
-        divisions: [
-          { ...replacementResolution.divisions[0], name: tooLong },
-        ],
+        divisions: [{ ...replacementResolution.divisions[0], name: tooLong }],
       },
       {
         ...replacementResolution,
@@ -1601,7 +1734,7 @@ describe("saved residence persistence", () => {
     const firstNow = new Date("2026-07-16T18:00:00.000Z");
 
     try {
-      await repository.save(
+      const created = await repository.save(
         "user_one",
         saveRequest("123 Main Street", "v1.private.first"),
         resolution,
@@ -1622,12 +1755,14 @@ describe("saved residence persistence", () => {
           },
           new Date("2026-07-16T19:00:00.000Z"),
           keyring,
+          created!.revision,
         ),
       ).rejects.toThrow();
 
-      expect(await repository.get("user_one", keyring)).toEqual(
-        residenceView,
-      );
+      expect(await repository.get("user_one", keyring)).toEqual({
+        residence: residenceView,
+        revision: created!.revision,
+      });
       expect(await db.select().from(savedResidenceDivision)).toHaveLength(1);
     } finally {
       await closeDatabase(db);
@@ -1646,11 +1781,8 @@ describe("saved residence persistence", () => {
     const keyring = loadResidenceEncryptionKeyring(validEnvironment());
 
     try {
-      await db.insert(user).values([
-        testUser("one"),
-        testUser("two"),
-      ]);
-      await repository.save(
+      await db.insert(user).values([testUser("one"), testUser("two")]);
+      const firstSaved = await repository.save(
         "user_one",
         saveRequest("123 Main Street", "v1.private.one"),
         replacementResolution,
@@ -1678,7 +1810,9 @@ describe("saved residence persistence", () => {
       expect(await getSavedResidenceDivisions("user_two")).toEqual(
         [...replacementResolution.divisions].reverse(),
       );
-      expect(await deleteSavedResidence("user_one")).toBe(true);
+      expect(await deleteSavedResidence("user_one", firstSaved!.revision)).toBe(
+        "deleted",
+      );
       expect(
         await db
           .select()
@@ -1762,9 +1896,7 @@ async function saveRotationResidence(
   );
 }
 
-function encryptedRows(
-  db: Awaited<ReturnType<typeof createDatabase>>,
-) {
+function encryptedRows(db: Awaited<ReturnType<typeof createDatabase>>) {
   return db
     .select({
       ciphertext: savedResidence.ciphertext,
@@ -1817,7 +1949,9 @@ function residenceEnvironment() {
   };
 }
 
-function restoreResidenceEnvironment(environment: ReturnType<typeof residenceEnvironment>) {
+function restoreResidenceEnvironment(
+  environment: ReturnType<typeof residenceEnvironment>,
+) {
   for (const [name, value] of Object.entries(environment)) {
     if (value === undefined) {
       delete process.env[name];
@@ -1927,7 +2061,7 @@ function expectCryptoFailure(
   userId: string,
   keyring: ReturnType<typeof loadResidenceEncryptionKeyring>,
 ) {
-  expect(() =>
-    decryptSavedResidenceAddress(envelope, userId, keyring),
-  ).toThrow("Saved residence encrypted address is invalid.");
+  expect(() => decryptSavedResidenceAddress(envelope, userId, keyring)).toThrow(
+    "Saved residence encrypted address is invalid.",
+  );
 }

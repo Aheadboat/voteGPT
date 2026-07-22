@@ -2,13 +2,11 @@ import {
   createCipheriv,
   createDecipheriv,
   randomBytes,
+  randomUUID,
 } from "node:crypto";
 import { and, asc, count, eq, gt, ne } from "drizzle-orm";
 import { createDatabase } from "@/db";
-import {
-  savedResidence,
-  savedResidenceDivision,
-} from "@/db/schema";
+import { savedResidence, savedResidenceDivision } from "@/db/schema";
 import {
   isPublicResidenceResolution,
   type ResolutionResponse,
@@ -54,7 +52,12 @@ export type SavedResidenceView = {
 
 export type GetSavedResidenceResponse =
   | { status: "empty" }
-  | { status: "saved"; residence: SavedResidenceView };
+  | { status: "saved"; residence: SavedResidenceView | null };
+
+export type VersionedSavedResidence = {
+  residence: SavedResidenceView | null;
+  revision: string;
+};
 
 export type SaveResidenceResponse = {
   status: "saved";
@@ -68,8 +71,7 @@ export type SavedResidenceMutationResult = Omit<
 >;
 
 export type DeleteSavedResidenceResponse =
-  | { status: "deleted" }
-  | { status: "empty" };
+  { status: "deleted" } | { status: "empty" };
 
 export type SavedResidenceErrorResponse = {
   status:
@@ -77,6 +79,7 @@ export type SavedResidenceErrorResponse = {
     | "unauthenticated"
     | "forbidden"
     | "invalid_token"
+    | "precondition_failed"
     | "unavailable";
   message: string;
 };
@@ -86,6 +89,8 @@ export const SAVED_RESIDENCE_ERROR_MESSAGES = {
   unauthenticated: "Sign in again before managing a saved residence.",
   forbidden: "This saved residence request was not accepted.",
   invalid_token: "Preview your voting residence again before saving.",
+  precondition_failed:
+    "Saved residence changed. Reload the latest state and try again.",
   unavailable: "Saved residence is temporarily unavailable. Try again later.",
 } as const satisfies Record<SavedResidenceErrorResponse["status"], string>;
 
@@ -119,15 +124,15 @@ const envelopeKeys = new Set([
 ]);
 const keyVersionPattern = /^[a-z0-9][a-z0-9._-]{0,31}$/;
 const base64urlPattern = /^[A-Za-z0-9_-]+$/;
+const revisionPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const envelopeVersion = "v1";
 const encryptionPurpose = "voteGPT/saved-residence/address";
 const ivBytes = 12;
 const tagBytes = 16;
 const keyBytes = 32;
-const keyringError =
-  "Saved residence encryption configuration is invalid.";
-const encryptedAddressError =
-  "Saved residence encrypted address is invalid.";
+const keyringError = "Saved residence encryption configuration is invalid.";
+const encryptedAddressError = "Saved residence encrypted address is invalid.";
 const savedResidenceRecordError = "Saved residence record is invalid.";
 const savedResidenceRotationError = "Saved residence key rotation failed.";
 const divisionTypes = new Set<SavedResidenceDivision["type"]>([
@@ -291,9 +296,7 @@ export function decryptSavedResidenceAddress(
     const decipher = createDecipheriv("aes-256-gcm", key, iv, {
       authTagLength: tagBytes,
     });
-    decipher.setAAD(
-      authenticatedData(value.version, value.keyVersion, userId),
-    );
+    decipher.setAAD(authenticatedData(value.version, value.keyVersion, userId));
     decipher.setAuthTag(tag);
     const plaintext = Buffer.concat([
       decipher.update(ciphertext),
@@ -325,7 +328,8 @@ export async function saveSavedResidence(
   request: SaveResidenceRequest,
   verifiedResolution: SavedResidenceResolution,
   now: Date,
-): Promise<SavedResidenceMutationResult> {
+  expectedRevision: string | null,
+): Promise<(SavedResidenceMutationResult & { revision: string }) | null> {
   requireUserId(userId);
   return (await productionRepository()).save(
     userId,
@@ -333,12 +337,13 @@ export async function saveSavedResidence(
     verifiedResolution,
     now,
     loadResidenceEncryptionKeyring(),
+    expectedRevision,
   );
 }
 
 export async function getSavedResidence(
   userId: string,
-): Promise<SavedResidenceView | null> {
+): Promise<VersionedSavedResidence | null> {
   requireUserId(userId);
   return (await productionRepository()).get(
     userId,
@@ -346,9 +351,12 @@ export async function getSavedResidence(
   );
 }
 
-export async function deleteSavedResidence(userId: string): Promise<boolean> {
+export async function deleteSavedResidence(
+  userId: string,
+  expectedRevision: string,
+): Promise<"deleted" | "empty" | "precondition_failed"> {
   requireUserId(userId);
-  return (await productionRepository()).delete(userId);
+  return (await productionRepository()).delete(userId, expectedRevision);
 }
 
 export async function rotateSavedResidenceKeys(): Promise<{
@@ -379,16 +387,6 @@ export function createSavedResidenceRepository(database: Database) {
           throw new Error(savedResidenceRotationError);
         }
 
-        const referencedVersions = await database
-          .selectDistinct({ keyVersion: savedResidence.keyVersion })
-          .from(savedResidence)
-          .orderBy(asc(savedResidence.keyVersion));
-        for (const { keyVersion } of referencedVersions) {
-          if (!keyring.keys.has(keyVersion)) {
-            throw new Error(savedResidenceRotationError);
-          }
-        }
-
         let lastUserId: string | null = null;
         let rotated = 0;
         let skipped = 0;
@@ -399,6 +397,7 @@ export function createSavedResidenceRepository(database: Database) {
               envelopeVersion: savedResidence.envelopeVersion,
               iv: savedResidence.iv,
               keyVersion: savedResidence.keyVersion,
+              revision: savedResidence.revision,
               tag: savedResidence.tag,
               userId: savedResidence.userId,
             })
@@ -419,22 +418,28 @@ export function createSavedResidenceRepository(database: Database) {
 
           for (const row of rows) {
             lastUserId = row.userId;
-            const address = decryptSavedResidenceAddress(
-              {
-                ciphertext: row.ciphertext,
-                iv: row.iv,
-                keyVersion: row.keyVersion,
-                tag: row.tag,
-                version: row.envelopeVersion,
-              },
-              row.userId,
-              keyring,
-            );
-            const envelope = encryptSavedResidenceAddress(
-              address,
-              row.userId,
-              keyring,
-            );
+            let envelope: SavedResidenceEncryptionEnvelope;
+            try {
+              const address = decryptSavedResidenceAddress(
+                {
+                  ciphertext: row.ciphertext,
+                  iv: row.iv,
+                  keyVersion: row.keyVersion,
+                  tag: row.tag,
+                  version: row.envelopeVersion,
+                },
+                row.userId,
+                keyring,
+              );
+              envelope = encryptSavedResidenceAddress(
+                address,
+                row.userId,
+                keyring,
+              );
+            } catch {
+              skipped += 1;
+              continue;
+            }
             await options.beforeUpdate?.();
             const updated = await database
               .update(savedResidence)
@@ -448,6 +453,7 @@ export function createSavedResidenceRepository(database: Database) {
               .where(
                 and(
                   eq(savedResidence.userId, row.userId),
+                  eq(savedResidence.revision, row.revision),
                   eq(savedResidence.envelopeVersion, row.envelopeVersion),
                   eq(savedResidence.keyVersion, row.keyVersion),
                   eq(savedResidence.iv, row.iv),
@@ -480,8 +486,15 @@ export function createSavedResidenceRepository(database: Database) {
       verifiedResolution: SavedResidenceResolution,
       now: Date,
       keyring: ResidenceEncryptionKeyring,
-    ): Promise<SavedResidenceMutationResult> {
+      expectedRevision: string | null = null,
+    ): Promise<(SavedResidenceMutationResult & { revision: string }) | null> {
       requireUserId(userId);
+      if (
+        expectedRevision !== null &&
+        !revisionPattern.test(expectedRevision)
+      ) {
+        return null;
+      }
       const resolution = copySavedResidenceResolution(
         verifiedResolution,
         request.address,
@@ -501,6 +514,7 @@ export function createSavedResidenceRepository(database: Database) {
         iv: envelope.iv,
         keyVersion: envelope.keyVersion,
         resolutionStatus: resolution.status,
+        revision: randomUUID(),
         sourceBenchmark: resolution.source.benchmark ?? null,
         sourceCheckedAt: new Date(resolution.source.checkedAt),
         sourceEffectiveAt:
@@ -516,39 +530,44 @@ export function createSavedResidenceRepository(database: Database) {
       };
 
       const stored = await database.transaction(async (transaction) => {
-        let [residence] = await transaction
-          .insert(savedResidence)
-          .values(parent)
-          .onConflictDoNothing({ target: savedResidence.userId })
-          .returning();
-        const replaced = residence === undefined;
-        if (replaced) {
-          [residence] = await transaction
-            .update(savedResidence)
-            .set({
-              ciphertext: parent.ciphertext,
-              consentVersion: parent.consentVersion,
-              consentedAt: parent.consentedAt,
-              coverageNotes: parent.coverageNotes,
-              envelopeVersion: parent.envelopeVersion,
-              iv: parent.iv,
-              keyVersion: parent.keyVersion,
-              resolutionStatus: parent.resolutionStatus,
-              sourceBenchmark: parent.sourceBenchmark,
-              sourceCheckedAt: parent.sourceCheckedAt,
-              sourceEffectiveAt: parent.sourceEffectiveAt,
-              sourceName: parent.sourceName,
-              sourceUrl: parent.sourceUrl,
-              sourceVintage: parent.sourceVintage,
-              tag: parent.tag,
-              updatedAt: parent.updatedAt,
-            })
-            .where(eq(savedResidence.userId, userId))
-            .returning();
-        }
+        const [residence] =
+          expectedRevision === null
+            ? await transaction
+                .insert(savedResidence)
+                .values(parent)
+                .onConflictDoNothing({ target: savedResidence.userId })
+                .returning()
+            : await transaction
+                .update(savedResidence)
+                .set({
+                  ciphertext: parent.ciphertext,
+                  consentVersion: parent.consentVersion,
+                  consentedAt: parent.consentedAt,
+                  coverageNotes: parent.coverageNotes,
+                  envelopeVersion: parent.envelopeVersion,
+                  iv: parent.iv,
+                  keyVersion: parent.keyVersion,
+                  resolutionStatus: parent.resolutionStatus,
+                  revision: parent.revision,
+                  sourceBenchmark: parent.sourceBenchmark,
+                  sourceCheckedAt: parent.sourceCheckedAt,
+                  sourceEffectiveAt: parent.sourceEffectiveAt,
+                  sourceName: parent.sourceName,
+                  sourceUrl: parent.sourceUrl,
+                  sourceVintage: parent.sourceVintage,
+                  tag: parent.tag,
+                  updatedAt: parent.updatedAt,
+                })
+                .where(
+                  and(
+                    eq(savedResidence.userId, userId),
+                    eq(savedResidence.revision, expectedRevision),
+                  ),
+                )
+                .returning();
 
         if (!residence) {
-          throw new Error(savedResidenceRecordError);
+          return null;
         }
 
         await transaction
@@ -567,11 +586,16 @@ export function createSavedResidenceRepository(database: Database) {
           );
         }
 
-        return { ...residence, replaced };
+        return { ...residence, replaced: expectedRevision !== null };
       });
+
+      if (stored === null) {
+        return null;
+      }
 
       return {
         replaced: stored.replaced,
+        revision: stored.revision,
         residence: {
           address: request.address,
           consent: {
@@ -588,7 +612,7 @@ export function createSavedResidenceRepository(database: Database) {
     async get(
       userId: string,
       keyring: ResidenceEncryptionKeyring,
-    ): Promise<SavedResidenceView | null> {
+    ): Promise<VersionedSavedResidence | null> {
       requireUserId(userId);
       const rows = await database
         .select({
@@ -605,6 +629,7 @@ export function createSavedResidenceRepository(database: Database) {
           iv: savedResidence.iv,
           keyVersion: savedResidence.keyVersion,
           resolutionStatus: savedResidence.resolutionStatus,
+          revision: savedResidence.revision,
           sourceBenchmark: savedResidence.sourceBenchmark,
           sourceCheckedAt: savedResidence.sourceCheckedAt,
           sourceEffectiveAt: savedResidence.sourceEffectiveAt,
@@ -625,89 +650,105 @@ export function createSavedResidenceRepository(database: Database) {
       if (!row) {
         return null;
       }
-      if (
-        (row.resolutionStatus !== "matched" &&
-          row.resolutionStatus !== "partial") ||
-        row.consentVersion !== SAVED_RESIDENCE_CONSENT_VERSION ||
-        !Array.isArray(row.coverageNotes) ||
-        !row.coverageNotes.every((note) => typeof note === "string")
-      ) {
-        throw new Error(savedResidenceRecordError);
-      }
-
-      const source: SavedResidenceResolution["source"] = {
-        checkedAt: row.sourceCheckedAt.toISOString(),
-        effectiveAt: row.sourceEffectiveAt?.toISOString() ?? null,
-        name: row.sourceName,
-        url: row.sourceUrl,
-      };
-      if (row.sourceBenchmark !== null) {
-        source.benchmark = row.sourceBenchmark;
-      }
-      if (row.sourceVintage !== null) {
-        source.vintage = row.sourceVintage;
-      }
-      const divisions = rows.flatMap((candidate) => {
+      try {
         if (
-          candidate.divisionType === null ||
-          candidate.divisionName === null ||
-          candidate.divisionId === null ||
-          candidate.divisionIdScheme === null
+          (row.resolutionStatus !== "matched" &&
+            row.resolutionStatus !== "partial") ||
+          row.consentVersion !== SAVED_RESIDENCE_CONSENT_VERSION ||
+          !Array.isArray(row.coverageNotes) ||
+          !row.coverageNotes.every((note) => typeof note === "string")
         ) {
-          return [];
+          throw new Error(savedResidenceRecordError);
         }
-        return [
-          savedDivision({
-            id: candidate.divisionId,
-            idScheme: candidate.divisionIdScheme,
-            name: candidate.divisionName,
-            type: candidate.divisionType,
-          }),
-        ];
-      });
 
-      return {
-        address: decryptSavedResidenceAddress(
-          {
-            ciphertext: row.ciphertext,
-            iv: row.iv,
-            keyVersion: row.keyVersion,
-            tag: row.tag,
-            version: row.envelopeVersion,
+        const source: SavedResidenceResolution["source"] = {
+          checkedAt: row.sourceCheckedAt.toISOString(),
+          effectiveAt: row.sourceEffectiveAt?.toISOString() ?? null,
+          name: row.sourceName,
+          url: row.sourceUrl,
+        };
+        if (row.sourceBenchmark !== null) {
+          source.benchmark = row.sourceBenchmark;
+        }
+        if (row.sourceVintage !== null) {
+          source.vintage = row.sourceVintage;
+        }
+        const divisions = rows.flatMap((candidate) => {
+          if (
+            candidate.divisionType === null ||
+            candidate.divisionName === null ||
+            candidate.divisionId === null ||
+            candidate.divisionIdScheme === null
+          ) {
+            return [];
+          }
+          return [
+            savedDivision({
+              id: candidate.divisionId,
+              idScheme: candidate.divisionIdScheme,
+              name: candidate.divisionName,
+              type: candidate.divisionType,
+            }),
+          ];
+        });
+
+        return {
+          residence: {
+            address: decryptSavedResidenceAddress(
+              {
+                ciphertext: row.ciphertext,
+                iv: row.iv,
+                keyVersion: row.keyVersion,
+                tag: row.tag,
+                version: row.envelopeVersion,
+              },
+              userId,
+              keyring,
+            ),
+            consent: {
+              acceptedAt: row.consentedAt.toISOString(),
+              version: SAVED_RESIDENCE_CONSENT_VERSION,
+            },
+            createdAt: row.createdAt.toISOString(),
+            resolution: {
+              coverageNotes: [...row.coverageNotes],
+              divisions,
+              source,
+              status: row.resolutionStatus,
+            },
+            updatedAt: row.updatedAt.toISOString(),
           },
-          userId,
-          keyring,
-        ),
-        consent: {
-          acceptedAt: row.consentedAt.toISOString(),
-          version: SAVED_RESIDENCE_CONSENT_VERSION,
-        },
-        createdAt: row.createdAt.toISOString(),
-        resolution: {
-          coverageNotes: [...row.coverageNotes],
-          divisions,
-          source,
-          status: row.resolutionStatus,
-        },
-        updatedAt: row.updatedAt.toISOString(),
-      };
+          revision: row.revision,
+        };
+      } catch {
+        return { residence: null, revision: row.revision };
+      }
     },
 
-    async delete(userId: string) {
+    async delete(userId: string, expectedRevision: string) {
       requireUserId(userId);
+      if (!revisionPattern.test(expectedRevision)) {
+        return "precondition_failed" as const;
+      }
       return database.transaction(async (transaction) => {
+        const [deleted] = await transaction
+          .delete(savedResidence)
+          .where(
+            and(
+              eq(savedResidence.userId, userId),
+              eq(savedResidence.revision, expectedRevision),
+            ),
+          )
+          .returning();
+        if (deleted) {
+          return "deleted" as const;
+        }
         const [existing] = await transaction
           .select({ userId: savedResidence.userId })
           .from(savedResidence)
           .where(eq(savedResidence.userId, userId))
           .limit(1);
-        if (!existing) {
-          return false;
-        }
-        await transaction
-          .delete(savedResidence)
-          .where(eq(savedResidence.userId, userId));
-        return true;
+        return existing ? "precondition_failed" : "empty";
       });
     },
 
@@ -735,9 +776,7 @@ async function productionRepository() {
   if (!connectionString) {
     throw new Error("DATABASE_URL is required");
   }
-  return createSavedResidenceRepository(
-    await createDatabase(connectionString),
-  );
+  return createSavedResidenceRepository(await createDatabase(connectionString));
 }
 
 function copySavedResidenceResolution(
@@ -811,10 +850,7 @@ function authenticatedData(
   );
 }
 
-function keyForVersion(
-  keyring: ResidenceEncryptionKeyring,
-  version: string,
-) {
+function keyForVersion(keyring: ResidenceEncryptionKeyring, version: string) {
   if (!keyVersionPattern.test(version)) {
     return null;
   }

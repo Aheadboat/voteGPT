@@ -7,6 +7,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import * as navigation from "next/navigation";
 import type {
   ResidenceInput,
   ResolutionErrorResponse,
@@ -29,16 +30,11 @@ type SaveCandidate = Pick<
   expiresAt: string;
 };
 
-type SavedState =
-  | "loading"
-  | "empty"
-  | "saved"
-  | "error"
-  | "unauthenticated";
+type SavedState = "loading" | "empty" | "saved" | "error" | "unauthenticated";
 
 type SavedLoadOutcome =
   | { state: "empty" }
-  | { state: "saved"; residence: SavedResidenceView }
+  | { state: "saved"; residence: SavedResidenceView | null; etag: string | null }
   | { state: "error" | "unauthenticated"; message: string };
 
 const resolveEndpoint = "/api/v1/location/resolve";
@@ -49,8 +45,11 @@ const consentCopy =
   "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
 const unauthenticatedMessage =
   "Sign in again before managing a saved residence.";
+const strongResidenceEtagPattern =
+  /^"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/;
 
 export function ResidencePreview() {
+  const router = "useRouter" in navigation ? navigation.useRouter() : null;
   const [address, setAddress] = useState("");
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<SavedResidenceResolution | null>(null);
@@ -58,6 +57,7 @@ export function ResidencePreview() {
   const [savedState, setSavedState] = useState<SavedState>("loading");
   const [savedResidence, setSavedResidence] =
     useState<SavedResidenceView | null>(null);
+  const [savedEtag, setSavedEtag] = useState<string | null>(null);
   const [savedError, setSavedError] = useState("");
   const [candidate, setCandidate] = useState<SaveCandidate | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -103,6 +103,7 @@ export function ResidencePreview() {
       savedLoadPendingRef.current = false;
       setSavedState(outcome.state);
       setSavedResidence(outcome.state === "saved" ? outcome.residence : null);
+      setSavedEtag(outcome.state === "saved" ? outcome.etag : null);
       setSavedError("message" in outcome ? outcome.message : "");
     });
     return () => {
@@ -133,6 +134,7 @@ export function ResidencePreview() {
     }
     setSavedState(outcome.state);
     setSavedResidence(outcome.state === "saved" ? outcome.residence : null);
+    setSavedEtag(outcome.state === "saved" ? outcome.etag : null);
     setSavedError("message" in outcome ? outcome.message : "");
   }
 
@@ -218,6 +220,7 @@ export function ResidencePreview() {
     savedLoadRequestRef.current += 1;
     savedLoadPendingRef.current = false;
     setSavedResidence(null);
+    setSavedEtag(null);
     setSavedState("unauthenticated");
     setSavedError(message);
     setDeleteConfirmation(false);
@@ -317,9 +320,7 @@ export function ResidencePreview() {
         return;
       }
 
-      const body = rawBody as
-        | ResolutionResponse
-        | ResolutionErrorResponse;
+      const body = rawBody as ResolutionResponse | ResolutionErrorResponse;
 
       if (
         response.ok &&
@@ -388,7 +389,11 @@ export function ResidencePreview() {
   }
 
   function useDeviceOnce() {
-    if (pendingRef.current || savePendingRef.current || deletePendingRef.current) {
+    if (
+      pendingRef.current ||
+      savePendingRef.current ||
+      deletePendingRef.current
+    ) {
       return;
     }
 
@@ -442,6 +447,7 @@ export function ResidencePreview() {
       !candidate ||
       !consentAccepted ||
       (savedState !== "empty" && savedState !== "saved") ||
+      (savedState === "saved" && savedEtag === null) ||
       savePendingRef.current ||
       deletePendingRef.current
     ) {
@@ -462,12 +468,16 @@ export function ResidencePreview() {
     const responseGeneration = authResponseGenerationRef.current;
     setSavePending(true);
     setStatus(
-      savedResidence
+      savedState === "saved"
         ? "Saving residence replacement…"
         : "Saving residence…",
     );
 
     try {
+      const headers = new Headers({ "content-type": "application/json" });
+      if (savedEtag !== null) {
+        headers.set("if-match", savedEtag);
+      }
       const response = await fetch(savedEndpoint, {
         body: JSON.stringify({
           address: candidate.address,
@@ -477,7 +487,7 @@ export function ResidencePreview() {
             version: savedResidenceConsentVersion,
           },
         } satisfies SaveResidenceRequest),
-        headers: { "content-type": "application/json" },
+        headers,
         method: "POST",
       });
 
@@ -504,11 +514,16 @@ export function ResidencePreview() {
       }
 
       const body = rawBody as
-        | SaveResidenceResponse
-        | SavedResidenceErrorResponse;
+        SaveResidenceResponse | SavedResidenceErrorResponse;
 
       if (response.ok && body.status === "saved") {
+        const etag = strongResidenceEtag(response);
+        if (etag === null) {
+          await reconcileSave(candidate.address);
+          return;
+        }
         setSavedResidence(body.residence);
+        setSavedEtag(etag);
         setSavedState("saved");
         setDeleteConfirmation(false);
         focusManualAfterPendingRef.current = true;
@@ -518,6 +533,7 @@ export function ResidencePreview() {
             ? "Saved residence was replaced."
             : "Saved residence was saved.",
         );
+        router?.refresh();
         return;
       }
 
@@ -543,9 +559,7 @@ export function ResidencePreview() {
       if (!mountedRef.current) {
         return;
       }
-      setStatus(
-        `We could not save the residence. Try again. ${unchangedResidenceMessage(savedResidence)}`,
-      );
+      await reconcileSave(candidate.address);
     } finally {
       savePendingRef.current = false;
       if (mountedRef.current) {
@@ -556,7 +570,8 @@ export function ResidencePreview() {
 
   async function deleteResidence() {
     if (
-      !savedResidence ||
+      savedState !== "saved" ||
+      savedEtag === null ||
       deletePendingRef.current ||
       savePendingRef.current ||
       pendingRef.current
@@ -573,7 +588,10 @@ export function ResidencePreview() {
     try {
       const response = await fetch(savedEndpoint, {
         body: JSON.stringify({ confirmation: "DELETE_SAVED_RESIDENCE" }),
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "if-match": savedEtag,
+        },
         method: "DELETE",
       });
 
@@ -600,19 +618,20 @@ export function ResidencePreview() {
       }
 
       const body = rawBody as
-        | DeleteSavedResidenceResponse
-        | SavedResidenceErrorResponse;
+        DeleteSavedResidenceResponse | SavedResidenceErrorResponse;
 
       if (
         response.ok &&
         (body.status === "deleted" || body.status === "empty")
       ) {
         setSavedResidence(null);
+        setSavedEtag(null);
         setSavedState("empty");
         setDeleteConfirmation(false);
         clearCandidate();
         focusManualAfterPendingRef.current = true;
         setStatus("Saved residence was deleted.");
+        router?.refresh();
         return;
       }
 
@@ -627,9 +646,7 @@ export function ResidencePreview() {
       if (!mountedRef.current) {
         return;
       }
-      setStatus(
-        "We could not delete the saved residence. Try again. Your saved residence is unchanged.",
-      );
+      await reconcileDelete();
     } finally {
       deletePendingRef.current = false;
       if (mountedRef.current) {
@@ -638,9 +655,67 @@ export function ResidencePreview() {
     }
   }
 
+  async function reconcileSave(address: string) {
+    const outcome = await requestSavedResidence();
+    if (!mountedRef.current) {
+      return;
+    }
+    applySavedOutcome(outcome);
+    if (outcome.state === "saved" && outcome.residence?.address === address) {
+      setDeleteConfirmation(false);
+      focusManualAfterPendingRef.current = true;
+      clearCandidate();
+      setStatus(
+        "Saved residence was saved after its latest state was checked.",
+      );
+      router?.refresh();
+      return;
+    }
+    setStatus(
+      outcome.state === "error" || outcome.state === "unauthenticated"
+        ? outcome.message
+        : "Save result was not confirmed. The latest saved residence is shown.",
+    );
+  }
+
+  async function reconcileDelete() {
+    const outcome = await requestSavedResidence();
+    if (!mountedRef.current) {
+      return;
+    }
+    applySavedOutcome(outcome);
+    if (outcome.state === "empty") {
+      setDeleteConfirmation(false);
+      focusManualAfterPendingRef.current = true;
+      clearCandidate();
+      setStatus(
+        "Saved residence was deleted after its latest state was checked.",
+      );
+      router?.refresh();
+      return;
+    }
+    setStatus(
+      outcome.state === "error" || outcome.state === "unauthenticated"
+        ? outcome.message
+        : "Delete result was not confirmed. The latest saved residence is shown.",
+    );
+  }
+
+  function applySavedOutcome(outcome: SavedLoadOutcome) {
+    setSavedState(outcome.state);
+    setSavedResidence(outcome.state === "saved" ? outcome.residence : null);
+    setSavedEtag(outcome.state === "saved" ? outcome.etag : null);
+    setSavedError("message" in outcome ? outcome.message : "");
+    if (outcome.state === "unauthenticated") {
+      focusSignInAfterPendingRef.current = true;
+    }
+  }
+
   const mutationPending = savePending || deletePending;
   const showSaveControls =
-    candidate !== null && (savedState === "empty" || savedState === "saved");
+    candidate !== null &&
+    (savedState === "empty" ||
+      (savedState === "saved" && savedEtag !== null));
 
   return (
     <>
@@ -680,26 +755,41 @@ export function ResidencePreview() {
           </div>
         ) : null}
 
-        {savedState === "saved" && savedResidence ? (
+        {savedState === "saved" ? (
           <div className="saved-residence-details">
-            <p>
-              <strong>Saved address:</strong> {savedResidence.address}
-            </p>
-            <ResidenceResult
-              label="Saved residence match"
-              result={savedResidence.resolution}
-            />
-            <p>
-              Consent recorded:{" "}
-              <time dateTime={savedResidence.consent.acceptedAt}>
-                {savedResidence.consent.acceptedAt}
-              </time>
-            </p>
+            {savedResidence ? (
+              <>
+                <p>
+                  <strong>Saved address:</strong> {savedResidence.address}
+                </p>
+                <ResidenceResult
+                  label="Saved residence match"
+                  result={savedResidence.resolution}
+                />
+                <p>
+                  Consent recorded:{" "}
+                  <time dateTime={savedResidence.consent.acceptedAt}>
+                    {savedResidence.consent.acceptedAt}
+                  </time>
+                </p>
+              </>
+            ) : (
+              <p role="status">
+                Your saved residence cannot be displayed. Preview another
+                residence to replace it, or delete it.
+              </p>
+            )}
+            {savedEtag === null ? (
+              <p role="status">
+                Reload this page before you replace or delete the saved
+                residence.
+              </p>
+            ) : null}
             <button
               aria-controls="saved-residence-delete-confirmation"
               aria-expanded={deleteConfirmation}
               className="secondary-button"
-              disabled={pending || mutationPending}
+              disabled={pending || mutationPending || savedEtag === null}
               onClick={() => {
                 if (!pendingRef.current) {
                   setDeleteConfirmation(true);
@@ -718,8 +808,9 @@ export function ResidencePreview() {
                 role="group"
               >
                 <p id="saved-residence-delete-confirmation-label">
-                  Delete this saved address and its political divisions? Your
-                  account will remain.
+                  Delete this{" "}
+                  {savedResidence ? "saved address" : "saved residence"} and its
+                  political divisions? Your account will remain.
                 </p>
                 <button
                   disabled={pending || mutationPending}
@@ -814,10 +905,10 @@ export function ResidencePreview() {
             ref={candidateControlsRef}
           >
             <h3 id="save-residence-heading">Save this residence</h3>
-            {savedResidence ? (
+            {savedState === "saved" ? (
               <p>
-                Saving this residence replaces your existing saved residence.
-                No prior residence history will be retained.
+                Saving this residence replaces your existing saved residence. No
+                prior residence history will be retained.
               </p>
             ) : null}
             <label>
@@ -907,7 +998,9 @@ function ResidenceResult({
         </p>
         <p>
           Checked:{" "}
-          <time dateTime={result.source.checkedAt}>{result.source.checkedAt}</time>
+          <time dateTime={result.source.checkedAt}>
+            {result.source.checkedAt}
+          </time>
         </p>
         <p>
           {result.source.effectiveAt ? (
@@ -943,14 +1036,14 @@ async function requestSavedResidence(): Promise<SavedLoadOutcome> {
   try {
     const response = await fetch(savedEndpoint, { method: "GET" });
     const body = (await response.json()) as
-      | GetSavedResidenceResponse
-      | SavedResidenceErrorResponse;
+      GetSavedResidenceResponse | SavedResidenceErrorResponse;
 
     if (response.ok && body.status === "empty") {
       return { state: "empty" };
     }
     if (response.ok && body.status === "saved") {
-      return { state: "saved", residence: body.residence };
+      const etag = strongResidenceEtag(response);
+      return { state: "saved", residence: body.residence, etag };
     }
 
     return {
@@ -969,6 +1062,11 @@ async function requestSavedResidence(): Promise<SavedLoadOutcome> {
       message: "We could not load your saved residence. Try again.",
     };
   }
+}
+
+function strongResidenceEtag(response: Response) {
+  const etag = response.headers.get("etag");
+  return etag !== null && strongResidenceEtagPattern.test(etag) ? etag : null;
 }
 
 function isFresh(expiresAt: string) {

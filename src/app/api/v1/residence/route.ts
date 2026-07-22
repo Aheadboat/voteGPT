@@ -30,6 +30,14 @@ const unavailable = {
   status: "unavailable",
   message: SAVED_RESIDENCE_ERROR_MESSAGES.unavailable,
 } as const;
+const preconditionFailed = {
+  status: "precondition_failed",
+  message: SAVED_RESIDENCE_ERROR_MESSAGES.precondition_failed,
+} as const;
+const preconditionStatus = 412;
+const invalidIfMatch = Symbol("invalid-if-match");
+const canonicalRevisionPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export async function GET(request: Request): Promise<Response> {
   const userId = await currentUserId(request).catch(() => undefined);
@@ -41,12 +49,13 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const residence = await getSavedResidence(userId);
+    const saved = await getSavedResidence(userId);
     return privateJson(
-      residence === null
+      saved === null
         ? { status: "empty" }
-        : { status: "saved", residence },
+        : { status: "saved", residence: saved.residence },
       200,
+      saved === null ? undefined : { ETag: strongEtag(saved.revision) },
     );
   } catch {
     return privateJson(unavailable, 503);
@@ -67,6 +76,11 @@ export async function POST(request: Request): Promise<Response> {
   }
   if (userId === null) {
     return privateJson(unauthenticated, 401);
+  }
+
+  const expectedRevision = parseIfMatch(request.headers.get("if-match"), true);
+  if (expectedRevision === invalidIfMatch) {
+    return privateJson(preconditionFailed, preconditionStatus);
   }
 
   const body = parseSaveResidenceRequest(
@@ -97,8 +111,15 @@ export async function POST(request: Request): Promise<Response> {
       body,
       verifiedResolution,
       new Date(),
+      expectedRevision,
     );
-    return privateJson({ status: "saved", ...saved }, 200);
+    if (saved === null) {
+      return privateJson(preconditionFailed, preconditionStatus);
+    }
+    const { revision, ...response } = saved;
+    return privateJson({ status: "saved", ...response }, 200, {
+      ETag: strongEtag(revision),
+    });
   } catch {
     return privateJson(unavailable, 503);
   }
@@ -120,14 +141,21 @@ export async function DELETE(request: Request): Promise<Response> {
     return privateJson(unauthenticated, 401);
   }
 
+  const expectedRevision = parseIfMatch(request.headers.get("if-match"), false);
+  if (expectedRevision === invalidIfMatch || expectedRevision === null) {
+    return privateJson(preconditionFailed, preconditionStatus);
+  }
+
   const body = await request.json().catch(() => null);
   if (!isDeleteRequest(body)) {
     return privateJson(invalidRequest, 400);
   }
 
   try {
-    const deleted = await deleteSavedResidence(userId);
-    return privateJson({ status: deleted ? "deleted" : "empty" }, 200);
+    const deleted = await deleteSavedResidence(userId, expectedRevision);
+    return deleted === "deleted"
+      ? privateJson({ status: "deleted" }, 200)
+      : privateJson(preconditionFailed, preconditionStatus);
   } catch {
     return privateJson(unavailable, 503);
   }
@@ -156,8 +184,11 @@ function hasSameOrigin(request: Request) {
 
 function hasJsonContentType(request: Request) {
   return (
-    request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ===
-    "application/json"
+    request.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      .trim()
+      .toLowerCase() === "application/json"
   );
 }
 
@@ -172,9 +203,29 @@ function isDeleteRequest(value: unknown) {
   );
 }
 
-function privateJson(body: unknown, status: number) {
+function parseIfMatch(value: string | null, allowMissing: boolean) {
+  if (value === null) {
+    return allowMissing ? null : invalidIfMatch;
+  }
+  const match = /^"([^"]+)"$/.exec(value);
+  return match?.[1] && canonicalRevisionPattern.test(match[1])
+    ? match[1]
+    : invalidIfMatch;
+}
+
+function strongEtag(revision: string) {
+  return `"${revision}"`;
+}
+
+function privateJson(
+  body: unknown,
+  status: number,
+  extraHeaders?: HeadersInit,
+) {
+  const headers = new Headers(extraHeaders);
+  headers.set("Cache-Control", "private, no-store");
   return Response.json(body, {
-    headers: { "Cache-Control": "private, no-store" },
+    headers,
     status,
   });
 }

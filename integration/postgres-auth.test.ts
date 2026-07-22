@@ -44,7 +44,7 @@ afterAll(async () => {
 });
 
 describe("hosted PostgreSQL auth contract", () => {
-  it("serializes concurrent first residence saves across two PostgreSQL connections", async () => {
+  it("allows only one of two stale residence mutations across PostgreSQL connections", async () => {
     const firstPool = residenceRacePool();
     const secondPool = residenceRacePool();
     const firstDatabase = drizzle(firstPool, { schema: databaseSchema });
@@ -142,6 +142,22 @@ describe("hosted PostgreSQL auth contract", () => {
         name: "PostgreSQL Residence Race Voter",
       });
 
+      const initial = await createSavedResidenceRepository(firstDatabase).save(
+        userId,
+        {
+          address: "100 Initial Residence Way",
+          consent: { accepted: true, version: "saved-residence-v1" },
+          resolutionToken: "synthetic.initial",
+        },
+        firstResolution,
+        new Date("2026-07-16T20:09:00.000Z"),
+        keyring,
+        null,
+      );
+      expect(initial?.revision).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+
       const results = await withinMilliseconds(
         Promise.all([
           firstRepository.save(
@@ -154,6 +170,7 @@ describe("hosted PostgreSQL auth contract", () => {
             firstResolution,
             new Date("2026-07-16T20:10:00.000Z"),
             keyring,
+            initial!.revision,
           ),
           secondRepository.save(
             userId,
@@ -165,21 +182,23 @@ describe("hosted PostgreSQL auth contract", () => {
             secondResolution,
             new Date("2026-07-16T20:10:01.000Z"),
             keyring,
+            initial!.revision,
           ),
         ]),
         10_000,
       );
 
-      expect(results.map(({ replaced }) => replaced).sort()).toEqual([
-        false,
-        true,
-      ]);
+      expect(results.filter((result) => result !== null)).toHaveLength(1);
+      expect(results.filter((result) => result === null)).toHaveLength(1);
       expect(transactionBarrier.arrivals()).toBe(2);
-      const replacement = results.find(({ replaced }) => replaced);
+      const replacement = results.find((result) => result !== null);
       expect(replacement).toBeDefined();
 
       const storedResidence = await firstRepository.get(userId, keyring);
-      expect(storedResidence).toEqual(replacement?.residence);
+      expect(storedResidence).toEqual({
+        residence: replacement?.residence,
+        revision: replacement?.revision,
+      });
       expect(
         await firstDatabase
           .select({ userId: savedResidence.userId })
@@ -229,12 +248,9 @@ describe("hosted PostgreSQL auth contract", () => {
       RESIDENCE_ENCRYPTION_ACTIVE_KEY: "2026-07",
       RESIDENCE_ENCRYPTION_KEYS: serializedKeys,
     });
-    const before = encryptSavedResidenceAddress(
-      address,
-      userId,
-      legacyKeyring,
-    );
+    const before = encryptSavedResidenceAddress(address, userId, legacyKeyring);
     const now = new Date("2026-07-16T20:00:00.000Z");
+    const revision = "33333333-3333-4333-8333-333333333333";
     await db.insert(user).values({
       email: "postgres-rotation@example.com",
       id: userId,
@@ -250,6 +266,7 @@ describe("hosted PostgreSQL auth contract", () => {
       iv: before.iv,
       keyVersion: before.keyVersion,
       resolutionStatus: "matched",
+      revision,
       sourceCheckedAt: now,
       sourceName: "PostgreSQL fixture civic source",
       sourceUrl: "https://example.com/postgres-civic-source",
@@ -275,12 +292,14 @@ describe("hosted PostgreSQL auth contract", () => {
         envelopeVersion: savedResidence.envelopeVersion,
         iv: savedResidence.iv,
         keyVersion: savedResidence.keyVersion,
+        revision: savedResidence.revision,
         tag: savedResidence.tag,
       })
       .from(savedResidence)
       .where(eq(savedResidence.userId, userId));
     expect(stored).toBeDefined();
     expect(stored?.keyVersion).toBe(activeKeyring.activeVersion);
+    expect(stored?.revision).toBe(revision);
     expect(stored?.iv).not.toBe(before.iv);
     expect(stored?.ciphertext).not.toBe(before.ciphertext);
     expect(stored?.tag).not.toBe(before.tag);
@@ -387,6 +406,7 @@ describe("hosted PostgreSQL auth contract", () => {
       envelopeVersion: "v1",
       iv: "postgres-fixture-iv",
       keyVersion: "postgres-fixture-key",
+      revision: "44444444-4444-4444-8444-444444444444",
       resolutionStatus: "matched",
       sourceCheckedAt: residenceNow,
       sourceName: "PostgreSQL fixture civic source",
@@ -463,7 +483,10 @@ function twoPartyBarrier() {
   };
 }
 
-async function withinMilliseconds<T>(promise: Promise<T>, milliseconds: number) {
+async function withinMilliseconds<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+) {
   let timeout: NodeJS.Timeout | undefined;
   try {
     return await Promise.race([

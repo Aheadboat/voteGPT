@@ -1,4 +1,11 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ambiguousResidenceResponse,
@@ -14,10 +21,15 @@ import type { ResolutionResponse } from "@/lib/residence";
 import type { SavedResidenceView } from "@/lib/saved-residence";
 import { ResidencePreview } from "./residence-preview";
 
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+
 const address = "742 Evergreen Terrace, Springfield";
 const savedAddress = "123 Main Street, Springfield";
 const savedEndpoint = "/api/v1/residence";
 const resolveEndpoint = "/api/v1/location/resolve";
+const revision = "11111111-1111-4111-8111-111111111111";
+const replacementRevision = "22222222-2222-4222-8222-222222222222";
 const consentCopy =
   "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.";
 const coordinateInput = {
@@ -54,12 +66,21 @@ const originalGeolocation = Object.getOwnPropertyDescriptor(
   "geolocation",
 );
 
-function jsonResponse(
-  body: unknown,
-  status = 200,
-) {
+function jsonResponse(body: unknown, status = 200) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "status" in body &&
+    body.status === "saved"
+  ) {
+    headers.set(
+      "etag",
+      `"${"replaced" in body && body.replaced ? replacementRevision : revision}"`,
+    );
+  }
   return new Response(JSON.stringify(body), {
-    headers: { "content-type": "application/json" },
+    headers,
     status,
   });
 }
@@ -164,9 +185,9 @@ function unresolvedJsonResponse(status = 401) {
   return response;
 }
 
-type FetchRouteHandler = (init: RequestInit | undefined) =>
-  | Response
-  | Promise<Response>;
+type FetchRouteHandler = (
+  init: RequestInit | undefined,
+) => Response | Promise<Response>;
 
 function installResidenceFetch(
   routes: {
@@ -181,8 +202,9 @@ function installResidenceFetch(
     const method = init?.method ?? "GET";
 
     if (url === savedEndpoint && method === "GET") {
-      return (routes.savedGet ??
-        (() => jsonResponse({ status: "empty" })))(init);
+      return (routes.savedGet ?? (() => jsonResponse({ status: "empty" })))(
+        init,
+      );
     }
     if (url === resolveEndpoint && method === "POST" && routes.resolve) {
       return routes.resolve(init);
@@ -246,7 +268,8 @@ describe("residence preview", () => {
       name: "Use this device once",
     });
     expect(
-      input.compareDocumentPosition(deviceButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+      input.compareDocumentPosition(deviceButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       screen.getByText(
@@ -318,9 +341,7 @@ describe("residence preview", () => {
     expect(
       screen.queryByRole("checkbox", { name: /Save this residence/i }),
     ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
 
     enterAddress();
     const partialConsent = await screen.findByRole("checkbox", {
@@ -361,14 +382,14 @@ describe("residence preview", () => {
       name: /^(?:Residence match|Residence preview match)$/i,
     });
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
 
     await act(async () => {
       savedRequest.resolve(jsonResponse({ status: "empty" }));
     });
-    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(
+      await screen.findByText(/No residence (?:is )?saved/i),
+    ).toBeVisible();
     expect(
       await screen.findByRole("checkbox", { name: consentCopy }),
     ).not.toBeChecked();
@@ -399,7 +420,9 @@ describe("residence preview", () => {
     expect(
       saved.querySelector('time[datetime="2026-07-14T20:00:00.000Z"]'),
     ).toBeInTheDocument();
-    expect(within(saved).getByText("Effective date unavailable.")).toBeVisible();
+    expect(
+      within(saved).getByText("Effective date unavailable."),
+    ).toBeVisible();
     expect(
       within(saved).getByText("Local divisions may be unavailable."),
     ).toBeVisible();
@@ -415,6 +438,34 @@ describe("residence preview", () => {
     ).toBeTruthy();
   });
 
+  it("renders a saved representation without a revision read-only", async () => {
+    installResidenceFetch({
+      savedGet: () =>
+        Response.json({ status: "saved", residence: savedResidence }),
+      resolve: () => jsonResponse(matchedResidenceResponse),
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    expect(within(saved).getByText(savedAddress)).toBeVisible();
+    expect(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    ).toBeDisabled();
+    expect(
+      within(saved).getByText(/reload.*before.*replace.*delete/i),
+    ).toBeVisible();
+
+    enterAddress();
+    await screen.findByRole("region", {
+      name: /^(?:Residence match|Residence preview match)$/i,
+    });
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
+  });
+
   it.each(["network", "unavailable", "unauthenticated"] as const)(
     "recovers saved-home GET %s without implying data changed",
     async (failure) => {
@@ -424,9 +475,7 @@ describe("residence preview", () => {
       const fetchMock = installResidenceFetch({
         savedGet: () => {
           getAttempt += 1;
-          return getAttempt === 1
-            ? savedRequest.promise
-            : retryRequest.promise;
+          return getAttempt === 1 ? savedRequest.promise : retryRequest.promise;
         },
       });
       installGeolocation();
@@ -467,12 +516,15 @@ describe("residence preview", () => {
         /No saved residence data (?:was )?(?:changed|modified)/i,
       );
       expect(screen.queryByText(savedAddress)).toBeNull();
-      expect(document.body).not.toHaveTextContent("SENTINEL_PRIVATE_GET_DETAIL");
+      expect(document.body).not.toHaveTextContent(
+        "SENTINEL_PRIVATE_GET_DETAIL",
+      );
 
       if (failure === "unauthenticated") {
-        expect(
-          screen.getByRole("link", { name: /Sign in/i }),
-        ).toHaveAttribute("href", "/sign-in");
+        expect(screen.getByRole("link", { name: /Sign in/i })).toHaveAttribute(
+          "href",
+          "/sign-in",
+        );
       } else {
         const retry = screen.getByRole("button", {
           name: /Retry.*saved residence/i,
@@ -567,7 +619,9 @@ describe("residence preview", () => {
       });
 
       if (outcome === "success") {
-        expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+        expect(
+          await screen.findByText(/No residence (?:is )?saved/i),
+        ).toBeVisible();
       } else {
         expect(
           await screen.findByRole("button", {
@@ -630,6 +684,9 @@ describe("residence preview", () => {
     expect(new Headers(saveCall[1]?.headers).get("content-type")).toBe(
       "application/json",
     );
+    expect(new Headers(saveCall[1]?.headers).get("if-match")).toBe(
+      `"${revision}"`,
+    );
     expect(new Headers(saveCall[1]?.headers).has("origin")).toBe(false);
     expect(JSON.parse(String(saveCall[1]?.body))).toEqual({
       address,
@@ -667,13 +724,12 @@ describe("residence preview", () => {
     expect(await within(saved).findByText(address)).toBeVisible();
     expect(within(saved).queryByText(savedAddress)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     const replaced = await screen.findByText(
       /Saved residence (?:was )?replaced|Replaced saved residence/i,
     );
     expect(replaced.closest('[role="status"], [aria-live]')).not.toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(1);
 
     const browserWrites = JSON.stringify([
       ...pushState.mock.calls,
@@ -685,6 +741,156 @@ describe("residence preview", () => {
       expect(browserWrites).not.toContain(secret);
       expect(decodeURIComponent(window.location.href)).not.toContain(secret);
     }
+  });
+
+  it("reconciles one authoritative GET after ambiguous save without retrying mutation", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    const reconciliation = deferredResponse();
+    let getAttempt = 0;
+    const fetchMock = installResidenceFetch({
+      savedGet: () => {
+        getAttempt += 1;
+        return getAttempt === 1
+          ? jsonResponse({ status: "saved", residence: savedResidence })
+          : reconciliation.promise;
+      },
+      resolve: () => jsonResponse(matchedResidenceResponse),
+      save: () => {
+        throw new Error("SENTINEL_AMBIGUOUS_TRANSPORT");
+      },
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    await screen.findByText(savedAddress);
+    enterAddress();
+    fireEvent.click(await screen.findByRole("checkbox", { name: consentCopy }));
+    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+
+    await waitFor(() => expect(getAttempt).toBe(2));
+    expect(
+      screen.getByRole("button", { name: "Save residence" }),
+    ).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "POST",
+      ),
+    ).toHaveLength(1);
+
+    await act(async () => {
+      reconciliation.resolve(
+        jsonResponse({
+          status: "saved",
+          residence: replacementSavedResidence,
+        }),
+      );
+    });
+
+    expect(await screen.findByText(address)).toBeVisible();
+    expect(getAttempt).toBe(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(document.body).not.toHaveTextContent("SENTINEL_AMBIGUOUS_TRANSPORT");
+  });
+
+  it("reconciles one authoritative GET after ambiguous delete without retrying mutation", async () => {
+    const reconciliation = deferredResponse();
+    let getAttempt = 0;
+    const fetchMock = installResidenceFetch({
+      savedGet: () => {
+        getAttempt += 1;
+        return getAttempt === 1
+          ? jsonResponse({ status: "saved", residence: savedResidence })
+          : reconciliation.promise;
+      },
+      remove: () => {
+        throw new Error("SENTINEL_AMBIGUOUS_TRANSPORT");
+      },
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm deletion" }));
+
+    await waitFor(() => expect(getAttempt).toBe(2));
+    expect(
+      screen.getByRole("button", { name: "Confirm deletion" }),
+    ).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "DELETE",
+      ),
+    ).toHaveLength(1);
+
+    await act(async () => {
+      reconciliation.resolve(jsonResponse({ status: "empty" }));
+    });
+
+    expect(
+      await screen.findByText(/No residence (?:is )?saved/i),
+    ).toBeVisible();
+    expect(getAttempt).toBe(2);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("textbox", { name: "Voting residence address" }),
+    ).toHaveFocus();
+  });
+
+  it("offers focused replacement and deletion recovery for an unreadable saved residence", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    const fetchMock = installResidenceFetch({
+      savedGet: () => jsonResponse({ status: "saved", residence: null }),
+      resolve: () => jsonResponse(matchedResidenceResponse),
+      remove: () =>
+        jsonResponse(
+          {
+            status: "unavailable",
+            message:
+              "Saved residence is temporarily unavailable. Try again later.",
+          },
+          503,
+        ),
+      save: () => new Promise<Response>(() => undefined),
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    expect(within(saved).getByText(/cannot be displayed/i)).toBeVisible();
+    fireEvent.click(
+      within(saved).getByRole("button", { name: "Delete saved residence" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm deletion" }));
+    await screen.findByText(/temporarily unavailable/i);
+    const deleteCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === savedEndpoint && init?.method === "DELETE",
+    );
+    expect(new Headers(deleteCall?.[1]?.headers).get("if-match")).toBe(
+      `"${revision}"`,
+    );
+
+    enterAddress();
+    fireEvent.click(await screen.findByRole("checkbox", { name: consentCopy }));
+    fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
+    const saveCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === savedEndpoint && init?.method === "POST",
+    );
+    expect(new Headers(saveCall?.[1]?.headers).get("if-match")).toBe(
+      `"${revision}"`,
+    );
   });
 
   it("clears the same candidate as soon as its address is edited", async () => {
@@ -703,13 +909,13 @@ describe("residence preview", () => {
 
     fireEvent.change(
       screen.getByRole("textbox", { name: "Voting residence address" }),
-      { target: { value: `${address} Apt 2` } },
+      {
+        target: { value: `${address} Apt 2` },
+      },
     );
 
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
   });
 
   it("clears consent on new checks, device use, expiry, and a rejected token", async () => {
@@ -786,7 +992,9 @@ describe("residence preview", () => {
     fireEvent.click(consent);
     vi.setSystemTime(new Date("2026-07-14T20:11:00.000Z"));
     fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
-    expect(await screen.findByText(/preview.*expired|expired.*preview/i)).toBeVisible();
+    expect(
+      await screen.findByText(/preview.*expired|expired.*preview/i),
+    ).toBeVisible();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
     expect(
       fetchMock.mock.calls.filter(
@@ -805,9 +1013,7 @@ describe("residence preview", () => {
       ),
     ).toBeVisible();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
   });
 
   it("expires a consented candidate at expiresAt without a save attempt", async () => {
@@ -829,21 +1035,22 @@ describe("residence preview", () => {
     await act(async () => {});
     const consent = screen.getByRole("checkbox", { name: consentCopy });
     fireEvent.click(consent);
-    expect(screen.getByRole("button", { name: "Save residence" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Save residence" }),
+    ).toBeEnabled();
 
     act(() => vi.advanceTimersByTime(60_000));
 
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     const expired = screen.getByText(/preview.*expired|expired.*preview/i);
     expect(expired.closest('[role="status"], [aria-live]')).not.toBeNull();
     expect(input).toHaveFocus();
     expect(
       fetchMock.mock.calls.filter(
         ([requestUrl, requestInit]) =>
-          String(requestUrl) === savedEndpoint && requestInit?.method === "POST",
+          String(requestUrl) === savedEndpoint &&
+          requestInit?.method === "POST",
       ),
     ).toHaveLength(0);
   });
@@ -874,7 +1081,9 @@ describe("residence preview", () => {
     await act(async () => {});
     const consent = screen.getByRole("checkbox", { name: consentCopy });
     fireEvent.click(consent);
-    expect(screen.getByRole("button", { name: "Save residence" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Save residence" }),
+    ).toBeEnabled();
     const externalControl = screen.getByRole("button", {
       name: "Open voting help",
     });
@@ -884,9 +1093,7 @@ describe("residence preview", () => {
     act(() => vi.advanceTimersByTime(60_000));
 
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     const expired = screen.getByText(/preview.*expired|expired.*preview/i);
     expect(expired.closest('[role="status"], [aria-live]')).not.toBeNull();
     expect(externalControl).toHaveFocus();
@@ -914,9 +1121,7 @@ describe("residence preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
 
     expect(await screen.findByText(address)).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     expect(input).toHaveFocus();
   });
 
@@ -944,7 +1149,9 @@ describe("residence preview", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save residence" }));
 
     expect(
-      await screen.findByText("Preview your voting residence again before saving."),
+      await screen.findByText(
+        "Preview your voting residence again before saving.",
+      ),
     ).toBeVisible();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
     expect(input).toHaveFocus();
@@ -984,7 +1191,9 @@ describe("residence preview", () => {
       name: "Confirm deletion",
     });
     expect(confirm).toHaveFocus();
-    fireEvent.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(
+      within(confirmation).getByRole("button", { name: "Cancel" }),
+    );
 
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
@@ -1009,7 +1218,8 @@ describe("residence preview", () => {
         return jsonResponse(
           {
             status: "unavailable",
-            message: "Saved residence is temporarily unavailable. Try again later.",
+            message:
+              "Saved residence is temporarily unavailable. Try again later.",
           },
           503,
         );
@@ -1028,15 +1238,15 @@ describe("residence preview", () => {
 
     fireEvent.click(saveButton);
     expect(
-      await screen.findByText(/could not (?:save|reach)/i),
+      await screen.findByText(/Save result was not confirmed/i),
     ).toBeVisible();
-    expect(document.body).toHaveTextContent(
-      /(?:prior|previous|saved) residence.*(?:unchanged|not changed)/i,
-    );
+    expect(document.body).toHaveTextContent(/latest saved residence is shown/i);
     expect(screen.getByText(savedAddress)).toBeVisible();
     expect(consent).toBeChecked();
     expect(saveButton).toBeEnabled();
-    expect(document.body).not.toHaveTextContent("SENTINEL_PRIVATE_NETWORK_DETAIL");
+    expect(document.body).not.toHaveTextContent(
+      "SENTINEL_PRIVATE_NETWORK_DETAIL",
+    );
 
     fireEvent.click(saveButton);
     expect(
@@ -1150,7 +1360,9 @@ describe("residence preview", () => {
     await act(async () => {
       deleteRequest.resolve(jsonResponse({ status: "deleted" }));
     });
-    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(
+      await screen.findByText(/No residence (?:is )?saved/i),
+    ).toBeVisible();
     const preview = screen.getByRole("region", {
       name: "Preview your voting residence",
     });
@@ -1233,13 +1445,13 @@ describe("residence preview", () => {
     fireEvent.click(saveButton);
 
     expect(
-      await screen.findByText(/Sign in again before managing a saved residence/i),
+      await screen.findByText(
+        /Sign in again before managing a saved residence/i,
+      ),
     ).toBeVisible();
     expect(screen.queryByText(savedAddress)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
@@ -1326,9 +1538,7 @@ describe("residence preview", () => {
           operation === "resolve"
             ? () => unauthorizedResponse
             : () => jsonResponse(matchedResidenceResponse),
-        ...(operation === "save"
-          ? { save: () => unauthorizedResponse }
-          : {}),
+        ...(operation === "save" ? { save: () => unauthorizedResponse } : {}),
         ...(operation === "delete"
           ? { remove: () => unauthorizedResponse }
           : {}),
@@ -1423,13 +1633,13 @@ describe("residence preview", () => {
     fireEvent.click(confirm);
 
     expect(
-      await screen.findByText(/Sign in again before managing a saved residence/i),
+      await screen.findByText(
+        /Sign in again before managing a saved residence/i,
+      ),
     ).toBeVisible();
     expect(screen.queryByText(savedAddress)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Confirm deletion" }),
     ).toBeNull();
@@ -1653,12 +1863,12 @@ describe("residence preview", () => {
     await act(async () => {
       deleteRequest.resolve(jsonResponse({ status: "deleted" }));
     });
-    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
+    expect(
+      await screen.findByText(/No residence (?:is )?saved/i),
+    ).toBeVisible();
     expect(screen.queryByText(savedAddress)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: consentCopy })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Save residence" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save residence" })).toBeNull();
     expect(
       screen.getByRole("textbox", { name: "Voting residence address" }),
     ).toHaveFocus();
@@ -1746,8 +1956,12 @@ describe("residence preview", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Confirm deletion" }));
 
-    expect(await screen.findByText(/No residence (?:is )?saved/i)).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Saved residence" })).toBeNull();
+    expect(
+      await screen.findByText(/No residence (?:is )?saved/i),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("region", { name: "Saved residence" }),
+    ).toBeNull();
     expect(screen.queryByText(savedAddress)).toBeNull();
     expect(
       screen.getByRole("textbox", { name: "Voting residence address" }),
@@ -1816,7 +2030,8 @@ describe("residence preview", () => {
     const resolverCalls = () =>
       fetchMock.mock.calls.filter(
         ([requestUrl, requestInit]) =>
-          String(requestUrl) === resolveEndpoint && requestInit?.method === "POST",
+          String(requestUrl) === resolveEndpoint &&
+          requestInit?.method === "POST",
       );
     expect(resolverCalls()).toHaveLength(1);
     const [url, init] = resolverCalls()[0];
@@ -1825,16 +2040,21 @@ describe("residence preview", () => {
       headers: { "content-type": "application/json" },
       method: "POST",
     });
-    expect(JSON.parse(String(init?.body))).toEqual({ kind: "address", address });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      kind: "address",
+      address,
+    });
 
-    expect(screen.getByRole("button", { name: "Check residence" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Check residence" }),
+    ).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Use this device once" }),
     ).toBeDisabled();
     expect(
-      screen.getByText(/Checking residence/i).closest(
-        '[role="status"], [aria-live]',
-      ),
+      screen
+        .getByText(/Checking residence/i)
+        .closest('[role="status"], [aria-live]'),
     ).not.toBeNull();
     fireEvent.submit(input.closest("form")!);
     fireEvent.click(
@@ -1904,11 +2124,11 @@ describe("residence preview", () => {
       "https://developers.google.com/civic-information",
     );
     expect(
-      provenance.querySelector(
-        'time[datetime="2026-07-14T20:00:00.000Z"]',
-      ),
+      provenance.querySelector('time[datetime="2026-07-14T20:00:00.000Z"]'),
     ).toBeInTheDocument();
-    expect(within(provenance).getByText("Effective date unavailable.")).toBeVisible();
+    expect(
+      within(provenance).getByText("Effective date unavailable."),
+    ).toBeVisible();
 
     const coverage = within(result).getByRole("list", {
       name: "Coverage notes",
@@ -1939,7 +2159,9 @@ describe("residence preview", () => {
       }),
     ).toBeInTheDocument();
     expect(within(result).getByText("Example County")).toBeInTheDocument();
-    expect(within(result).getByText("Benchmark: Public_AR_Current")).toBeVisible();
+    expect(
+      within(result).getByText("Benchmark: Public_AR_Current"),
+    ).toBeVisible();
     expect(within(result).getByText("Vintage: Current_Current")).toBeVisible();
     expect(
       within(result).getByText(
@@ -1952,7 +2174,9 @@ describe("residence preview", () => {
   });
 
   it("renders overlapping upper and lower district IDs with stable keys", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
     const overlappingResponse = {
       ...partialResidenceResponse,
       divisions: [
@@ -2083,9 +2307,7 @@ describe("residence preview", () => {
   });
 
   it("ignores a delayed device location delivered after unmount", async () => {
-    let deliverPosition:
-      | ((position: GeolocationPosition) => void)
-      | undefined;
+    let deliverPosition: ((position: GeolocationPosition) => void) | undefined;
     const fetchMock = installResidenceFetch({
       resolve: () => jsonResponse(partialResidenceResponse),
     });
@@ -2121,7 +2343,10 @@ describe("residence preview", () => {
 
   it.each([
     [1, "Location permission was denied. Enter your voting residence instead."],
-    [2, "This device's location is unavailable. Enter your voting residence instead."],
+    [
+      2,
+      "This device's location is unavailable. Enter your voting residence instead.",
+    ],
     [3, "Location request timed out. Enter your voting residence instead."],
   ] as const)(
     "keeps device error %i client-side and returns focus to manual entry",
