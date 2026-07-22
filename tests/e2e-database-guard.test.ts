@@ -213,4 +213,22 @@ describe("destructive E2E database guard", () => {
       /DROP DATABASE IF EXISTS votegpt_e2e WITH \(FORCE\);\s*DROP DATABASE IF EXISTS votegpt_test WITH \(FORCE\);/,
     );
   });
+
+  it("attempts both CI database drops before returning either cleanup failure", () => {
+    const workflow = repositoryFile(".github/workflows/ci.yml");
+    const cleanup = workflow.match(
+      /- name: Destroy disposable databases([\s\S]*)/,
+    )?.[1];
+
+    expect(cleanup).toBeDefined();
+    const cleanupStep = cleanup ?? "";
+    expect(cleanupStep).toContain("cleanup_status=0");
+    expect(cleanupStep).toMatch(
+      /psql[^\n]*DROP DATABASE IF EXISTS votegpt_e2e WITH \(FORCE\);'\s*\|\| cleanup_status=\$\?/,
+    );
+    expect(cleanupStep).toMatch(
+      /psql[^\n]*DROP DATABASE IF EXISTS votegpt_test WITH \(FORCE\);'\s*\|\| cleanup_status=\$\?/,
+    );
+    expect(cleanupStep).toMatch(/exit "\$cleanup_status"/);
+  });
 });

@@ -77,5 +77,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_e2e WITH (FORCE);'
-          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_test WITH (FORCE);'
+          cleanup_status=0
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_e2e WITH (FORCE);' || cleanup_status=$?
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_test WITH (FORCE);' || cleanup_status=$?
+          exit "$cleanup_status"
