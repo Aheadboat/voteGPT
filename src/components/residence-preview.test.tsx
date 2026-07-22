@@ -780,18 +780,85 @@ describe("residence preview", () => {
     ).toHaveLength(1);
 
     await act(async () => {
-      reconciliation.resolve(
-        jsonResponse({
-          status: "saved",
-          residence: replacementSavedResidence,
-        }),
-      );
+      const confirmedReplacement = jsonResponse({
+        status: "saved",
+        residence: replacementSavedResidence,
+      });
+      confirmedReplacement.headers.set("etag", `"${replacementRevision}"`);
+      reconciliation.resolve(confirmedReplacement);
     });
 
     expect(await screen.findByText(address)).toBeVisible();
     expect(getAttempt).toBe(2);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(document.body).not.toHaveTextContent("SENTINEL_AMBIGUOUS_TRANSPORT");
+  });
+
+  it("does not confirm an ambiguous same-address replacement when the owner revision is unchanged", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-14T20:05:00.000Z"));
+    const reconciliation = deferredResponse();
+    let getAttempt = 0;
+    const fetchMock = installResidenceFetch({
+      savedGet: () => {
+        getAttempt += 1;
+        return getAttempt === 1
+          ? jsonResponse({ status: "saved", residence: savedResidence })
+          : reconciliation.promise;
+      },
+      resolve: () => jsonResponse(partialResidenceResponse),
+      save: () => {
+        throw new Error("SENTINEL_AMBIGUOUS_SAME_ADDRESS_TRANSPORT");
+      },
+    });
+    installGeolocation();
+
+    render(<ResidencePreview />);
+    const saved = await screen.findByRole("region", {
+      name: "Saved residence",
+    });
+    enterAddress(savedAddress);
+    fireEvent.click(await screen.findByRole("checkbox", { name: consentCopy }));
+    const saveButton = screen.getByRole("button", { name: "Save residence" });
+    saveButton.focus();
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(getAttempt).toBe(2));
+    expect(saveButton).toBeDisabled();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "POST",
+      ),
+    ).toHaveLength(1);
+
+    await act(async () => {
+      reconciliation.resolve(
+        jsonResponse({ status: "saved", residence: savedResidence }),
+      );
+    });
+
+    expect(within(saved).getByText(savedAddress)).toBeVisible();
+    expect(
+      within(saved).getByText("Example Congressional District 1"),
+    ).toBeVisible();
+    expect(getAttempt).toBe(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([input, init]) =>
+          String(input) === savedEndpoint && init?.method === "POST",
+      ),
+    ).toHaveLength(1);
+    expect(screen.getByText(/Save result was not confirmed/i)).toBeVisible();
+    expect(
+      screen.queryByText(/saved after its latest state was checked/i),
+    ).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(saveButton).toBeEnabled();
+    expect(saveButton).toHaveFocus();
+    expect(document.body).not.toHaveTextContent(
+      "SENTINEL_AMBIGUOUS_SAME_ADDRESS_TRANSPORT",
+    );
   });
 
   it("reconciles one authoritative GET after ambiguous delete without retrying mutation", async () => {

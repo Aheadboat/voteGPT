@@ -28,6 +28,7 @@ type SaveCandidate = Pick<
   "address" | "resolutionToken"
 > & {
   expiresAt: string;
+  resolution: SavedResidenceResolution;
 };
 
 type SavedState = "loading" | "empty" | "saved" | "error" | "unauthenticated";
@@ -333,6 +334,12 @@ export function ResidencePreview() {
           setCandidate({
             address: manualAddress,
             expiresAt: body.expiresAt,
+            resolution: {
+              coverageNotes: body.coverageNotes,
+              divisions: body.divisions,
+              source: body.source,
+              status: body.status,
+            },
             resolutionToken: body.resolutionToken,
           });
         }
@@ -466,6 +473,8 @@ export function ResidencePreview() {
     savePendingRef.current = true;
     authResponseGenerationRef.current += 1;
     const responseGeneration = authResponseGenerationRef.current;
+    const preMutationEtag = savedEtag;
+    const intendedCandidate = candidate;
     setSavePending(true);
     setStatus(
       savedState === "saved"
@@ -519,7 +528,7 @@ export function ResidencePreview() {
       if (response.ok && body.status === "saved") {
         const etag = strongResidenceEtag(response);
         if (etag === null) {
-          await reconcileSave(candidate.address);
+          await reconcileSave(intendedCandidate, preMutationEtag);
           return;
         }
         setSavedResidence(body.residence);
@@ -559,7 +568,7 @@ export function ResidencePreview() {
       if (!mountedRef.current) {
         return;
       }
-      await reconcileSave(candidate.address);
+      await reconcileSave(intendedCandidate, preMutationEtag);
     } finally {
       savePendingRef.current = false;
       if (mountedRef.current) {
@@ -655,13 +664,21 @@ export function ResidencePreview() {
     }
   }
 
-  async function reconcileSave(address: string) {
+  async function reconcileSave(
+    intendedCandidate: SaveCandidate,
+    preMutationEtag: string | null,
+  ) {
     const outcome = await requestSavedResidence();
     if (!mountedRef.current) {
       return;
     }
     applySavedOutcome(outcome);
-    if (outcome.state === "saved" && outcome.residence?.address === address) {
+    if (
+      outcome.state === "saved" &&
+      outcome.etag !== null &&
+      outcome.etag !== preMutationEtag &&
+      matchesIntendedSavedOutcome(outcome.residence, intendedCandidate)
+    ) {
       setDeleteConfirmation(false);
       focusManualAfterPendingRef.current = true;
       clearCandidate();
@@ -1078,6 +1095,46 @@ function unchangedResidenceMessage(savedResidence: SavedResidenceView | null) {
   return savedResidence
     ? "Your prior saved residence is unchanged."
     : "No saved residence data was changed.";
+}
+
+function matchesIntendedSavedOutcome(
+  residence: SavedResidenceView | null,
+  candidate: SaveCandidate,
+) {
+  if (
+    residence === null ||
+    residence.address !== candidate.address ||
+    residence.consent.version !== savedResidenceConsentVersion
+  ) {
+    return false;
+  }
+
+  const actual = residence.resolution;
+  const expected = candidate.resolution;
+  return (
+    actual.status === expected.status &&
+    actual.source.name === expected.source.name &&
+    actual.source.url === expected.source.url &&
+    actual.source.checkedAt === expected.source.checkedAt &&
+    actual.source.effectiveAt === expected.source.effectiveAt &&
+    actual.source.benchmark === expected.source.benchmark &&
+    actual.source.vintage === expected.source.vintage &&
+    actual.divisions.length === expected.divisions.length &&
+    actual.divisions.every((division, index) => {
+      const expectedDivision = expected.divisions[index];
+      return (
+        expectedDivision !== undefined &&
+        division.type === expectedDivision.type &&
+        division.name === expectedDivision.name &&
+        division.id === expectedDivision.id &&
+        division.idScheme === expectedDivision.idScheme
+      );
+    }) &&
+    actual.coverageNotes.length === expected.coverageNotes.length &&
+    actual.coverageNotes.every(
+      (note, index) => note === expected.coverageNotes[index],
+    )
+  );
 }
 
 function deviceErrorMessage(code: number) {
