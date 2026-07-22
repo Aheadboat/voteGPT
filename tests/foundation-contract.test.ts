@@ -670,6 +670,11 @@ describe("concurrent roadmap delivery contract", () => {
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
+    const recoveryDesign = readRepositoryFile(
+      "F4-F5-LEAN-RECOVERY-DESIGN.md",
+    )
+    const f4RecoveryPlan = readRepositoryFile("F4-LEAN-RECOVERY-PLAN.md")
+    const f5RecoveryPlan = readRepositoryFile("F5-LEAN-RECOVERY-PLAN.md")
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
     const inactiveLaterRoadmapIds = [
@@ -699,7 +704,7 @@ describe("concurrent roadmap delivery contract", () => {
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
     const f5MergeOrder = readCoordinationField(f5, "Merge order")
-    const activationBase = "735d73b0b069fa67a1e16a968a7298fb973ef17a"
+    const recoveryBase = "4c5fd46106013fe3a104f20de4bfcf51f2508710"
     const sharedSurfaces = [
       "src/db/schema.ts",
       "src/db/index.ts",
@@ -776,15 +781,21 @@ describe("concurrent roadmap delivery contract", () => {
     expect(implementationPlan).toContain(
       "contents.indexOf(token, previousIndex + 1)",
     )
+    expect(recoveryDesign).toContain(
+      "Human Gate A and written specification approved on 2026-07-21",
+    )
+    expect(recoveryDesign).toContain("This thread remains the coordinator")
+    expect(f4RecoveryPlan).toContain("### Task 4: Guard destructive E2E")
+    expect(f5RecoveryPlan).toContain(
+      "### Task 4: Prove the F4 handoff",
+    )
     expect(readme).toContain(
       "R1 — Concurrent Roadmap Delivery Contract is complete",
     )
     if (f4Status === "DONE") {
       expect(readme).toMatch(/F4[^.\n]*complete/i)
     } else {
-      expect(readme).toContain(
-        "F4 and F5 are active in `DISCOVER/DESIGN/PLAN`",
-      )
+      expect(readme).toContain("F4 and F5 have approved lean recovery plans")
     }
     if (f5Status === "DONE") {
       expect(readme).toMatch(/F5[^.\n]*complete/i)
@@ -797,7 +808,7 @@ describe("concurrent roadmap delivery contract", () => {
     expectTokensInOrder(roadmap, ["## F5 ", "## R2 ", "## F6 "])
     expect(r2).toContain("PROJECT-MAP.md")
     expect(r2).toContain("TEMPORARY.md")
-    expect(r2).toContain("F4 and F5 are both `DONE` on `main`")
+    expect(r2).toContain("F4 and F5 must both be `DONE` on `main`")
     expect(r2).toContain("This records order only")
     expect(r2).toContain("explicitly activates it")
     expect(r2).toContain(
@@ -816,19 +827,17 @@ describe("concurrent roadmap delivery contract", () => {
       )
       expect(
         readCoordinationField(item, "Base commit").replace(/`/g, ""),
-      ).toBe(activationBase)
+      ).toBe(recoveryBase)
       expect(
         readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
       ).toMatch(/^[0-9a-f]{40}$/i)
-      expect(item).toContain(
-        "Human Gate A remains required before RED or production work.",
-      )
+      expect(item).toContain("Human Gate A approved on 2026-07-21")
     }
     expect(readCoordinationField(f4, "Branch")).toContain(
-      "codex/f4-consented-saved-residence",
+      "codex/f4-main-recovery",
     )
     expect(readCoordinationField(f5, "Branch")).toContain(
-      "codex/f5-federal-officials",
+      "codex/f5-main-recovery",
     )
     expect(f4Ownership).toContain("F4 exclusively owns these shared surfaces:")
     expect(f5Ownership).toContain(
