@@ -11,7 +11,7 @@ type GuardModule = {
 };
 
 const marker = "0123456789abcdef0123456789abcdef";
-const target = "postgresql://e2e:e2e-secret@localhost/votegpt_e2e";
+const target = "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e";
 const redactionSentinel = "task4-redaction-sentinel";
 const redactionUsername = `${redactionSentinel}-user`;
 const redactionPassword = `${redactionSentinel}-password`;
@@ -63,7 +63,7 @@ describe("destructive E2E database guard", () => {
       requireE2eDatabase(
         validEnvironment({
           DATABASE_URL:
-            "postgres://ambient:ambient-secret@LOCALHOST/votegpt_e2e",
+            "postgres://ambient:ambient-secret@LOCALHOST:5432/votegpt_e2e",
         }),
         readTargetMarker,
       ),
@@ -74,13 +74,8 @@ describe("destructive E2E database guard", () => {
   it.each([
     [
       "protocol aliases and credentials",
-      "postgres://ambient:ambient-secret@localhost/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@LOCALHOST/votegpt_e2e",
-    ],
-    [
-      "an omitted and explicit default port",
-      "postgresql://e2e:e2e-secret@localhost/votegpt_e2e",
       "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@LOCALHOST:5432/votegpt_e2e",
     ],
     [
       "non-routing connection options",
@@ -106,54 +101,83 @@ describe("destructive E2E database guard", () => {
     },
   );
 
+  it("rejects the reviewer PGPORT routing reproducer before reading the marker", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          DATABASE_URL:
+            "postgresql://ambient:ambient-secret@localhost:5432/votegpt_e2e",
+          E2E_DATABASE_URL:
+            "postgresql://e2e:e2e-secret@localhost/votegpt_e2e",
+          PGPORT: "6543",
+        }),
+        readTargetMarker,
+      ),
+    ).rejects.toThrow("E2E PostgreSQL database URL must specify an explicit port.");
+    expect(readTargetMarker).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
-      "an omitted target port resolved through PGPORT",
-      "postgresql://ambient:ambient-secret@localhost:6543/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@localhost/votegpt_e2e",
-      { PGPORT: "6543" },
+      "target",
+      { E2E_DATABASE_URL: "postgresql://e2e:e2e-secret@localhost/votegpt_e2e" },
     ],
     [
-      "a percent-encoded target host",
-      "postgresql://ambient:ambient-secret@localhost/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@%6cocalhost/votegpt_e2e",
-      {},
+      "ambient database",
+      { DATABASE_URL: "postgresql://ambient:ambient-secret@localhost/votegpt_e2e" },
     ],
   ])(
-    "rejects PostgreSQL client routing parity bypass with %s before reading the marker",
-    async (_description, ambientDatabaseUrl, e2eDatabaseUrl, environment) => {
+    "rejects a portless PostgreSQL %s before reading the marker regardless of PGPORT",
+    async (_description, urls) => {
       const { requireE2eDatabase } = await loadGuard();
       const readTargetMarker = vi.fn(async () => marker);
 
       await expect(
         requireE2eDatabase(
-          validEnvironment({
-            DATABASE_URL: ambientDatabaseUrl,
-            E2E_DATABASE_URL: e2eDatabaseUrl,
-            ...environment,
-          }),
+          validEnvironment({ ...urls, PGPORT: "6543" }),
           readTargetMarker,
         ),
-      ).rejects.toThrow(/ambient/i);
+      ).rejects.toThrow("E2E PostgreSQL database URL must specify an explicit port.");
       expect(readTargetMarker).not.toHaveBeenCalled();
     },
   );
 
+  it("rejects a percent-encoded target host before reading the marker", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          DATABASE_URL:
+            "postgresql://ambient:ambient-secret@localhost:5432/votegpt_e2e",
+          E2E_DATABASE_URL:
+            "postgresql://e2e:e2e-secret@%6cocalhost:5432/votegpt_e2e",
+        }),
+        readTargetMarker,
+      ),
+    ).rejects.toThrow(/ambient/i);
+    expect(readTargetMarker).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       "a DNS root-dot alias",
-      "postgresql://ambient:ambient-secret@localhost/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@localhost./votegpt_e2e",
+      "postgresql://ambient:ambient-secret@localhost:5432/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@localhost.:5432/votegpt_e2e",
     ],
     [
       "a non-canonical IPv4 spelling accepted by pg",
-      "postgresql://ambient:ambient-secret@127.0.0.1/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@127.1/votegpt_e2e",
+      "postgresql://ambient:ambient-secret@127.0.0.1:5432/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@127.1:5432/votegpt_e2e",
     ],
     [
       "an expanded IPv6 spelling normalized by pg",
-      "postgresql://ambient:ambient-secret@[::1]/votegpt_e2e",
-      "postgresql://e2e:e2e-secret@[0:0:0:0:0:0:0:1]/votegpt_e2e",
+      "postgresql://ambient:ambient-secret@[::1]:5432/votegpt_e2e",
+      "postgresql://e2e:e2e-secret@[0:0:0:0:0:0:0:1]:5432/votegpt_e2e",
     ],
   ])(
     "rejects equivalent PostgreSQL host identity expressed as %s before reading the marker",
@@ -182,7 +206,7 @@ describe("destructive E2E database guard", () => {
       requireE2eDatabase(
         validEnvironment({
           E2E_DATABASE_URL:
-            "postgresql://e2e:e2e-secret@localhost../votegpt_e2e",
+            "postgresql://e2e:e2e-secret@localhost..:5432/votegpt_e2e",
         }),
         readTargetMarker,
       ),
@@ -191,8 +215,8 @@ describe("destructive E2E database guard", () => {
   });
 
   it.each([
-    ["host", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?host=elsewhere"],
-    ["port", "postgresql://e2e:e2e-secret@localhost/votegpt_e2e?port=5433"],
+    ["host", "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e?host=elsewhere"],
+    ["port", "postgresql://e2e:e2e-secret@localhost:5432/votegpt_e2e?port=5433"],
   ])(
     "rejects PostgreSQL %s routing overrides before reading the marker",
     async (_parameter, e2eDatabaseUrl) => {
@@ -217,7 +241,7 @@ describe("destructive E2E database guard", () => {
       requireE2eDatabase(
         validEnvironment({
           E2E_DATABASE_URL:
-            "postgresql://e2e:e2e-secret@localhost/votegpt%ZZ_e2e",
+            "postgresql://e2e:e2e-secret@localhost:5432/votegpt%ZZ_e2e",
         }),
         readTargetMarker,
       ),

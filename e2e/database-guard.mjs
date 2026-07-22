@@ -23,10 +23,10 @@ export async function requireE2eDatabase(
     throw new Error("E2E database marker must be an unpredictable value.");
   }
 
-  const normalizedTarget = normalizeDatabaseUrl(databaseUrl, environment);
+  const normalizedTarget = normalizeDatabaseUrl(databaseUrl);
   if (
     ambientDatabaseUrl &&
-    normalizeDatabaseUrl(ambientDatabaseUrl, environment) === normalizedTarget
+    normalizeDatabaseUrl(ambientDatabaseUrl) === normalizedTarget
   ) {
     throw new Error("E2E database must differ from the ambient database.");
   }
@@ -62,7 +62,7 @@ export async function readE2eDatabaseMarker(databaseUrl) {
   throw new Error("E2E database must use PostgreSQL only.");
 }
 
-function normalizeDatabaseUrl(databaseUrl, environment) {
+function normalizeDatabaseUrl(databaseUrl) {
   if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
     let parsed;
     let connection;
@@ -85,10 +85,12 @@ function normalizeDatabaseUrl(databaseUrl, environment) {
 
     const hostname = canonicalizeHost(connection.host);
     const database = connection.database;
-    const port = Number.parseInt(
-      parsed.port || environment.PGPORT || connection.port || "5432",
-      10,
-    );
+    const port = Number.parseInt(parsed.port, 10);
+    if (!parsed.port) {
+      throw new Error(
+        "E2E PostgreSQL database URL must specify an explicit port.",
+      );
+    }
     if (!hostname || !database || !Number.isInteger(port)) {
       throw new Error(
         "E2E PostgreSQL database URL must specify a host and database.",
