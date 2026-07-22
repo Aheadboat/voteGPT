@@ -233,6 +233,55 @@ describe("destructive E2E database guard", () => {
     },
   );
 
+  it.each([
+    [
+      "the IPv4-mapped IPv6 form of 127.0.0.1",
+      "postgresql://ambient:ambient-secret@127.0.0.1:5432/shared_db",
+      "postgresql://e2e:e2e-secret@[::ffff:127.0.0.1]:5432/shared_db",
+    ],
+    [
+      "the IPv4-mapped IPv6 form of a 127/8 alias",
+      "postgresql://ambient:ambient-secret@127.1:5432/shared_db",
+      "postgresql://e2e:e2e-secret@[::ffff:127.1.0.1]:5432/shared_db",
+    ],
+  ])(
+    "rejects %s before reading the marker",
+    async (_description, ambientDatabaseUrl, e2eDatabaseUrl) => {
+      const { requireE2eDatabase } = await loadGuard();
+      const readTargetMarker = vi.fn(async () => marker);
+
+      await expect(
+        requireE2eDatabase(
+          validEnvironment({
+            DATABASE_URL: ambientDatabaseUrl,
+            E2E_DATABASE_URL: e2eDatabaseUrl,
+          }),
+          readTargetMarker,
+        ),
+      ).rejects.toThrow(/ambient/i);
+      expect(readTargetMarker).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a non-loopback IPv4-mapped IPv6 host distinct", async () => {
+    const { requireE2eDatabase } = await loadGuard();
+    const readTargetMarker = vi.fn(async () => marker);
+    const e2eDatabaseUrl =
+      "postgresql://e2e:e2e-secret@[::ffff:192.0.2.1]:5432/shared_db";
+
+    await expect(
+      requireE2eDatabase(
+        validEnvironment({
+          DATABASE_URL:
+            "postgresql://ambient:ambient-secret@192.0.2.1:5432/shared_db",
+          E2E_DATABASE_URL: e2eDatabaseUrl,
+        }),
+        readTargetMarker,
+      ),
+    ).resolves.toBe(e2eDatabaseUrl);
+    expect(readTargetMarker).toHaveBeenCalledOnce();
+  });
+
   it("rejects an ambiguous PostgreSQL host before reading the marker", async () => {
     const { requireE2eDatabase } = await loadGuard();
     const readTargetMarker = vi.fn(async () => marker);

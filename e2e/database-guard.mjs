@@ -113,11 +113,11 @@ function canonicalizeHost(hostname) {
     if (!host.startsWith("[") || !host.endsWith("]") || isIP(ipv6) !== 6) {
       throw new Error("E2E PostgreSQL database URL is invalid.");
     }
-    return ipv6 === "::1" ? "loopback" : `[${ipv6}]`;
+    return isLoopbackIpv6(ipv6) ? "loopback" : `[${ipv6}]`;
   }
 
   if (isIP(host) === 6) {
-    return host === "::1" ? "loopback" : host;
+    return isLoopbackIpv6(host) ? "loopback" : host;
   }
 
   const withoutRootDot = host.endsWith(".") ? host.slice(0, -1) : host;
@@ -137,6 +137,16 @@ function canonicalizeHost(hostname) {
   }
 
   return withoutRootDot === "localhost" ? "loopback" : withoutRootDot;
+}
+
+function isLoopbackIpv6(ipv6) {
+  const mappedIpv4 = /^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/.exec(ipv6);
+  return (
+    ipv6 === "::1" ||
+    (mappedIpv4 !== null &&
+      Number.parseInt(mappedIpv4[1], 16) >= 0x7f00 &&
+      Number.parseInt(mappedIpv4[1], 16) <= 0x7fff)
+  );
 }
 
 function singleMarker(rows) {
