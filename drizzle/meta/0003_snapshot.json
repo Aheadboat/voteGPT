@@ -214,6 +214,13 @@
           "primaryKey": true,
           "notNull": true
         },
+        "revision": {
+          "name": "revision",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
         "envelope_version": {
           "name": "envelope_version",
           "type": "text",

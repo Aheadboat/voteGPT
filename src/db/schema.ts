@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable(
@@ -113,6 +114,7 @@ export const savedResidence = pgTable(
     userId: text("user_id")
       .primaryKey()
       .references(() => user.id, { onDelete: "cascade" }),
+    revision: uuid("revision").defaultRandom().notNull(),
     envelopeVersion: text("envelope_version").notNull(),
     keyVersion: text("key_version").notNull(),
     iv: text("iv").notNull(),
