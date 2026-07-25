@@ -448,7 +448,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #17](https://github.com/Aheadboat/voteGPT/pull/17) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## F5 — Federal Officials [IN PROGRESS (GREEN)]
+## F5 — Federal Officials [IN PROGRESS (RED)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
@@ -461,6 +461,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **F5-T2 GREEN evidence:** Fresh implementation commit `27906ea2e8a80e0bee20c8185de8b98da9d9250a` moved provider orchestration to one service-owned snapshot, signal, and deadline; validates national Clerk evidence before state selection; separates authenticated fetch URLs from credential-free provenance; and renders only public source URLs. Its RED had six expected failures/321 passes; GREEN passed 327/327 focused and 705/705 full tests. A coordinator-authorized fixture-only `SourceRef` update in `integration/federal-official-cache.test.ts` changed no cache behavior.
 - **F5-T2 review correction evidence:** Adversarial review found two Important policy-consumption defects: named response/name/row bounds were incompletely consumed, and unrelated calendar/cache values were being used as generic numeric/string aliases. Fresh correction commit `8177101044bc7b3411ec1a4cb689a39526af21b1` added six expected REDs, consumes semantic federal policy directly, strengthens the literal audit without hiding structural values, and removes the aliases. Focused verification passed 331/331, full verification passed 709/709, and fresh re-review found no Critical, Important, or Minor issue.
 - **Planned F5-T4 browser RED:** Hosted run `30144464344` passed migrations, all PostgreSQL contracts, and every non-E2E check on the corrected Task 2 head. Its federal browser suite passed 16/22 and failed only six journeys because Task 4-owned `e2e/seed-session.mjs` still emits the legacy `SourceRef.url` fixture shape; Task 4 owns that fixture-clock and one-page handoff correction.
+- **F5-T3 RED/GREEN evidence:** Fresh implementation commit `6d6637b93cac6fa1176880f7cb98009524baf26c` added the post-lock database-clock and atomic cache-integrity behavior after two expected REDs. Hosted PostgreSQL exposed raw timestamp decoding and newer shared-profile conflicts; fresh corrections `73825bc037edf5e6500de8f47cdf82dfbd35b1c5` and `43b4f157952d385b462da87c24a05eee9665c0d9` now decode a validated database epoch, evaluate each unrelated row against its own retrieval time, preserve newer shared profiles by comparing stable identity, and roll back malformed unrelated roster/profile writes atomically. Local focused verification passed 80/80 and full serial verification passed 719/719. Exact-head hosted run `30145815545` passed migrations, all PostgreSQL contracts, and every non-E2E check; its only failures were the same six recorded Task 4 browser REDs, with 16/22 browser journeys passing. Fresh no-context re-review found no Critical, Important, or Minor issue.
 - **Gate A ownership correction RED/GREEN evidence:** Independent F4 design review found that the activation record omitted five existing residence/account UI and test surfaces required by the proposed F4 work. The strengthened activation guard first failed 1 of 14 tests on missing `src/lib/account.test.ts`; after F4 ownership and matching F5 deferral were extended to all five surfaces, it passed 14/14.
 - **Tests first:** Golden district fixture, senators, at-large seat, vacancy, stale/incomplete provider data, and mandatory source/retrieval time.
 - **Done:** Minimal `Person`, `Office`, `Term`, `SourceRef`, and `Freshness` records; Congress.gov adapter; public profiles; federal `In office` dashboard; graceful cached/error state when provider fails.
@@ -468,7 +469,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `GREEN`
+- **Phase:** `RED`
 - **Branch:** `codex/f5-main-recovery` — current with the completed F4 closeout and ready for the approved task graph.
 - **Base commit:** `4c5fd46106013fe3a104f20de4bfcf51f2508710`
 - **Integrated-main commit:** `b22f152a8dc719bbffa7295456ba218351821f76`
@@ -476,8 +477,8 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** `f5_main_recovery_lead` — one fresh implementation subagent per approved task, with separate independent review after each task.
 - **Ownership:** F5 exclusively owns new federal-only domain, fixture, Congress.gov adapter, source/freshness, public-profile route/component/module-style, and focused-test files. F5 exclusively owns the Congress.gov request/configuration external resource. F5 defers these F4-owned shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. That closeout is now integrated, so F5 accepts only the shared surfaces explicitly named by its approved tasks; the shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F5 remains active in isolated lanes but cannot reach Gate B until it integrates completed F4 from `main` after the F4 closeout. It then accepts the coordinator-recorded shared-surface handoff, completes deferred cache/dashboard/runtime integration, and reruns focused, database, full, E2E, review, and hosted-CI gates; only then may approach Gate B. Its feature PR, post-merge verification, and closeout follow F4's completed sequence.
-- **Feature PR/CI:** Not opened. Hosted Task 2 run `30144464344` passed migrations, PostgreSQL, and non-E2E checks; its only failures are the six recorded Task 4 browser REDs. Historical staging PRs and CI are evidence only.
-- **Blockers:** None; the approved Task 3 cache-integrity correction is next.
+- **Feature PR/CI:** Not opened. Exact-head hosted Task 3 run `30145815545` passed migrations, every PostgreSQL contract, and all non-E2E checks; its only failures are the six recorded Task 4 browser REDs. Historical staging PRs and CI are evidence only.
+- **Blockers:** None; Task 4 owns the active fixture-clock and one-page residence-to-official handoff RED.
 - **Feature merge:** Not started.
 - **Post-merge evidence:** Not applicable before the feature merge.
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
