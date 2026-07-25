@@ -448,7 +448,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #17](https://github.com/Aheadboat/voteGPT/pull/17) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## F5 — Federal Officials [IN PROGRESS (RED)]
+## F5 — Federal Officials [IN PROGRESS (GREEN)]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
@@ -458,6 +458,9 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **F5-T1 recovery evidence:** Fresh implementation commit `b16e1ef80ec858497020dd78758cc6677f4f5ce7` recovered exactly the 44 approved F5 and checked-in Census/policy paths with no excluded governance or refresh-writer state. The inherited F4 baseline passed 326/326, policy generation passed, and the federal suite passed 375/377 with only the two approved Task 2 literal-ownership REDs.
 - **F5-T1 handoff correction evidence:** Hosted CI exposed that three historical whole-file states overwrote newer F4 schema, destructive-E2E, and environment contracts. Fresh correction commit `162821de0e9caadfb3e419d29457f0c6fc221c53` composed the F5 additions onto the F4 handoff in four bounded files; coordinator contract commit `abd811b68799a1dd2dc7b114ead0ca28546cc9a8` added only the blank Congress credential name. Hosted run `30142858149` then passed migrations and all 23 PostgreSQL contracts before stopping at the two expected Task 2 REDs. Local F4 regression checks passed 91/91, the full suite passed 699/701 with only those two REDs, and fresh re-review found no Critical, Important, or Minor issue.
 - **F5-T2 RED evidence:** `tests/federal-policy-literal-audit.test.ts` fails exactly two tests because the recovered Congress/Clerk adapters and federal service still own duplicated policy and provider-host literals. Task 2 owns the shared snapshot/deadline/provenance correction and must make those tests green without changing the accepted F4 handoff.
+- **F5-T2 GREEN evidence:** Fresh implementation commit `27906ea2e8a80e0bee20c8185de8b98da9d9250a` moved provider orchestration to one service-owned snapshot, signal, and deadline; validates national Clerk evidence before state selection; separates authenticated fetch URLs from credential-free provenance; and renders only public source URLs. Its RED had six expected failures/321 passes; GREEN passed 327/327 focused and 705/705 full tests. A coordinator-authorized fixture-only `SourceRef` update in `integration/federal-official-cache.test.ts` changed no cache behavior.
+- **F5-T2 review correction evidence:** Adversarial review found two Important policy-consumption defects: named response/name/row bounds were incompletely consumed, and unrelated calendar/cache values were being used as generic numeric/string aliases. Fresh correction commit `8177101044bc7b3411ec1a4cb689a39526af21b1` added six expected REDs, consumes semantic federal policy directly, strengthens the literal audit without hiding structural values, and removes the aliases. Focused verification passed 331/331, full verification passed 709/709, and fresh re-review found no Critical, Important, or Minor issue.
+- **Planned F5-T4 browser RED:** Hosted run `30144464344` passed migrations, all PostgreSQL contracts, and every non-E2E check on the corrected Task 2 head. Its federal browser suite passed 16/22 and failed only six journeys because Task 4-owned `e2e/seed-session.mjs` still emits the legacy `SourceRef.url` fixture shape; Task 4 owns that fixture-clock and one-page handoff correction.
 - **Gate A ownership correction RED/GREEN evidence:** Independent F4 design review found that the activation record omitted five existing residence/account UI and test surfaces required by the proposed F4 work. The strengthened activation guard first failed 1 of 14 tests on missing `src/lib/account.test.ts`; after F4 ownership and matching F5 deferral were extended to all five surfaces, it passed 14/14.
 - **Tests first:** Golden district fixture, senators, at-large seat, vacancy, stale/incomplete provider data, and mandatory source/retrieval time.
 - **Done:** Minimal `Person`, `Office`, `Term`, `SourceRef`, and `Freshness` records; Congress.gov adapter; public profiles; federal `In office` dashboard; graceful cached/error state when provider fails.
@@ -465,7 +468,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `RED`
+- **Phase:** `GREEN`
 - **Branch:** `codex/f5-main-recovery` — current with the completed F4 closeout and ready for the approved task graph.
 - **Base commit:** `4c5fd46106013fe3a104f20de4bfcf51f2508710`
 - **Integrated-main commit:** `b22f152a8dc719bbffa7295456ba218351821f76`
@@ -473,8 +476,8 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** `f5_main_recovery_lead` — one fresh implementation subagent per approved task, with separate independent review after each task.
 - **Ownership:** F5 exclusively owns new federal-only domain, fixture, Congress.gov adapter, source/freshness, public-profile route/component/module-style, and focused-test files. F5 exclusively owns the Congress.gov request/configuration external resource. F5 defers these F4-owned shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. That closeout is now integrated, so F5 accepts only the shared surfaces explicitly named by its approved tasks; the shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F5 remains active in isolated lanes but cannot reach Gate B until it integrates completed F4 from `main` after the F4 closeout. It then accepts the coordinator-recorded shared-surface handoff, completes deferred cache/dashboard/runtime integration, and reruns focused, database, full, E2E, review, and hosted-CI gates; only then may approach Gate B. Its feature PR, post-merge verification, and closeout follow F4's completed sequence.
-- **Feature PR/CI:** Not opened. Hosted Task 1 run `30142858149` passed migrations and PostgreSQL contracts, then stopped only at the two expected Task 2 REDs. Historical staging PRs and CI are evidence only.
-- **Blockers:** None; the approved Task 2 provider/provenance correction is next.
+- **Feature PR/CI:** Not opened. Hosted Task 2 run `30144464344` passed migrations, PostgreSQL, and non-E2E checks; its only failures are the six recorded Task 4 browser REDs. Historical staging PRs and CI are evidence only.
+- **Blockers:** None; the approved Task 3 cache-integrity correction is next.
 - **Feature merge:** Not started.
 - **Post-merge evidence:** Not applicable before the feature merge.
 - **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
