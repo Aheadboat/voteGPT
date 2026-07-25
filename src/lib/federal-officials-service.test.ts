@@ -150,6 +150,76 @@ describe("federal official cache service", () => {
     ]);
   });
 
+  it.each([
+    ["non-number", NOW.getTime().toString()],
+    ["non-finite", Number.NaN],
+    ["out-of-range", 8_640_000_000_000_001],
+  ])("rejects a %s raw database clock", async (_label, rawClock) => {
+    const fake = fakeFederalCacheDatabase({
+      clock: NOW,
+      rawClock,
+    });
+    const repository = createFederalOfficialCacheRepository(
+      fake.database as never,
+    );
+
+    await expect(
+      repository.replaceRoster(
+        federalReplacement(verifiedRoster(jurisdiction), NOW),
+      ),
+    ).rejects.toThrow("Invalid federal official cache database clock");
+  });
+
+  it("repairs a prior-Congress target while validating global records at their retrieval snapshots", async () => {
+    const priorAt = new Date("2027-01-03T16:59:59.999Z");
+    const currentAt = new Date("2027-01-03T17:00:00.000Z");
+    const otherJurisdiction: FederalJurisdiction = {
+      stateCode: "CA",
+      district: 12,
+      divisionIds: [
+        "ocd-division/country:us/state:ca",
+        "ocd-division/country:us/state:ca/cd:12",
+      ],
+    };
+    const target = federalReplacement(
+      verifiedRoster(jurisdiction, "H000001", priorAt, 119),
+      priorAt,
+    );
+    const global = federalReplacement(
+      verifiedRoster(
+        otherJurisdiction,
+        "C000012",
+        priorAt,
+        119,
+        ["T000001", "T000002"],
+      ),
+      priorAt,
+    );
+    const incoming = federalReplacement(
+      verifiedRoster(
+        jurisdiction,
+        "H000120",
+        currentAt,
+        120,
+        ["S000120", "S000121"],
+      ),
+      currentAt,
+    );
+    const fake = fakeFederalCacheDatabase({
+      clock: currentAt,
+      globalRosterRows: [global.roster],
+      profileRows: [...target.profiles, ...global.profiles],
+      targetRows: [target.roster],
+    });
+    const repository = createFederalOfficialCacheRepository(
+      fake.database as never,
+    );
+
+    await expect(repository.replaceRoster(incoming)).resolves.toEqual({
+      status: "written",
+    });
+  });
+
   it("protects a displaced profile referenced by a surviving roster", async () => {
     const oldAt = new Date(NOW.getTime() - 2 * HOUR);
     const siblingJurisdiction: FederalJurisdiction = {
@@ -1105,6 +1175,7 @@ function fakeFederalCacheDatabase(options: {
   clock: Date;
   globalRosterRows?: readonly FederalOfficialCacheRecord[];
   profileRows?: readonly FederalOfficialCacheRecord[];
+  rawClock?: unknown;
   targetRows?: readonly FederalOfficialCacheRecord[];
 }) {
   const events: string[] = [];
@@ -1118,7 +1189,16 @@ function fakeFederalCacheDatabase(options: {
         return;
       }
       events.push("clock");
-      return { rows: [{ databaseTime: options.clock }] };
+      return {
+        rows: [
+          {
+            databaseTime: options.clock.toISOString(),
+            databaseTimeEpochMs: Object.hasOwn(options, "rawClock")
+              ? options.rawClock
+              : options.clock.getTime(),
+          },
+        ],
+      };
     },
     select() {
       recordRead += 1;
@@ -1173,17 +1253,43 @@ function verifiedRoster(
   selected: FederalJurisdiction,
   houseId = "H000001",
   retrievedAt = NOW,
+  congress = 119,
+  senateIds: readonly [string, string] = ["S000001", "S000002"],
 ): FederalOfficialsRoster {
   return reconcileFederalOfficials(
     selected,
     availableCongress(
-      [servingSeat("house", houseId, selected.district, selected, retrievedAt)],
       [
-        servingSeat("senate", "S000001", null, selected, retrievedAt),
-        servingSeat("senate", "S000002", null, selected, retrievedAt),
+        servingSeat(
+          "house",
+          houseId,
+          selected.district,
+          selected,
+          retrievedAt,
+          congress,
+        ),
       ],
+      [
+        servingSeat(
+          "senate",
+          senateIds[0],
+          null,
+          selected,
+          retrievedAt,
+          congress,
+        ),
+        servingSeat(
+          "senate",
+          senateIds[1],
+          null,
+          selected,
+          retrievedAt,
+          congress,
+        ),
+      ],
+      congress,
     ),
-    availableClerk([], retrievedAt),
+    availableClerk([], retrievedAt, congress),
   );
 }
 
@@ -1288,9 +1394,11 @@ function servingSeat(
   district: number | null,
   selected: FederalJurisdiction,
   retrievedAt = NOW,
+  congress = 119,
 ): Extract<FederalSeat, { status: "serving" }> {
   const officeId = `federal:${chamber}:${selected.stateCode}:${district ?? bioguideId}`;
   const personId = `bioguide:${bioguideId}` as const;
+  const startYear = 1787 + congress * 2;
   return {
     status: "serving",
     office: {
@@ -1304,9 +1412,9 @@ function servingSeat(
     term: {
       officeId,
       personId,
-      congress: 119,
-      startYear: 2025,
-      endYear: 2027,
+      congress,
+      startYear,
+      endYear: startYear + 2,
       status: "serving",
     },
     sources: [
@@ -1557,8 +1665,9 @@ function rosterPayload(record: FederalOfficialCacheRecord) {
 function availableCongress(
   house: readonly FederalSeat[],
   senate: readonly FederalSeat[],
+  currentCongress = 119,
 ): Extract<CongressRosterOutcome, { status: "available" }> {
-  return { status: "available", currentCongress: 119, house, senate };
+  return { status: "available", currentCongress, house, senate };
 }
 
 function availableClerk(
@@ -1567,10 +1676,11 @@ function availableClerk(
     { status: "available" }
   >["vacancies"] = [],
   retrievedAt = NOW,
+  currentCongress = 119,
 ): Extract<HouseVacancyOutcome, { status: "available" }> {
   return {
     status: "available",
-    currentCongress: 119,
+    currentCongress,
     source: { ...clerkSource, retrievedAt: retrievedAt.toISOString() },
     vacancies,
   };

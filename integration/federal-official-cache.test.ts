@@ -977,6 +977,62 @@ describe("PostgreSQL federal official cache", () => {
     ).toEqual(["S000001", "S000002"]);
   });
 
+  it("aborts invalid target repair when an unrelated roster is malformed", async () => {
+    const incoming = replacement(
+      "H000001",
+      ["S000001", "S000002"],
+      NOW,
+    );
+    const unrelated = replacementForJurisdiction(
+      "CA",
+      12,
+      "C000012",
+      ["T000001", "T000002"],
+      hoursBefore(1),
+    );
+    await db.insert(federalOfficialCache).values([
+      {
+        ...incoming.roster,
+        payload: { invalid: "target roster" },
+      },
+      {
+        ...unrelated.roster,
+        payload: { invalid: "unrelated roster" },
+      },
+    ]);
+    const before = await storedRows();
+
+    await expect(repository.replaceRoster(incoming)).rejects.toThrow(
+      "Invalid stored federal official roster",
+    );
+    expect(await storedRows()).toEqual(before);
+  });
+
+  it("aborts invalid target repair when an unrelated profile is malformed", async () => {
+    const incoming = replacement(
+      "H000001",
+      ["S000001", "S000002"],
+      NOW,
+    );
+    await db.insert(federalOfficialCache).values([
+      {
+        ...incoming.roster,
+        payload: { invalid: "target roster" },
+      },
+      cacheRecord(
+        "profile:v2:U000001",
+        { invalid: "unrelated profile" },
+        hoursBefore(1),
+      ),
+    ]);
+    const before = await storedRows();
+
+    await expect(repository.replaceRoster(incoming)).rejects.toThrow(
+      "Invalid stored federal official profile",
+    );
+    expect(await storedRows()).toEqual(before);
+  });
+
   it("keeps a profile while any surviving roster references its Bioguide ID", async () => {
     await seedCrossStateSharedSenator();
 

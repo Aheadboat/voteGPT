@@ -200,7 +200,7 @@ export function createFederalOfficialCacheRepository(
             row,
             row.cacheKey as FederalOfficialCacheKey,
             jurisdiction,
-            databaseTime,
+            row.retrievedAt,
           );
           if (roster === null) {
             throw new Error("Invalid stored federal official roster");
@@ -233,7 +233,7 @@ export function createFederalOfficialCacheRepository(
                 profile,
                 profile.cacheKey as FederalOfficialCacheKey,
                 match[1],
-                databaseTime,
+                profile.retrievedAt,
               )
             : null;
           if (stored === null) {
@@ -1709,11 +1709,23 @@ async function readClockTimestamp(
   tx: FederalCacheTransaction,
 ): Promise<Date> {
   const result = await tx.execute(
-    sql<{ databaseTime: Date }>`select clock_timestamp() as "databaseTime"`,
+    sql<{ databaseTimeEpochMs: number }>`
+      select (extract(epoch from clock_timestamp()) * 1000)::double precision
+        as "databaseTimeEpochMs"
+    `,
   );
   const [row] = "rows" in result ? result.rows : result;
-  if (!row || !validDate(row.databaseTime)) {
+  const epochMilliseconds = row?.databaseTimeEpochMs;
+  if (
+    !isNumber(epochMilliseconds) ||
+    !Number.isFinite(epochMilliseconds) ||
+    Math.abs(epochMilliseconds) > 8.64e15
+  ) {
     throw new Error("Invalid federal official cache database clock");
   }
-  return row.databaseTime;
+  const databaseTime = new Date(epochMilliseconds);
+  if (!validDate(databaseTime)) {
+    throw new Error("Invalid federal official cache database clock");
+  }
+  return databaseTime;
 }
