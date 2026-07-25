@@ -22,6 +22,13 @@
       "when": 1784197414459,
       "tag": "0002_saved_residence",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784238754626,
+      "tag": "0003_federal_official_cache",
+      "breakpoints": true
     }
   ]
 }

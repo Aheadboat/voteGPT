@@ -1,0 +1,308 @@
+{
+  "sources": [
+    {
+      "url": "https://www2.census.gov/programs-surveys/decennial/2020/data/apportionment/apportionment.csv",
+      "officialRelease": "2020 Census Apportionment Results",
+      "officialVersion": "2021-04-26T19:10:06.000Z",
+      "retrievedAt": "2026-07-18T09:56:13.395Z",
+      "upstreamSha256": "d9be9c833ad936ee309a83fa6428a3ae2f82d5d8e5b2c69c4d6ff1e79ba57fcd",
+      "canonicalSha256": "d9be9c833ad936ee309a83fa6428a3ae2f82d5d8e5b2c69c4d6ff1e79ba57fcd"
+    },
+    {
+      "url": "https://www2.census.gov/geo/docs/reference/state.txt",
+      "officialRelease": "Census State Reference File",
+      "officialVersion": "2013-03-13T18:26:28.000Z",
+      "retrievedAt": "2026-07-18T09:56:13.395Z",
+      "upstreamSha256": "bea4e03f71a1fa0045ae732aabad11fa541e5932b071c2369bb0d325e8cba5a0",
+      "canonicalSha256": "bea4e03f71a1fa0045ae732aabad11fa541e5932b071c2369bb0d325e8cba5a0"
+    }
+  ],
+  "generatedAt": "2026-07-18T09:56:13.395Z",
+  "censusIdentityManifest": {
+    "votingStates": [
+      {
+        "code": "AL",
+        "fips": "01",
+        "representativeCount": 7
+      },
+      {
+        "code": "AK",
+        "fips": "02",
+        "representativeCount": 1
+      },
+      {
+        "code": "AZ",
+        "fips": "04",
+        "representativeCount": 9
+      },
+      {
+        "code": "AR",
+        "fips": "05",
+        "representativeCount": 4
+      },
+      {
+        "code": "CA",
+        "fips": "06",
+        "representativeCount": 52
+      },
+      {
+        "code": "CO",
+        "fips": "08",
+        "representativeCount": 8
+      },
+      {
+        "code": "CT",
+        "fips": "09",
+        "representativeCount": 5
+      },
+      {
+        "code": "DE",
+        "fips": "10",
+        "representativeCount": 1
+      },
+      {
+        "code": "FL",
+        "fips": "12",
+        "representativeCount": 28
+      },
+      {
+        "code": "GA",
+        "fips": "13",
+        "representativeCount": 14
+      },
+      {
+        "code": "HI",
+        "fips": "15",
+        "representativeCount": 2
+      },
+      {
+        "code": "ID",
+        "fips": "16",
+        "representativeCount": 2
+      },
+      {
+        "code": "IL",
+        "fips": "17",
+        "representativeCount": 17
+      },
+      {
+        "code": "IN",
+        "fips": "18",
+        "representativeCount": 9
+      },
+      {
+        "code": "IA",
+        "fips": "19",
+        "representativeCount": 4
+      },
+      {
+        "code": "KS",
+        "fips": "20",
+        "representativeCount": 4
+      },
+      {
+        "code": "KY",
+        "fips": "21",
+        "representativeCount": 6
+      },
+      {
+        "code": "LA",
+        "fips": "22",
+        "representativeCount": 6
+      },
+      {
+        "code": "ME",
+        "fips": "23",
+        "representativeCount": 2
+      },
+      {
+        "code": "MD",
+        "fips": "24",
+        "representativeCount": 8
+      },
+      {
+        "code": "MA",
+        "fips": "25",
+        "representativeCount": 9
+      },
+      {
+        "code": "MI",
+        "fips": "26",
+        "representativeCount": 13
+      },
+      {
+        "code": "MN",
+        "fips": "27",
+        "representativeCount": 8
+      },
+      {
+        "code": "MS",
+        "fips": "28",
+        "representativeCount": 4
+      },
+      {
+        "code": "MO",
+        "fips": "29",
+        "representativeCount": 8
+      },
+      {
+        "code": "MT",
+        "fips": "30",
+        "representativeCount": 2
+      },
+      {
+        "code": "NE",
+        "fips": "31",
+        "representativeCount": 3
+      },
+      {
+        "code": "NV",
+        "fips": "32",
+        "representativeCount": 4
+      },
+      {
+        "code": "NH",
+        "fips": "33",
+        "representativeCount": 2
+      },
+      {
+        "code": "NJ",
+        "fips": "34",
+        "representativeCount": 12
+      },
+      {
+        "code": "NM",
+        "fips": "35",
+        "representativeCount": 3
+      },
+      {
+        "code": "NY",
+        "fips": "36",
+        "representativeCount": 26
+      },
+      {
+        "code": "NC",
+        "fips": "37",
+        "representativeCount": 14
+      },
+      {
+        "code": "ND",
+        "fips": "38",
+        "representativeCount": 1
+      },
+      {
+        "code": "OH",
+        "fips": "39",
+        "representativeCount": 15
+      },
+      {
+        "code": "OK",
+        "fips": "40",
+        "representativeCount": 5
+      },
+      {
+        "code": "OR",
+        "fips": "41",
+        "representativeCount": 6
+      },
+      {
+        "code": "PA",
+        "fips": "42",
+        "representativeCount": 17
+      },
+      {
+        "code": "RI",
+        "fips": "44",
+        "representativeCount": 2
+      },
+      {
+        "code": "SC",
+        "fips": "45",
+        "representativeCount": 7
+      },
+      {
+        "code": "SD",
+        "fips": "46",
+        "representativeCount": 1
+      },
+      {
+        "code": "TN",
+        "fips": "47",
+        "representativeCount": 9
+      },
+      {
+        "code": "TX",
+        "fips": "48",
+        "representativeCount": 38
+      },
+      {
+        "code": "UT",
+        "fips": "49",
+        "representativeCount": 4
+      },
+      {
+        "code": "VT",
+        "fips": "50",
+        "representativeCount": 1
+      },
+      {
+        "code": "VA",
+        "fips": "51",
+        "representativeCount": 11
+      },
+      {
+        "code": "WA",
+        "fips": "53",
+        "representativeCount": 10
+      },
+      {
+        "code": "WV",
+        "fips": "54",
+        "representativeCount": 2
+      },
+      {
+        "code": "WI",
+        "fips": "55",
+        "representativeCount": 8
+      },
+      {
+        "code": "WY",
+        "fips": "56",
+        "representativeCount": 1
+      }
+    ],
+    "nonlaunchJurisdictions": [
+      {
+        "code": "DC",
+        "fips": "11"
+      },
+      {
+        "code": "AS",
+        "fips": "60"
+      },
+      {
+        "code": "GU",
+        "fips": "66"
+      },
+      {
+        "code": "MP",
+        "fips": "69"
+      },
+      {
+        "code": "PR",
+        "fips": "72"
+      },
+      {
+        "code": "VI",
+        "fips": "78"
+      }
+    ],
+    "totalVotingStates": 50,
+    "totalRepresentativeCount": 435,
+    "totalNonlaunchJurisdictions": 6
+  },
+  "effectiveCongress": {
+    "first": 118,
+    "last": 119
+  }
+}
