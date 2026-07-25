@@ -224,6 +224,24 @@ describe("signed-in dashboard", () => {
     expectNoFederalLookup();
   });
 
+  it("explains expired district coverage without asking for a new residence", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(supportedDivisions);
+    vi.mocked(federalJurisdictionFromDivisions).mockReturnValueOnce({
+      status: "policy_expired",
+    });
+
+    const page = await DashboardPage();
+    render(page);
+
+    expect(
+      screen.getByText(
+        "Federal officials are temporarily unavailable while district coverage is updated for the new Congress. Your saved residence does not need to be changed.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    expectNoFederalLookup();
+  });
+
   it("states unsupported jurisdiction coverage without federal lookup", async () => {
     vi.mocked(getSavedResidenceDivisions).mockResolvedValue(
       unsupportedDivisions,

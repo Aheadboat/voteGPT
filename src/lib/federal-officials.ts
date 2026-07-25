@@ -2,6 +2,7 @@ import { FEDERAL_CENSUS_DATA } from "./federal-policy.generated";
 import {
   assessCensusDistrict,
   assessClerkJurisdiction,
+  CONGRESS_CALENDAR_POLICY,
   createCongressSnapshot,
   FEDERAL_OFFICIAL_FIELD_POLICY,
   isCensusCongressInEffectiveRange,
@@ -31,6 +32,7 @@ export type FederalJurisdictionResult =
       status: "unsupported";
       code: NonlaunchJurisdictionCode;
     }>
+  | Readonly<{ status: "policy_expired" }>
   | Readonly<{ status: "invalid" }>;
 
 export type SourceRef = Readonly<{
@@ -178,11 +180,18 @@ export function federalJurisdictionFromDivisions(
   divisions: readonly FederalDivisionInput[],
   congress: CongressSnapshot | null = createCongressSnapshot(new Date()),
 ): FederalJurisdictionResult {
+  if (congress === null) {
+    return { status: "invalid" };
+  }
   if (
-    congress === null ||
-    !isCensusCongressInEffectiveRange(congress.currentCongress)
+    !Number.isInteger(congress.currentCongress) ||
+    congress.currentCongress <
+      CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber
   ) {
     return { status: "invalid" };
+  }
+  if (!isCensusCongressInEffectiveRange(congress.currentCongress)) {
+    return { status: "policy_expired" };
   }
   if (
     divisions.some(

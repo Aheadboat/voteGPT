@@ -11,7 +11,10 @@ import {
   type HouseVacancyOutcome,
   type SourceRef,
 } from "./federal-officials";
-import { createCongressSnapshot } from "./federal-policy";
+import {
+  CONGRESS_CALENDAR_POLICY,
+  createCongressSnapshot,
+} from "./federal-policy";
 import { FEDERAL_CENSUS_DATA } from "./federal-policy.generated";
 
 // RED contract: this suite must first fail because the F5 domain module is absent.
@@ -38,12 +41,24 @@ const unsupported = Object.entries(
   FEDERAL_CENSUS_DATA.nonlaunchJurisdictionFips,
 );
 
+const congressStart = (congress: number) =>
+  new Date(
+    Date.UTC(
+      CONGRESS_CALENDAR_POLICY.epoch.startYearUtc +
+        (congress - CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber) *
+          CONGRESS_CALENDAR_POLICY.termLengthYears,
+      CONGRESS_CALENDAR_POLICY.turnoverUtc.monthIndex,
+      CONGRESS_CALENDAR_POLICY.turnoverUtc.dayOfMonth,
+      CONGRESS_CALENDAR_POLICY.turnoverUtc.hour,
+    ),
+  );
+const expiredCongressStart = congressStart(
+  FEDERAL_CENSUS_DATA.effectiveCongress.last + 1,
+);
 const supportedCongressSnapshot = createCongressSnapshot(
-  new Date("2027-01-03T16:59:59.999Z"),
+  congressStart(FEDERAL_CENSUS_DATA.effectiveCongress.last),
 );
-const expiredCongressSnapshot = createCongressSnapshot(
-  new Date("2027-01-03T17:00:00.000Z"),
-);
+const expiredCongressSnapshot = createCongressSnapshot(expiredCongressStart);
 const federalJurisdictionAtSupportedCongress = (
   divisions: readonly FederalDivisionInput[],
 ) => federalJurisdictionFromDivisions(divisions, supportedCongressSnapshot);
@@ -142,7 +157,7 @@ describe("strict federal jurisdiction", () => {
     }
   });
 
-  it("fails closed after the Census Congress range expires", () => {
+  it("distinguishes expired Census policy from invalid Congress snapshots", () => {
     const california = [
       division("state", "ocd-division/country:us/state:ca", "ocd"),
       division(
@@ -165,10 +180,16 @@ describe("strict federal jurisdiction", () => {
     ).toMatchObject({ status: "supported" });
     expect(
       federalJurisdictionFromDivisions(california, expiredCongressSnapshot),
-    ).toEqual({ status: "invalid" });
+    ).toEqual({ status: "policy_expired" });
     expect(federalJurisdictionFromDivisions(california, null)).toEqual({
       status: "invalid",
     });
+    expect(
+      federalJurisdictionFromDivisions(california, {
+        ...supportedCongressSnapshot!,
+        currentCongress: Number.NaN,
+      }),
+    ).toEqual({ status: "invalid" });
     expect(
       federalJurisdictionFromDivisions(
         districtOfColumbia,
@@ -180,21 +201,21 @@ describe("strict federal jurisdiction", () => {
         districtOfColumbia,
         expiredCongressSnapshot,
       ),
-    ).toEqual({ status: "invalid" });
+    ).toEqual({ status: "policy_expired" });
     expect(federalJurisdictionFromDivisions(districtOfColumbia, null)).toEqual({
       status: "invalid",
     });
 
     vi.useFakeTimers();
     try {
-      vi.setSystemTime(new Date("2027-01-03T16:59:59.999Z"));
+      vi.setSystemTime(new Date(expiredCongressStart.getTime() - 1));
       expect(federalJurisdictionFromDivisions(california)).toMatchObject({
         status: "supported",
       });
 
-      vi.setSystemTime(new Date("2027-01-03T17:00:00.000Z"));
+      vi.setSystemTime(expiredCongressStart);
       expect(federalJurisdictionFromDivisions(california)).toEqual({
-        status: "invalid",
+        status: "policy_expired",
       });
     } finally {
       vi.useRealTimers();

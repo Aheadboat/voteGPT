@@ -77,6 +77,15 @@ async function federalOfficialsFor(userId: string) {
       </p>
     );
   }
+  if (jurisdiction.status === "policy_expired") {
+    return (
+      <p>
+        Federal officials are temporarily unavailable while district coverage
+        is updated for the new Congress. Your saved residence does not need to
+        be changed.
+      </p>
+    );
+  }
   if (jurisdiction.status === "unsupported") {
     return (
       <p>
