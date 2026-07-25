@@ -48,9 +48,6 @@ const congressMemberKeys =
   FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.requiredKeys;
 const clerkVacancyKeys =
   FEDERAL_OFFICIAL_FIELD_POLICY.clerkVacancy.requiredKeys;
-const zero = FEDERAL_CACHE_POLICY.futureTimestampToleranceMs;
-const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
-const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
 
 export type FederalOfficialCacheKey =
   | `roster:v1:${string}:${string}`
@@ -120,7 +117,7 @@ export function createFederalOfficialCacheRepository(
         })
         .from(federalOfficialCache)
         .where(eq(federalOfficialCache.cacheKey, cacheKey))
-        .limit(one);
+        .limit(1);
       return record ?? null;
     },
 
@@ -144,7 +141,7 @@ export function createFederalOfficialCacheRepository(
           })
           .from(federalOfficialCache)
           .where(eq(federalOfficialCache.cacheKey, validated.roster.cacheKey))
-          .limit(one)
+          .limit(1)
           .for("update");
 
         let previousProfiles: readonly FederalProfileCachePayload[] = [];
@@ -664,7 +661,7 @@ function validateRosterRecord(
   const senateIds = senate.map((seat) =>
     seat.status === "serving" ? seat.person.bioguideId : "",
   );
-  if (senate.length > two || new Set(senateIds).size !== senateIds.length) {
+  if (senate.length > 2 || new Set(senateIds).size !== senateIds.length) {
     return null;
   }
   const coverage = validateCoverage(
@@ -808,7 +805,7 @@ function validateJurisdiction(value: unknown): FederalJurisdiction | null {
     !supportedStateFips.has(value.stateCode) ||
     !isDistrict(value.district) ||
     !Array.isArray(value.divisionIds) ||
-    value.divisionIds.length !== two ||
+    value.divisionIds.length !== 2 ||
     !value.divisionIds.every((id) => typeof id === "string")
   ) {
     return null;
@@ -1167,9 +1164,9 @@ function validateCoverage(value: unknown, house: FederalSeat, senateCount: numbe
           ? value.house === "partial"
           : value.house === "unknown" || value.house === "partial";
   const validSenate =
-    senateCount === two
+    senateCount === 2
       ? value.senate === "verified"
-      : senateCount === one
+      : senateCount === 1
         ? value.senate === "partial"
         : value.senate === "unknown";
   return validHouse && validSenate
@@ -1328,9 +1325,10 @@ function validClerkUrl(url: string, office: Office | null) {
   const districtIsAllowed =
     jurisdiction.status === "voting_state"
       ? office.district <= jurisdiction.maximumDistrict &&
-        (jurisdiction.maximumDistrict === one
-          ? office.district === zero
-          : office.district > zero)
+        (jurisdiction.maximumDistrict ===
+        FEDERAL_OFFICIAL_FIELD_POLICY.district.firstNumbered
+          ? office.district === FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
+          : office.district > FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge)
       : jurisdiction.status === "known_nonlaunch" &&
         jurisdiction.allowedDistricts.includes(office.district as 0);
   if (!districtIsAllowed) {
@@ -1375,7 +1373,7 @@ function isProfileEvidence(office: Office, sources: readonly SourceRef[]) {
       sourceType === "member" &&
       (memberUrl === null || publicUrl === memberUrl),
   );
-  if (memberSources.length === zero) {
+  if (memberSources.length === 0) {
     return false;
   }
   if (office.chamber === "senate") {
@@ -1476,7 +1474,7 @@ function freshness(
 
 function rosterKey(jurisdiction: FederalJurisdiction): FederalOfficialCacheKey {
   const district =
-    jurisdiction.district === zero
+    jurisdiction.district === FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
       ? "AL"
       : String(jurisdiction.district).padStart(2, "0");
   return `roster:v1:${jurisdiction.stateCode}:${district}`;
@@ -1491,14 +1489,18 @@ function parseRosterKey(value: string) {
   if (!match?.[1] || !match[2] || !supportedStateFips.has(match[1])) {
     return null;
   }
-  const district = match[two] === "AL" ? zero : Number(match[two]);
+  const district =
+    match[2] === "AL"
+      ? FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
+      : Number(match[2]);
   if (
     !isDistrict(district) ||
-    (district === zero) !== (match[two] === "AL")
+    (district === FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge) !==
+      (match[2] === "AL")
   ) {
     return null;
   }
-  return { stateCode: match[one], district };
+  return { stateCode: match[1], district };
 }
 
 function sameTimes(
@@ -1560,8 +1562,9 @@ function nullableCanonicalTime(value: unknown): number | null | false {
 function isDistrict(value: unknown): value is number {
   return (
     Number.isInteger(value) &&
-    (value as number) >= zero &&
-    (value as number) <= 99
+    (value as number) >= FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge &&
+    (value as number) <=
+      FEDERAL_OFFICIAL_FIELD_POLICY.district.maximumCanonical
   );
 }
 
@@ -1575,7 +1578,7 @@ function nullableYear(value: unknown) {
 }
 
 function isSafePositiveInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) > zero;
+  return Number.isSafeInteger(value) && (value as number) > Number();
 }
 
 function congressAt(time: number) {
@@ -1601,13 +1604,15 @@ function isCurrentTermWindow(
       CONGRESS_CALENDAR_POLICY.termLengthYears;
   const congressEnd =
     congressStart + CONGRESS_CALENDAR_POLICY.termLengthYears;
+  const maximumEndYear =
+    chamber === "senate" ? congressEnd + 4 : congressEnd;
   return (
     startYear < congressEnd &&
     (chamber === "senate" || startYear >= congressStart) &&
     (endYear === null ||
       (isNumber(endYear) &&
         endYear > congressStart &&
-        endYear <= congressEnd + (chamber === "senate" ? 4 : zero)))
+        endYear <= maximumEndYear))
   );
 }
 

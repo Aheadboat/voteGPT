@@ -14,7 +14,11 @@ import congressMemberSenatorOneFixture from "../../tests/fixtures/congress-membe
 import congressMemberSenatorTwoFixture from "../../tests/fixtures/congress-member-senator-two.json";
 import congressSenateFixture from "../../tests/fixtures/congress-senate.json";
 import { fetchCongressRoster } from "./congress-gov";
-import { createCongressSnapshot } from "./federal-policy";
+import {
+  createCongressSnapshot,
+  FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS,
+  FEDERAL_PROVIDER_RESPONSE_POLICY,
+} from "./federal-policy";
 import type {
   CongressRosterOutcome,
   FederalJurisdiction,
@@ -691,10 +695,43 @@ describe("Congress.gov current roster adapter", () => {
     expect(outcome).toEqual({ status: "unavailable", reason: "malformed" });
   });
 
-  it("rejects a persisted member name above 200 characters", async () => {
+  it("accepts a canonical member name at the shared code-point limit", async () => {
     const fixtures = fixtureBundle();
-    fixtures.houseDetail.member.directOrderName = "N".repeat(201);
-    expect(fixtures.houseDetail.member.directOrderName).toHaveLength(201);
+    const canonicalName = "😀".repeat(FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS);
+    fixtures.senate.members[0].name = canonicalName;
+    fixtures.houseDetail.member.directOrderName = canonicalName;
+    expect(Array.from(canonicalName)).toHaveLength(
+      FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS,
+    );
+    expect(canonicalName.length).toBeGreaterThan(
+      FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS,
+    );
+
+    const available = expectAvailable(await lookup(fixtureFetch(fixtures)));
+
+    expect(available.house[0]).toMatchObject({
+      status: "serving",
+      person: { name: canonicalName },
+    });
+  });
+
+  it("rejects a member name above the shared code-point limit", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.houseDetail.member.directOrderName = "N".repeat(
+      FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS + 1,
+    );
+
+    await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
+      status: "unavailable",
+      reason: "malformed",
+    });
+  });
+
+  it("rejects a member-list name above the shared code-point limit", async () => {
+    const fixtures = fixtureBundle();
+    fixtures.senate.members[0].name = "N".repeat(
+      FEDERAL_OFFICIAL_NAME_MAX_CODE_POINTS + 1,
+    );
 
     await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
       status: "unavailable",
@@ -770,13 +807,15 @@ describe("Congress.gov current roster adapter", () => {
     });
   });
 
-  it("rejects 251 otherwise-valid unique results above the API page limit", async () => {
+  it("rejects otherwise-valid unique results above the shared state-member list limit", async () => {
     const fixtures = fixtureBundle();
-    setStateMemberResults(fixtures, 251);
-    expect(fixtures.senate.members).toHaveLength(251);
+    const oversizedCount =
+      FEDERAL_PROVIDER_RESPONSE_POLICY.congress.stateMemberListLimit + 1;
+    setStateMemberResults(fixtures, oversizedCount);
+    expect(fixtures.senate.members).toHaveLength(oversizedCount);
     expect(new Set(
       fixtures.senate.members.map(({ bioguideId }) => bioguideId),
-    ).size).toBe(251);
+    ).size).toBe(oversizedCount);
 
     await expect(lookup(fixtureFetch(fixtures))).resolves.toEqual({
       status: "unavailable",

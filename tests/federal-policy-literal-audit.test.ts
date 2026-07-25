@@ -38,6 +38,22 @@ describe("federal policy literal ownership audit", () => {
       ).toEqual([]);
     });
 
+    it("detects response caps in length comparisons while allowing small cardinalities", () => {
+      const forbidden = policyLiterals([0, 1, 2, 3, 250]);
+      expect(
+        policyLiteralViolations(
+          "fixture.ts",
+          String.raw`
+            const none = values.length === 0;
+            const duplicate = values.length > 1;
+            const pair = values.length === 2;
+            const overflow = values.length > 250;
+          `,
+          forbidden,
+        ),
+      ).toEqual(["fixture.ts: 250"]);
+    });
+
     it("does not hide low policy values outside structural contexts", () => {
       expect(
         policyLiteralViolations(
@@ -75,6 +91,12 @@ describe("federal policy literal ownership audit", () => {
             for (let index = 0; index < values.length; index += 1) {}
             const segment = values.slice(1, 2 + 3);
             const padded = value.padStart(17, "0");
+            const nextCursor = cursor + 1;
+            const afterComment = commentEnd + 3;
+            const partial = senateCount === 1;
+            const isNull = codePoint === 0;
+            let byteCount = 0;
+            let cursor = 0;
           `,
           policyLiterals([0, 1, 2, 3, 17]),
         ),
@@ -153,6 +175,9 @@ describe("federal policy literal ownership audit", () => {
   it("derives forbidden policy tokens and permits no adapter/service owner", () => {
     const inventory = [...FEDERAL_POLICY_LITERAL_AUDIT.productionFiles];
     expect(inventory).toEqual([...inventory].sort());
+    expect(FEDERAL_POLICY_LITERAL_AUDIT.providerUrlConsumerFiles).toContain(
+      "src/components/federal-officials.tsx",
+    );
     for (const path of inventory) {
       expect(FEDERAL_POLICY_LITERAL_AUDIT.allowlistedPaths[path]).toBeUndefined();
     }
@@ -191,7 +216,10 @@ describe("federal policy literal ownership audit", () => {
     expect(policyLiteralViolations(ownerPath, owner, hosts)).toEqual(
       hosts.map((host) => `${ownerPath}: ${policyLiteralToken(host)}`),
     );
-    for (const path of FEDERAL_POLICY_LITERAL_AUDIT.productionFiles) {
+    for (const path of [
+      ...FEDERAL_POLICY_LITERAL_AUDIT.productionFiles,
+      ...FEDERAL_POLICY_LITERAL_AUDIT.providerUrlConsumerFiles,
+    ]) {
       expect(policyLiteralViolations(path, readFileSync(path, "utf8"), hosts)).toEqual(
         [],
       );
@@ -247,7 +275,11 @@ function sourcePolicyLiteralKeys(
     source,
     ts.ScriptTarget.Latest,
     true,
-    path.endsWith(".mjs") ? ts.ScriptKind.JS : ts.ScriptKind.TS,
+    path.endsWith(".mjs")
+      ? ts.ScriptKind.JS
+      : path.endsWith(".tsx")
+        ? ts.ScriptKind.TSX
+        : ts.ScriptKind.TS,
   );
   const found = new Set<string>();
   const forbiddenKeys = new Set(forbidden.map(policyLiteralKey));
@@ -379,6 +411,9 @@ function isStructuralNumericExpression(node: ts.Node): boolean {
   return (
     isElementAccessIndex(node) ||
     isLengthCardinalityCheck(node) ||
+    isNamedCardinalityCheck(node) ||
+    isStructuralCounterInitializer(node) ||
+    isIndexOffset(node) ||
     isForLoopBookkeeping(node) ||
     isStructuralStandardLibraryArgument(node)
   );
@@ -392,10 +427,76 @@ function isElementAccessIndex(node: ts.Node): boolean {
 }
 
 function isLengthCardinalityCheck(node: ts.Node): boolean {
+  const value = numericExpressionValue(node);
   return (
+    value !== undefined &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 3 &&
     ts.isBinaryExpression(node.parent) &&
     ((node.parent.left === node && isLengthAccess(node.parent.right)) ||
       (node.parent.right === node && isLengthAccess(node.parent.left)))
+  );
+}
+
+function isNamedCardinalityCheck(node: ts.Node): boolean {
+  const value = numericExpressionValue(node);
+  if (
+    value === undefined ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > 3 ||
+    !ts.isBinaryExpression(node.parent)
+  ) {
+    return false;
+  }
+  const other =
+    node.parent.left === node
+      ? node.parent.right
+      : node.parent.right === node
+        ? node.parent.left
+        : undefined;
+  return (
+    other !== undefined &&
+    ts.isIdentifier(other) &&
+    /(?:codePoint|count|size)$/i.test(other.text)
+  );
+}
+
+function isStructuralCounterInitializer(node: ts.Node): boolean {
+  return (
+    numericExpressionValue(node) === 0 &&
+    ts.isVariableDeclaration(node.parent) &&
+    node.parent.initializer === node &&
+    ts.isIdentifier(node.parent.name) &&
+    /(?:count|cursor|index|offset|position)$/i.test(node.parent.name.text) &&
+    ts.isVariableDeclarationList(node.parent.parent) &&
+    (node.parent.parent.flags & ts.NodeFlags.Let) !== 0
+  );
+}
+
+function isIndexOffset(node: ts.Node): boolean {
+  const value = numericExpressionValue(node);
+  if (
+    value === undefined ||
+    !Number.isInteger(value) ||
+    Math.abs(value) > 3 ||
+    !ts.isBinaryExpression(node.parent) ||
+    (node.parent.operatorToken.kind !== ts.SyntaxKind.PlusToken &&
+      node.parent.operatorToken.kind !== ts.SyntaxKind.MinusToken)
+  ) {
+    return false;
+  }
+  const other =
+    node.parent.left === node
+      ? node.parent.right
+      : node.parent.right === node
+        ? node.parent.left
+        : undefined;
+  return (
+    other !== undefined &&
+    ts.isIdentifier(other) &&
+    /(?:cursor|index|start|end|offset|position)$/i.test(other.text)
   );
 }
 
@@ -426,7 +527,17 @@ function isStructuralStandardLibraryArgument(node: ts.Node): boolean {
     return false;
   }
   const argumentIndex = node.parent.arguments.indexOf(node as ts.Expression);
-  if (argumentIndex === -1 || !ts.isPropertyAccessExpression(node.parent.expression)) {
+  if (argumentIndex === -1) {
+    return false;
+  }
+  const value = numericExpressionValue(node);
+  if (
+    ts.isIdentifier(node.parent.expression) &&
+    node.parent.expression.text === "String"
+  ) {
+    return argumentIndex === 0 && value !== undefined && value >= 0 && value <= 3;
+  }
+  if (!ts.isPropertyAccessExpression(node.parent.expression)) {
     return false;
   }
   switch (node.parent.expression.name.text) {
@@ -434,9 +545,17 @@ function isStructuralStandardLibraryArgument(node: ts.Node): boolean {
     case "padEnd":
     case "padStart":
       return argumentIndex === 0;
+    case "limit":
+      return argumentIndex === 0 && value !== undefined && value >= 0 && value <= 3;
     case "slice":
     case "substring":
-      return argumentIndex === 0;
+      return (
+        argumentIndex === 0 ||
+        (argumentIndex === 1 &&
+          value !== undefined &&
+          value >= 0 &&
+          value <= 3)
+      );
     default:
       return false;
   }

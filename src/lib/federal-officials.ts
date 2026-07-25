@@ -192,11 +192,13 @@ export function federalJurisdictionFromDivisions(
     return { status: "invalid" };
   }
 
-  const stateDivisionType =
-    FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.requiredKeys[2];
-  const states = divisions.filter(({ type }) => type === stateDivisionType);
+  const states = divisions.filter(
+    ({ type }) => type === FEDERAL_OFFICIAL_FIELD_POLICY.divisionTypes.state,
+  );
   const districts = divisions.filter(
-    ({ type }) => type === "congressional_district",
+    ({ type }) =>
+      type ===
+      FEDERAL_OFFICIAL_FIELD_POLICY.divisionTypes.congressionalDistrict,
   );
   if (
     states.length !== 1 ||

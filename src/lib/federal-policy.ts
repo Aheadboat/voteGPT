@@ -143,6 +143,15 @@ export const BIOGUIDE_ID_PATTERN = /^[A-Z]\d{6}$/;
 const OFFICIAL_NAME_FORBIDDEN_RAW_INPUT_PATTERN =
   /[\p{Cc}\p{Bidi_Control}\p{Cs}\uFEFF]/u;
 export const FEDERAL_OFFICIAL_FIELD_POLICY = Object.freeze({
+  divisionTypes: Object.freeze({
+    state: "state",
+    congressionalDistrict: "congressional_district",
+  }),
+  district: Object.freeze({
+    atLarge: 0,
+    firstNumbered: 1,
+    maximumCanonical: 99,
+  }),
   stateCodePattern: /^[A-Z]{2}$/,
   officialName: Object.freeze({
     normalization: "NFC",
@@ -193,6 +202,9 @@ export const FEDERAL_POLICY_LITERAL_AUDIT = Object.freeze({
     "src/lib/federal-officials.ts",
     "src/lib/federal-provider-host-policy.d.mts",
     "src/lib/house-clerk-vacancy.ts",
+  ]),
+  providerUrlConsumerFiles: Object.freeze([
+    "src/components/federal-officials.tsx",
   ]),
   allowlistedPaths: federalPolicyLiteralAuditAllowlistedPaths,
   epochLiteralValues: Object.freeze([

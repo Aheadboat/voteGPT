@@ -552,6 +552,15 @@ describe("named federal policy ownership", () => {
   });
 
   it("owns immutable named provider field contracts", () => {
+    expect(FEDERAL_OFFICIAL_FIELD_POLICY.divisionTypes).toEqual({
+      state: "state",
+      congressionalDistrict: "congressional_district",
+    });
+    expect(FEDERAL_OFFICIAL_FIELD_POLICY.district).toEqual({
+      atLarge: 0,
+      firstNumbered: 1,
+      maximumCanonical: 99,
+    });
     expect(FEDERAL_OFFICIAL_FIELD_POLICY.congressCurrent).toEqual({
       requiredKeys: ["number", "startYear", "endYear", "url"],
     });
@@ -564,6 +573,8 @@ describe("named federal policy ownership", () => {
     });
 
     for (const value of [
+      FEDERAL_OFFICIAL_FIELD_POLICY.divisionTypes,
+      FEDERAL_OFFICIAL_FIELD_POLICY.district,
       FEDERAL_OFFICIAL_FIELD_POLICY.congressCurrent,
       FEDERAL_OFFICIAL_FIELD_POLICY.congressCurrent.requiredKeys,
       FEDERAL_OFFICIAL_FIELD_POLICY.congressMember,

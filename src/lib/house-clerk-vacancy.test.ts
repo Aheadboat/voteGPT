@@ -9,7 +9,11 @@ import {
   vi,
 } from "vitest";
 import { fetchCurrentHouseVacancies } from "./house-clerk-vacancy";
-import { createCongressSnapshot } from "./federal-policy";
+import {
+  clerkNationalVacancyUrl,
+  createCongressSnapshot,
+  FEDERAL_PROVIDER_RESPONSE_POLICY,
+} from "./federal-policy";
 import type {
   FetchCurrentHouseVacancies,
   HouseVacancyOutcome,
@@ -23,7 +27,7 @@ const fixture = readFileSync(
   "utf8",
 );
 const now = new Date("2026-07-16T12:00:00.000Z");
-const listUrl = "https://clerk.house.gov/Members/ViewVacancies";
+const listUrl = clerkNationalVacancyUrl().toString();
 const minimalFixture = `<!doctype html>
 <div class="container members-profile">
   <h1>Vacancies of the 119th Congress</h1>
@@ -140,6 +144,24 @@ describe("House Clerk current-vacancy adapter", () => {
 
     await expect(
       lookup(vi.fn(async () => htmlResponse(invalidNationalEvidence))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("rejects national vacancy rows above the shared response limit", async () => {
+    const oversizedRows = Array.from(
+      {
+        length:
+          FEDERAL_PROVIDER_RESPONSE_POLICY.clerk.maxNationalVacancyRows + 1,
+      },
+      (_, index) => `<li class="vacancy_release">Filled seat ${index}</li>`,
+    ).join("");
+    const oversizedNationalList = minimalFixture.replace(
+      "<h2>First Session</h2>",
+      `<h2>First Session</h2>${oversizedRows}`,
+    );
+
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(oversizedNationalList))),
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 

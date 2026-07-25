@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { FederalOfficialsView, Freshness, SourceRef } from "@/lib/federal-officials";
+import { clerkNationalVacancyUrl } from "@/lib/federal-policy";
 
 import { FederalOfficials } from "./federal-officials";
 
@@ -21,8 +22,8 @@ const fresh: Freshness = {
 const clerkSource: SourceRef = {
   publisher: "Office of the Clerk, U.S. House of Representatives",
   sourceType: "vacancy",
-  publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
-  ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
+  publicUrl: clerkNationalVacancyUrl().toString(),
+  ingestionUrl: clerkNationalVacancyUrl().toString(),
   retrievedAt: checkedAt,
   recordUpdatedAt: null,
   effectiveAt: null,

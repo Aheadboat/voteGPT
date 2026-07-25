@@ -4,10 +4,14 @@ import type {
   Freshness,
   SourceRef,
 } from "@/lib/federal-officials";
+import {
+  clerkNationalVacancyUrl,
+  FEDERAL_OFFICIAL_FIELD_POLICY,
+} from "@/lib/federal-policy";
 
 import styles from "./federal-officials.module.css";
 
-const clerkListUrl = "https://clerk.house.gov/Members/ViewVacancies";
+const clerkListUrl = clerkNationalVacancyUrl().toString();
 
 type UnsupportedCode = "DC" | "AS" | "GU" | "MP" | "PR" | "VI";
 
@@ -280,7 +284,7 @@ function RecoveryState({
 
 function jurisdictionLabel(view: FederalOfficialsView) {
   const { district, stateCode } = view.jurisdiction;
-  return district === 0
+  return district === FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
     ? `${stateCode} at-large`
     : `${stateCode} District ${district}`;
 }
@@ -290,7 +294,7 @@ function sourceLinkName(source: SourceRef) {
     source.publisher === "Office of the Clerk, U.S. House of Representatives"
   ) {
     const record =
-      source.publicUrl === "https://clerk.house.gov/Members/ViewVacancies"
+      source.publicUrl === clerkListUrl
       ? "current vacancies list"
       : "district vacancy record";
     return `${source.publisher} ${record} source`;
@@ -302,7 +306,7 @@ function officeHeading(seat: FederalSeat) {
   if (seat.office.chamber === "senate") {
     return seat.office.title;
   }
-  return seat.office.district === 0
+  return seat.office.district === FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
     ? `${seat.office.title} — At-large`
     : `${seat.office.title} — District ${seat.office.district}`;
 }

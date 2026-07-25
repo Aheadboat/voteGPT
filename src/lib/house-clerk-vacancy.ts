@@ -9,15 +9,12 @@ import {
   clerkVacancyPublicUrl,
   CONGRESS_CALENDAR_POLICY,
   createCongressSnapshot,
+  FEDERAL_OFFICIAL_FIELD_POLICY,
   FEDERAL_PROVIDER_RESPONSE_POLICY,
   FEDERAL_PROVIDER_URL_POLICY,
   type CongressSnapshot,
 } from "./federal-policy";
 
-const zero = CONGRESS_CALENDAR_POLICY.turnoverUtc.monthIndex;
-const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
-const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
-const three = CONGRESS_CALENDAR_POLICY.turnoverUtc.dayOfMonth;
 const rawTextNames = new Set([
   "script",
   "style",
@@ -135,7 +132,7 @@ async function readBody(
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let byteCount = zero;
+  let byteCount = 0;
   let html = "";
   try {
     while (true) {
@@ -202,7 +199,7 @@ function parseVacancies(html: string, snapshot: CongressSnapshot) {
       element.name === "div" &&
       hasClasses(element.attributes.get("class"), "container", "members-profile"),
   );
-  if (owners.length !== one) {
+  if (owners.length !== 1) {
     return null;
   }
   const owner = owners[0];
@@ -219,24 +216,37 @@ function parseVacancies(html: string, snapshot: CongressSnapshot) {
     const match = /^Vacancies of the (\d+)(st|nd|rd|th) Congress$/.exec(text);
     if (
       !match ||
-      Number(match[one]) < one ||
-      match[two] !== ordinalSuffix(Number(match[one]))
+      Number(match[1]) < CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber ||
+      match[2] !== ordinalSuffix(Number(match[1]))
     ) {
       return null;
     }
-    headings.push({ ...element, congress: Number(match[one]) });
+    headings.push({ ...element, congress: Number(match[1]) });
   }
 
   const currentHeadings = headings.filter(
     ({ congress }) => congress === snapshot.currentCongress,
   );
-  if (currentHeadings.length !== one) {
+  if (currentHeadings.length !== 1) {
     return null;
   }
   const currentHeading = currentHeadings[0];
   const nextHeading = headings.find(
     ({ start }) => start > currentHeading.start,
   );
+  const rows = elements.filter(
+    (element) =>
+      element.name === "li" &&
+      element.start >= currentHeading.end &&
+      element.start < (nextHeading?.start ?? owner.closeStart) &&
+      containedBy(element, owner),
+  );
+  if (
+    rows.length >
+    FEDERAL_PROVIDER_RESPONSE_POLICY.clerk.maxNationalVacancyRows
+  ) {
+    return null;
+  }
   const links = elements.filter(
     (element) =>
       element.name === "a" &&
@@ -295,42 +305,42 @@ function relevantElements(html: string): RelevantElement[] | null {
       open.push(token);
     }
   }
-  return open.length === zero
+  return open.length === 0
     ? completed.sort((left, right) => left.start - right.start)
     : null;
 }
 
 function relevantTokens(html: string): TagToken[] | null {
   const tokens: TagToken[] = [];
-  let cursor: number = zero;
+  let cursor: number = 0;
   while (cursor < html.length) {
     const start = html.indexOf("<", cursor);
-    if (start === -one) {
+    if (start === -1) {
       break;
     }
     if (html.startsWith("<!--", start)) {
       const commentEnd = html.indexOf("-->", start + 4);
-      if (commentEnd === -one) {
+      if (commentEnd === -1) {
         return null;
       }
-      cursor = commentEnd + three;
+      cursor = commentEnd + 3;
       continue;
     }
 
-    let nameStart = start + one;
+    let nameStart = start + 1;
     const closing = html[nameStart] === "/";
     if (closing) {
       nameStart++;
     }
     if (!/[A-Za-z]/.test(html[nameStart] ?? "")) {
       if (html[nameStart] === "!" || html[nameStart] === "?") {
-        const declarationEnd = findTagEnd(html, start + one);
+        const declarationEnd = findTagEnd(html, start + 1);
         if (declarationEnd === null) {
           return null;
         }
-        cursor = declarationEnd + one;
+        cursor = declarationEnd + 1;
       } else {
-        cursor = start + one;
+        cursor = start + 1;
       }
       continue;
     }
@@ -350,7 +360,7 @@ function relevantTokens(html: string): TagToken[] | null {
     const rawName = html.slice(nameStart, nameEnd).toLowerCase();
     if (rawName === "title" && !closing) {
       const closingTitle = /<\/title[\t\n\f\r ]*>/gi;
-      closingTitle.lastIndex = end + one;
+      closingTitle.lastIndex = end + 1;
       const match = closingTitle.exec(html);
       if (match === null) {
         return null;
@@ -371,7 +381,7 @@ function relevantTokens(html: string): TagToken[] | null {
         tokens.push({
           name: relevantName,
           start,
-          end: end + one,
+          end: end + 1,
           closing: true,
           attributes: new Map(),
         });
@@ -386,13 +396,13 @@ function relevantTokens(html: string): TagToken[] | null {
         tokens.push({
           name: relevantName,
           start,
-          end: end + one,
+          end: end + 1,
           closing: false,
           attributes,
         });
       }
     }
-    cursor = end + one;
+    cursor = end + 1;
   }
   return tokens;
 }
@@ -416,7 +426,7 @@ function findTagEnd(html: string, start: number): number | null {
 
 function parseAttributes(source: string): Map<string, string | null> | null {
   const attributes = new Map<string, string | null>();
-  let cursor = zero;
+  let cursor = 0;
   while (cursor < source.length) {
     while (isHtmlWhitespace(source[cursor])) {
       cursor++;
@@ -458,11 +468,11 @@ function parseAttributes(source: string): Map<string, string | null> | null {
         cursor++;
         const valueStart = cursor;
         const valueEnd = source.indexOf(quote, cursor);
-        if (valueEnd === -one) {
+        if (valueEnd === -1) {
           return null;
         }
         value = source.slice(valueStart, valueEnd);
-        cursor = valueEnd + one;
+        cursor = valueEnd + 1;
         if (cursor < source.length && !isHtmlWhitespace(source[cursor])) {
           return null;
         }
@@ -535,7 +545,7 @@ function decodeNumericCharacterReferences(value: string) {
         decimal ?? hexadecimal ?? "",
         decimal === undefined ? 16 : 10,
       );
-      return codePoint === zero ||
+      return codePoint === 0 ||
         codePoint > 0x10ffff ||
         (codePoint >= 0xd800 && codePoint <= 0xdfff)
         ? "\ufffd"
@@ -577,8 +587,11 @@ function vacancyLink(
   ) {
     return { status: "invalid" };
   }
-  const stateCode = match[one];
-  const district = match[two] === "00" ? zero : Number(match[two]);
+  const stateCode = match[1];
+  const district =
+    match[2] === "00"
+      ? FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge
+      : Number(match[2]);
   const jurisdiction = assessClerkJurisdiction(stateCode);
   const publicUrl =
     jurisdiction.status === "voting_state"
@@ -616,11 +629,11 @@ function ordinalSuffix(value: number) {
   if (lastTwo >= 11 && lastTwo <= 13) {
     return "th";
   }
-  return String(value % 10) === String(one)
+  return String(value % 10) === String(1)
     ? "st"
-    : String(value % 10) === String(two)
+    : String(value % 10) === String(2)
       ? "nd"
-      : String(value % 10) === String(three)
+      : String(value % 10) === String(3)
         ? "rd"
         : "th";
 }

@@ -17,6 +17,7 @@ import {
   FEDERAL_PROVIDER_RESPONSE_POLICY,
   FEDERAL_PROVIDER_URL_POLICY,
   isBioguideId,
+  normalizeOfficialName,
 } from "./federal-policy";
 
 type JsonOutcome =
@@ -43,9 +44,6 @@ type NormalizedMember = {
 const senateChamber =
   FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.chambers[1] as
     MemberSummary["chamber"];
-const zero = CONGRESS_CALENDAR_POLICY.turnoverUtc.monthIndex;
-const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
-const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
 
 export const fetchCongressRoster: FetchCongressRoster = async (
   jurisdiction,
@@ -61,8 +59,9 @@ export const fetchCongressRoster: FetchCongressRoster = async (
     expectedSnapshot.endYear !== snapshot.endYear ||
     !FEDERAL_OFFICIAL_FIELD_POLICY.stateCodePattern.test(jurisdiction.stateCode) ||
     !Number.isInteger(jurisdiction.district) ||
-    jurisdiction.district < zero ||
-    jurisdiction.district > 99
+    jurisdiction.district < FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge ||
+    jurisdiction.district >
+      FEDERAL_OFFICIAL_FIELD_POLICY.district.maximumCanonical
   ) {
     return unavailable("malformed");
   }
@@ -106,16 +105,14 @@ export const fetchCongressRoster: FetchCongressRoster = async (
   const houseSummaries = stateMembers.filter(
     ({ chamber }) => chamber === "House of Representatives",
   ).filter(({ district }) => district === jurisdiction.district);
-  if (
-    houseSummaries.length > one
-  ) {
+  if (houseSummaries.length > 1) {
     return unavailable("malformed");
   }
 
   const senateSummaries = stateMembers.filter(
     ({ chamber }) => chamber === senateChamber,
   );
-  if (senateSummaries.length > two) {
+  if (senateSummaries.length > 2) {
     return unavailable("malformed");
   }
 
@@ -307,7 +304,7 @@ async function readJsonBody(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let byteCount = zero;
+  let byteCount = 0;
   let json = "";
   try {
     while (true) {
@@ -422,7 +419,8 @@ function parseMemberList(
     !isRecord(body) ||
     !validRequest(body.request) ||
     !Array.isArray(body.members) ||
-    body.members.length > 250 ||
+    body.members.length >
+      FEDERAL_PROVIDER_RESPONSE_POLICY.congress.stateMemberListLimit ||
     !isRecord(body.pagination) ||
     !Number.isInteger(body.pagination.count) ||
     body.pagination.count !== body.members.length ||
@@ -443,16 +441,17 @@ function parseMemberList(
       return null;
     }
     bioguideIds.add(bioguideId);
+    const name =
+      typeof value.name === "string" ? normalizeOfficialName(value.name) : null;
 
     if (
       value.currentMember !== true ||
-      typeof value.name !== "string" ||
-      value.name.trim() === "" ||
+      name === null ||
       typeof value.state !== "string" ||
       value.state.trim() === "" ||
       !isRecord(value.terms) ||
       !Array.isArray(value.terms.item) ||
-      value.terms.item.length === zero ||
+      value.terms.item.length === 0 ||
       value.terms.item.length > 64 ||
       !value.terms.item.every(isSummaryTerm) ||
       !canonicalItemUrl(value.url, `/v3/member/${bioguideId}`)
@@ -471,8 +470,10 @@ function parseMemberList(
     if (
       (district !== null &&
         (!Number.isInteger(district) ||
-          (district as number) < zero ||
-          (district as number) > 99))
+          (district as number) <
+            FEDERAL_OFFICIAL_FIELD_POLICY.district.atLarge ||
+          (district as number) >
+            FEDERAL_OFFICIAL_FIELD_POLICY.district.maximumCanonical))
     ) {
       return null;
     }
@@ -481,7 +482,7 @@ function parseMemberList(
     const currentTerms = value.terms.item.filter((term) =>
       isCurrentSummaryTerm(term, expectedChamber, currentCongress),
     );
-    if (currentTerms.length !== one) {
+    if (currentTerms.length !== 1) {
       return null;
     }
     const chamber = expectedChamber;
@@ -497,7 +498,7 @@ function parseMemberList(
       bioguideId,
       chamber,
       district: district as number | null,
-      name: value.name.trim(),
+      name,
       state: value.state.trim(),
       updateDate,
       url: value.url as string,
@@ -526,6 +527,10 @@ function parseMemberDetail(
   const expectedChamber =
     chamber === "house" ? "House of Representatives" : senateChamber;
   const expectedMemberType = chamber === "house" ? "Representative" : "Senator";
+  const name =
+    typeof member.directOrderName === "string"
+      ? normalizeOfficialName(member.directOrderName)
+      : null;
   const district =
     member.district === undefined || member.district === null
       ? null
@@ -533,9 +538,7 @@ function parseMemberDetail(
   if (
     member.bioguideId !== summary.bioguideId ||
     member.currentMember !== true ||
-    typeof member.directOrderName !== "string" ||
-    member.directOrderName.trim() === "" ||
-    member.directOrderName.length > 200 ||
+    name === null ||
     typeof member.state !== "string" ||
     member.state.trim() !== summary.state ||
     (chamber === "house" && district !== jurisdiction.district) ||
@@ -564,10 +567,10 @@ function parseMemberDetail(
         ? term.district === jurisdiction.district
         : term.district === undefined || term.district === null),
   );
-  if (currentTerms.length !== one || !isRecord(currentTerms[zero])) {
+  if (currentTerms.length !== 1 || !isRecord(currentTerms[0])) {
     return null;
   }
-  const term = currentTerms[zero];
+  const term = currentTerms[0];
   const endYear =
     term.endYear === undefined || term.endYear === null ? null : term.endYear;
   const currentSnapshot = createCongressSnapshot(retrievedAt);
@@ -595,7 +598,7 @@ function parseMemberDetail(
   }
 
   return {
-    name: member.directOrderName.trim(),
+    name,
     startYear: term.startYear as number,
     endYear: endYear as number | null,
     updateDate,
@@ -645,7 +648,7 @@ function validTermYears(startYear: unknown, endYear: unknown) {
 }
 
 function isSafePositiveInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) > zero;
+  return Number.isSafeInteger(value) && (value as number) > Number();
 }
 
 function validRequest(value: unknown) {
@@ -681,9 +684,9 @@ function canonicalItemUrl(value: unknown, expectedPath: string) {
       url.username === "" &&
       url.password === "" &&
       url.hash === "" &&
-      (keys.length === zero ||
-        (keys.length === one &&
-          keys[zero] === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryName &&
+      (keys.length === 0 ||
+        (keys.length === 1 &&
+          keys[0] === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryName &&
           url.searchParams.get(
             FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryName,
           ) === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryValue))
