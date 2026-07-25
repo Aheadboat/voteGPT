@@ -1,0 +1,169 @@
+import { isIP } from "node:net";
+import { Client, Pool } from "pg";
+
+export const E2E_DATABASE_MARKER_TABLE = "e2e_database_guard";
+export const E2E_DATABASE_MARKER_QUERY =
+  `SELECT "marker" FROM "${E2E_DATABASE_MARKER_TABLE}" WHERE "id" = 1`;
+
+export async function requireE2eDatabase(
+  environment = process.env,
+  readTargetMarker = readE2eDatabaseMarker,
+) {
+  const ambientDatabaseUrl = environment.DATABASE_URL?.trim();
+  const databaseUrl = environment.E2E_DATABASE_URL?.trim();
+  const marker = environment.E2E_DATABASE_MARKER;
+
+  if (environment.E2E_DESTRUCTIVE_OPT_IN !== "1") {
+    throw new Error("E2E database requires explicit destructive opt-in.");
+  }
+  if (!databaseUrl) {
+    throw new Error("E2E database URL is required.");
+  }
+  if (!marker || marker.trim().length < 32) {
+    throw new Error("E2E database marker must be an unpredictable value.");
+  }
+
+  const normalizedTarget = normalizeDatabaseUrl(databaseUrl);
+  if (
+    ambientDatabaseUrl &&
+    normalizeDatabaseUrl(ambientDatabaseUrl) === normalizedTarget
+  ) {
+    throw new Error("E2E database must differ from the ambient database.");
+  }
+
+  let targetMarker;
+  try {
+    targetMarker = await readTargetMarker(databaseUrl);
+  } catch {
+    throw new Error("E2E database marker could not be read from the target.");
+  }
+  if (targetMarker !== marker) {
+    throw new Error("E2E database marker does not match the target.");
+  }
+
+  return databaseUrl;
+}
+
+export async function readE2eDatabaseMarker(databaseUrl) {
+  if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
+    const pool = new Pool({ connectionString: databaseUrl, max: 1 });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN READ ONLY");
+      const result = await client.query(E2E_DATABASE_MARKER_QUERY);
+      await client.query("ROLLBACK");
+      return singleMarker(result.rows);
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  }
+
+  throw new Error("E2E database must use PostgreSQL only.");
+}
+
+function normalizeDatabaseUrl(databaseUrl) {
+  if (/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
+    let parsed;
+    let connection;
+    try {
+      parsed = new URL(databaseUrl);
+      decodeURIComponent(parsed.hostname);
+      decodeURI(parsed.pathname);
+      connection = new Client({ connectionString: databaseUrl }).connectionParameters;
+    } catch {
+      throw new Error("E2E PostgreSQL database URL is invalid.");
+    }
+    if (
+      parsed.searchParams.has("host") ||
+      parsed.searchParams.has("port")
+    ) {
+      throw new Error(
+        "E2E PostgreSQL database URL must not use routing parameters.",
+      );
+    }
+
+    const hostname = canonicalizeHost(connection.host);
+    const database = connection.database;
+    const port = Number.parseInt(parsed.port, 10);
+    if (!parsed.port) {
+      throw new Error(
+        "E2E PostgreSQL database URL must specify an explicit port.",
+      );
+    }
+    if (!hostname || !database || !Number.isInteger(port)) {
+      throw new Error(
+        "E2E PostgreSQL database URL must specify a host and database.",
+      );
+    }
+
+    return `postgresql://${hostname}:${port}/${database}`;
+  }
+  throw new Error("E2E database must use PostgreSQL only.");
+}
+
+function canonicalizeHost(hostname) {
+  const host = hostname?.toLowerCase();
+  if (!host) {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
+
+  if (host.startsWith("[") || host.endsWith("]")) {
+    const ipv6 = host.slice(1, -1);
+    if (!host.startsWith("[") || !host.endsWith("]") || isIP(ipv6) !== 6) {
+      throw new Error("E2E PostgreSQL database URL is invalid.");
+    }
+    const canonicalIpv6 = canonicalizeIpv6(ipv6);
+    return isIP(canonicalIpv6) === 4 || canonicalIpv6 === "loopback"
+      ? canonicalIpv6
+      : `[${canonicalIpv6}]`;
+  }
+
+  if (isIP(host) === 6) {
+    return canonicalizeIpv6(host);
+  }
+
+  const withoutRootDot = host.endsWith(".") ? host.slice(0, -1) : host;
+  if (!withoutRootDot || withoutRootDot.endsWith(".")) {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
+  if (/^[0-9.]+$/.test(withoutRootDot)) {
+    return canonicalizeIpv4(withoutRootDot);
+  }
+
+  return withoutRootDot === "localhost" ? "loopback" : withoutRootDot;
+}
+
+function canonicalizeIpv6(ipv6) {
+  if (ipv6 === "::1") {
+    return "loopback";
+  }
+  const mappedIpv4 = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(ipv6);
+  if (mappedIpv4 === null) {
+    return ipv6;
+  }
+  const [firstWord, secondWord] = mappedIpv4.slice(1).map((word) =>
+    Number.parseInt(word, 16),
+  );
+  return canonicalizeIpv4(
+    `${firstWord >> 8}.${firstWord & 0xff}.${secondWord >> 8}.${secondWord & 0xff}`,
+  );
+}
+
+function canonicalizeIpv4(ipv4) {
+  try {
+    const canonicalIpv4 = new URL(`http://${ipv4}`).hostname;
+    if (!ipv4.includes(".") || isIP(canonicalIpv4) !== 4) {
+      throw new Error();
+    }
+    return canonicalIpv4.startsWith("127.") ? "loopback" : canonicalIpv4;
+  } catch {
+    throw new Error("E2E PostgreSQL database URL is invalid.");
+  }
+}
+
+function singleMarker(rows) {
+  return rows.length === 1 && typeof rows[0]?.marker === "string"
+    ? rows[0].marker
+    : undefined;
+}

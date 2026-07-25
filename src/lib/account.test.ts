@@ -8,6 +8,8 @@ import { describe, expect, it } from "vitest";
 import {
   account,
   authSchema,
+  savedResidence,
+  savedResidenceDivision,
   session,
   user,
   verification,
@@ -106,6 +108,34 @@ describe("account lifecycle", () => {
         providerId: "google",
         userId: currentUser.id,
       });
+      const residenceNow = new Date("2026-07-16T20:00:00.000Z");
+      await db.insert(savedResidence).values({
+        ciphertext: "fixture-ciphertext",
+        consentVersion: "saved-residence-v1",
+        consentedAt: residenceNow,
+        coverageNotes: [],
+        createdAt: residenceNow,
+        envelopeVersion: "v1",
+        iv: "fixture-iv",
+        keyVersion: "fixture-key",
+        resolutionStatus: "matched",
+        sourceCheckedAt: residenceNow,
+        sourceName: "Fixture civic source",
+        sourceUrl: "https://example.com/civic-source",
+        tag: "fixture-tag",
+        updatedAt: residenceNow,
+        userId: currentUser.id,
+      });
+      await db.insert(savedResidenceDivision).values({
+        displayOrder: 0,
+        divisionId: "ocd-division/country:us/state:ex",
+        idScheme: "ocd",
+        name: "Example State",
+        type: "state",
+        userId: currentUser.id,
+      });
+      expect(await db.select().from(savedResidence)).toHaveLength(1);
+      expect(await db.select().from(savedResidenceDivision)).toHaveLength(1);
       await requestLink("Voter@Example.com");
       await requestLink("other@example.com");
       await db.insert(verification).values({
@@ -129,6 +159,8 @@ describe("account lifecycle", () => {
         ),
       ).rejects.toMatchObject({ body: { code: "SESSION_EXPIRED" } });
       expect(await db.select().from(user)).toHaveLength(1);
+      expect(await db.select().from(savedResidence)).toHaveLength(1);
+      expect(await db.select().from(savedResidenceDivision)).toHaveLength(1);
 
       await db.update(session).set({ createdAt: new Date() });
 
@@ -144,6 +176,8 @@ describe("account lifecycle", () => {
       expect(await db.select().from(user)).toHaveLength(0);
       expect(await db.select().from(account)).toHaveLength(0);
       expect(await db.select().from(session)).toHaveLength(0);
+      expect(await db.select().from(savedResidence)).toHaveLength(0);
+      expect(await db.select().from(savedResidenceDivision)).toHaveLength(0);
       const remainingVerifications = await db.select().from(verification);
       expect(remainingVerifications.map(({ value }) => value).sort()).toEqual([
         "not-json",

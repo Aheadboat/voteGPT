@@ -2,6 +2,20 @@ import { defineConfig, devices } from "@playwright/test"
 
 delete process.env.NO_COLOR
 
+const databaseMarker = process.env.E2E_DATABASE_MARKER ?? ""
+const databaseUrl = process.env.E2E_DATABASE_URL?.trim() ?? ""
+const destructiveOptIn = process.env.E2E_DESTRUCTIVE_OPT_IN
+const residenceEncryptionKeys = JSON.stringify([
+  {
+    key: Buffer.alloc(32, 17).toString("base64url"),
+    version: "e2e-legacy",
+  },
+  {
+    key: Buffer.alloc(32, 29).toString("base64url"),
+    version: "e2e-current",
+  },
+])
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -17,16 +31,22 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "node e2e/seed-session.mjs && node ./node_modules/next/dist/bin/next start --hostname 127.0.0.1",
+      "node e2e/seed-session.mjs --start-server",
     env: {
       BETTER_AUTH_SECRET: "e2e-secret-at-least-thirty-two-characters",
       BETTER_AUTH_URL: "http://127.0.0.1:3000",
-      DATABASE_URL: "pglite://.data/e2e",
+      E2E_DATABASE_URL: databaseUrl,
+      E2E_DATABASE_MARKER: databaseMarker,
+      ...(destructiveOptIn === undefined
+        ? {}
+        : { E2E_DESTRUCTIVE_OPT_IN: destructiveOptIn }),
       EMAIL_FROM: "test@example.invalid",
       EMAIL_SERVER: "smtp://127.0.0.1:2525",
       GOOGLE_CIVIC_API_KEY: "",
       GOOGLE_CLIENT_ID: "e2e",
       GOOGLE_CLIENT_SECRET: "e2e",
+      RESIDENCE_ENCRYPTION_ACTIVE_KEY: "e2e-legacy",
+      RESIDENCE_ENCRYPTION_KEYS: residenceEncryptionKeys,
     },
     reuseExistingServer: false,
     timeout: 120_000,

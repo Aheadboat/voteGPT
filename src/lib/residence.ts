@@ -1,6 +1,15 @@
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
 import { lookupCensus } from "./census-geocoder";
 import { lookupGoogleAddress } from "./google-civic";
+import {
+  MAX_LATITUDE_ABSOLUTE_DEGREES,
+  MAX_LONGITUDE_ABSOLUTE_DEGREES,
+  MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS,
+  RESIDENCE_RESOLUTION_TOKEN_VERSION,
+  canonicalizeResidenceCoordinate,
+  isResidenceAddressGrammar,
+  isV2ResolutionTokenGrammar,
+} from "./residence-policy";
 
 export type ResidenceInput =
   | { kind: "address"; address: string }
@@ -59,6 +68,7 @@ export type ProviderOutcome =
 export type ParseResidenceInput = (value: unknown) => ResidenceInput | null;
 
 export type CreateResolutionToken = (
+  input: ResidenceInput,
   resolution: Extract<ResolutionOutcome, { status: "matched" | "partial" }>,
   userId: string,
   secret: string,
@@ -68,6 +78,7 @@ export type CreateResolutionToken = (
 export type VerifyResolutionToken = (
   token: string,
   userId: string,
+  expectedInput: ResidenceInput,
   secret: string,
   now: Date,
 ) => Extract<ResolutionOutcome, { status: "matched" | "partial" }> | null;
@@ -110,10 +121,25 @@ export type ResolveResidence = (
 
 const addressKeys = new Set(["kind", "address"]);
 const coordinateKeys = new Set(["kind", "latitude", "longitude"]);
-const tokenVersion = "v1";
+const tokenVersion = RESIDENCE_RESOLUTION_TOKEN_VERSION;
 const tokenLifetimeMilliseconds = 10 * 60 * 1_000;
-const tokenPurpose = "voteGPT/residence-resolution/v1";
+const tokenPurpose = `voteGPT/residence-resolution/${tokenVersion}`;
 const providerTimeoutMilliseconds = 5_000;
+const maximumPublicCollectionSize = 64;
+const maximumPublicTextLength = 2_048;
+const maximumDecodePasses = 4;
+const decimalDigitZeroCodePoints = [
+  0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6,
+  0xc66, 0xce6, 0xd66, 0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090,
+  0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50, 0x1bb0,
+  0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50,
+  0xabf0, 0xff10, 0x104a0, 0x10d30, 0x10d40, 0x11066, 0x110f0,
+  0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650, 0x116c0,
+  0x116d0, 0x116da, 0x11730, 0x118e0, 0x11950, 0x11bf0, 0x11c50,
+  0x11d50, 0x11da0, 0x11de0, 0x11f50, 0x16130, 0x16a60, 0x16ac0,
+  0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec,
+  0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0,
+] as const;
 const sourceUrlsByName: ReadonlyMap<string, string> = new Map([
   [
     "Google Civic Information API",
@@ -143,40 +169,53 @@ export const parseResidenceInput: ParseResidenceInput = (value) => {
     }
 
     const address = value.address.trim();
-    return address.length >= 1 && address.length <= 300
+    return isResidenceAddressGrammar(address)
       ? { kind: "address", address }
       : null;
   }
 
   if (value.kind === "coordinates" && hasExactKeys(value, coordinateKeys)) {
     const { latitude, longitude } = value;
-    if (
-      typeof latitude !== "number" ||
-      typeof longitude !== "number" ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
+    const canonicalLatitude = canonicalizeResidenceCoordinate(
+      latitude,
+      MAX_LATITUDE_ABSOLUTE_DEGREES,
+    );
+    const canonicalLongitude = canonicalizeResidenceCoordinate(
+      longitude,
+      MAX_LONGITUDE_ABSOLUTE_DEGREES,
+    );
+    if (canonicalLatitude === null || canonicalLongitude === null) {
       return null;
     }
 
-    return { kind: "coordinates", latitude, longitude };
+    return {
+      kind: "coordinates",
+      latitude: Number(canonicalLatitude),
+      longitude: Number(canonicalLongitude),
+    };
   }
 
   return null;
 };
 
 export const createResolutionToken: CreateResolutionToken = (
+  input,
   resolution,
   userId,
   secret,
   now,
 ) => {
-  const normalizedResolution = copyResolvedResidence(resolution);
-  if (!isResolvedResidence(normalizedResolution)) {
+  const canonicalInput = parseResidenceInput(input);
+  if (canonicalInput === null) {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
+  let normalizedResolution: ResolvedResidence;
+  try {
+    normalizedResolution = copyResolvedResidence(resolution);
+  } catch {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
+  if (!isPublicResidenceResolution(normalizedResolution, canonicalInput)) {
     throw new Error("Cannot sign an invalid residence resolution.");
   }
 
@@ -185,6 +224,7 @@ export const createResolutionToken: CreateResolutionToken = (
   ).toISOString();
   const payload = {
     version: tokenVersion,
+    input: canonicalInput,
     userId,
     issuedAt: now.toISOString(),
     expiresAt,
@@ -193,6 +233,9 @@ export const createResolutionToken: CreateResolutionToken = (
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString(
     "base64url",
   );
+  if (encodedPayload.length > MAX_RESOLUTION_TOKEN_PAYLOAD_CHARACTERS) {
+    throw new Error("Cannot sign an invalid residence resolution.");
+  }
   const signingInput = `${tokenVersion}.${encodedPayload}`;
   const signature = sign(signingInput, secret);
 
@@ -205,25 +248,25 @@ export const createResolutionToken: CreateResolutionToken = (
 export const verifyResolutionToken: VerifyResolutionToken = (
   token,
   userId,
+  expectedInput,
   secret,
   now,
 ) => {
+  if (!isV2ResolutionTokenGrammar(token)) {
+    return null;
+  }
+
   try {
-    const [version, encodedPayload, receivedSignature, extra] = token.split(".");
-    if (
-      version !== tokenVersion ||
-      !encodedPayload ||
-      !receivedSignature ||
-      extra !== undefined
-    ) {
+    const [version, encodedPayload, receivedSignature] = token.split(".");
+
+    const actualSignature = Buffer.from(receivedSignature, "base64url");
+    if (actualSignature.toString("base64url") !== receivedSignature) {
       return null;
     }
-
     const expectedSignature = Buffer.from(
       sign(`${version}.${encodedPayload}`, secret),
       "base64url",
     );
-    const actualSignature = Buffer.from(receivedSignature, "base64url");
     if (
       actualSignature.length !== expectedSignature.length ||
       !timingSafeEqual(actualSignature, expectedSignature)
@@ -234,7 +277,7 @@ export const verifyResolutionToken: VerifyResolutionToken = (
     const payload = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as unknown;
-    if (!isResolutionTokenPayload(payload, userId, now)) {
+    if (!isResolutionTokenPayload(payload, userId, expectedInput, now)) {
       return null;
     }
 
@@ -390,9 +433,11 @@ function copyResolvedResidence(resolution: ResolvedResidence): ResolvedResidence
 function isResolutionTokenPayload(
   value: unknown,
   userId: string,
+  expectedInput: ResidenceInput,
   now: Date,
 ): value is {
-  version: "v1";
+  version: typeof RESIDENCE_RESOLUTION_TOKEN_VERSION;
+  input: ResidenceInput;
   userId: string;
   issuedAt: string;
   expiresAt: string;
@@ -402,10 +447,25 @@ function isResolutionTokenPayload(
     !isRecord(value) ||
     !hasExactKeys(
       value,
-      new Set(["version", "userId", "issuedAt", "expiresAt", "resolution"]),
+      new Set([
+        "version",
+        "input",
+        "userId",
+        "issuedAt",
+        "expiresAt",
+        "resolution",
+      ]),
     ) ||
-    value.version !== tokenVersion ||
+    value.version !== tokenVersion
+  ) {
+    return false;
+  }
+
+  const input = parseResidenceInput(value.input);
+  if (
+    input === null ||
     value.userId !== userId ||
+    !sameResidenceInput(input, expectedInput) ||
     !isIsoDate(value.issuedAt) ||
     !isIsoDate(value.expiresAt) ||
     Date.parse(value.issuedAt) > Date.parse(value.expiresAt) ||
@@ -413,7 +473,7 @@ function isResolutionTokenPayload(
     Date.parse(value.expiresAt) - Date.parse(value.issuedAt) !==
       tokenLifetimeMilliseconds ||
     Date.parse(value.expiresAt) <= now.getTime() ||
-    !isResolvedResidence(value.resolution)
+    !isPublicResidenceResolution(value.resolution, input)
   ) {
     return false;
   }
@@ -421,7 +481,20 @@ function isResolutionTokenPayload(
   return true;
 }
 
-function isResolvedResidence(value: unknown): value is ResolvedResidence {
+function sameResidenceInput(value: unknown, expected: ResidenceInput) {
+  const actualInput = parseResidenceInput(value);
+  const expectedInput = parseResidenceInput(expected);
+  return (
+    actualInput !== null &&
+    expectedInput !== null &&
+    JSON.stringify(actualInput) === JSON.stringify(expectedInput)
+  );
+}
+
+export function isPublicResidenceResolution(
+  value: unknown,
+  input?: ResidenceInput,
+): value is Extract<ResolutionOutcome, { status: "matched" | "partial" }> {
   if (
     !isRecord(value) ||
     !hasExactKeys(
@@ -430,15 +503,20 @@ function isResolvedResidence(value: unknown): value is ResolvedResidence {
     ) ||
     (value.status !== "matched" && value.status !== "partial") ||
     !Array.isArray(value.divisions) ||
+    value.divisions.length > maximumPublicCollectionSize ||
     !value.divisions.every(isDivision) ||
     !isSource(value.source) ||
     !Array.isArray(value.coverageNotes) ||
-    !value.coverageNotes.every((note) => typeof note === "string")
+    value.coverageNotes.length > maximumPublicCollectionSize ||
+    !value.coverageNotes.every(isBoundedPublicText)
   ) {
     return false;
   }
 
-  return true;
+  return (
+    input === undefined ||
+    !reflectsResidenceInput(value as ResolvedResidence, input)
+  );
 }
 
 function isDivision(value: unknown): value is ResolvedResidence["divisions"][number] {
@@ -447,9 +525,9 @@ function isDivision(value: unknown): value is ResolvedResidence["divisions"][num
     hasExactKeys(value, new Set(["type", "name", "id", "idScheme"])) &&
     typeof value.type === "string" &&
     divisionTypes.has(value.type as DivisionType) &&
-    typeof value.name === "string" &&
-    typeof value.id === "string" &&
-    typeof value.idScheme === "string"
+    isBoundedPublicText(value.name) &&
+    isBoundedPublicText(value.id) &&
+    isBoundedPublicText(value.idScheme)
   );
 }
 
@@ -467,18 +545,294 @@ function isSource(value: unknown): value is ResolvedResidence["source"] {
         "vintage",
       ]),
     ) ||
-    typeof value.name !== "string" ||
-    typeof value.url !== "string" ||
+    !isBoundedPublicText(value.name) ||
+    !isBoundedPublicText(value.url) ||
     sourceUrlsByName.get(value.name) !== value.url ||
     !isIsoDate(value.checkedAt) ||
     !(value.effectiveAt === null || isIsoDate(value.effectiveAt)) ||
-    !(value.benchmark === undefined || typeof value.benchmark === "string") ||
-    !(value.vintage === undefined || typeof value.vintage === "string")
+    !(
+      value.benchmark === undefined || isBoundedPublicText(value.benchmark)
+    ) ||
+    !(value.vintage === undefined || isBoundedPublicText(value.vintage))
   ) {
     return false;
   }
 
   return true;
+}
+
+function reflectsResidenceInput(
+  resolution: ResolvedResidence,
+  input: ResidenceInput,
+) {
+  const fields = publicResolutionFields(resolution);
+  return input.kind === "address"
+    ? reflectsAddress(fields, input.address)
+    : reflectsCoordinates(fields, input.latitude, input.longitude);
+}
+
+type PublicResolutionField = {
+  aggregateOnly?: boolean;
+  kind: "identifier" | "prose" | "timestamp";
+  text: string;
+};
+
+function publicResolutionFields(
+  resolution: ResolvedResidence,
+): PublicResolutionField[] {
+  return [
+    ...resolution.divisions.flatMap(({ id, idScheme, name, type }) => [
+      { kind: "prose" as const, text: name },
+      { kind: "prose" as const, text: type.replaceAll("_", " ") },
+      { kind: "identifier" as const, text: id },
+      { kind: "identifier" as const, text: idScheme },
+    ]),
+    { aggregateOnly: true, kind: "prose", text: resolution.source.name },
+    { aggregateOnly: true, kind: "identifier", text: resolution.source.url },
+    { kind: "timestamp", text: resolution.source.checkedAt },
+    ...(resolution.source.effectiveAt === null
+      ? []
+      : [{ kind: "timestamp" as const, text: resolution.source.effectiveAt }]),
+    ...(resolution.source.benchmark === undefined
+      ? []
+      : [{ kind: "identifier" as const, text: resolution.source.benchmark }]),
+    ...(resolution.source.vintage === undefined
+      ? []
+      : [{ kind: "identifier" as const, text: resolution.source.vintage }]),
+    ...resolution.coverageNotes.map((text) => ({ kind: "prose" as const, text })),
+  ];
+}
+
+function reflectsAddress(fields: PublicResolutionField[], address: string) {
+  const normalizedAddress = normalizeWordTokens(address).join("");
+  if (normalizedAddress.length === 0) {
+    return true;
+  }
+
+  const layers = fields.map((field) => ({
+    aggregateOnly: field.aggregateOnly ?? false,
+    layers: decodePublicText(field.text),
+  }));
+  return (
+    layers.some((fieldLayers) => fieldLayers === null) ||
+    containsAddressAcrossPublicFields(layers, normalizedAddress)
+  );
+}
+
+function containsAddressAcrossPublicFields(
+  layersByField: Array<{ aggregateOnly: boolean; layers: string[] | null }>,
+  target: string,
+) {
+  const carriedMatches = new Map<string, { offset: number; startedAt: number }>();
+
+  for (const [fieldIndex, field] of layersByField.entries()) {
+    const { aggregateOnly, layers } = field;
+    if (layers === null) {
+      return true;
+    }
+
+    for (const layer of layers) {
+      for (const token of normalizeWordTokens(layer)) {
+        const followingMatches = new Map<string, { offset: number; startedAt: number }>();
+        for (const match of [
+          ...carriedMatches.values(),
+          { offset: 0, startedAt: fieldIndex },
+        ]) {
+          if (!target.startsWith(token, match.offset)) {
+            continue;
+          }
+          const nextOffset = match.offset + token.length;
+          if (nextOffset === target.length) {
+            if (match.startedAt !== fieldIndex || !aggregateOnly) {
+              return true;
+            }
+            continue;
+          }
+          followingMatches.set(`${nextOffset}:${match.startedAt}`, {
+            offset: nextOffset,
+            startedAt: match.startedAt,
+          });
+        }
+        for (const match of followingMatches.values()) {
+          carriedMatches.set(`${match.offset}:${match.startedAt}`, match);
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function reflectsCoordinates(
+  fields: PublicResolutionField[],
+  latitude: number,
+  longitude: number,
+) {
+  for (const field of fields) {
+    const layers = decodePublicText(field.text);
+    if (layers === null) {
+      return true;
+    }
+    const fieldKind = field.kind;
+    if (fieldKind === "timestamp") {
+      continue;
+    }
+    if (
+      layers.some((layer) =>
+        containsCoordinate(layer, latitude, longitude),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function decodePublicText(value: string) {
+  const layers = [value];
+  let decoded = value;
+  for (let pass = 0; pass < maximumDecodePasses; pass += 1) {
+    const next = decodePublicTextLayer(decoded);
+    if (next === null) {
+      return null;
+    }
+    if (next === decoded) {
+      return layers;
+    }
+    decoded = next;
+    layers.push(decoded);
+  }
+
+  return decodePublicTextLayer(decoded) === null || /%[\da-f]{2}/iu.test(decoded)
+    ? null
+    : layers;
+}
+
+function decodePublicTextLayer(value: string) {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "+") {
+      decoded += " ";
+      continue;
+    }
+    if (character !== "%") {
+      decoded += character;
+      continue;
+    }
+
+    if (!isPercentEscape(value, index)) {
+      if (isLiteralPercentage(value, index)) {
+        decoded += character;
+        continue;
+      }
+      return null;
+    }
+
+    let end = index;
+    while (isPercentEscape(value, end)) {
+      end += 3;
+    }
+    try {
+      decoded += decodeURIComponent(value.slice(index, end));
+    } catch {
+      return null;
+    }
+    index = end - 1;
+  }
+
+  return decoded;
+}
+
+function isPercentEscape(value: string, index: number) {
+  return value[index] === "%" && /^[\da-f]{2}$/iu.test(value.slice(index + 1, index + 3));
+}
+
+function isLiteralPercentage(value: string, index: number) {
+  const previous = value[index - 1];
+  const next = value[index + 1];
+  return (
+    previous !== undefined &&
+    /\p{N}/u.test(previous) &&
+    (next === undefined || /[\s\p{P}]/u.test(next))
+  );
+}
+
+function normalizeWordTokens(value: string) {
+  const normalized = normalizeUnicodeNumbers(value)
+    .toLowerCase()
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+  return normalized.length === 0 ? [] : normalized.split(/\s+/u);
+}
+
+function normalizeUnicodeNumbers(value: string) {
+  const folded = value.normalize("NFKD").replace(/\p{M}+/gu, "");
+  return Array.from(folded, (character) => {
+    const codePoint = character.codePointAt(0);
+    const zero = decimalDigitZeroCodePoints.find(
+      (candidate) =>
+        codePoint !== undefined &&
+        codePoint >= candidate &&
+        codePoint <= candidate + 9,
+    );
+    return zero === undefined || codePoint === undefined
+      ? character
+      : String(codePoint - zero);
+  }).join("");
+}
+
+function containsCoordinate(
+  value: string,
+  latitude: number,
+  longitude: number,
+) {
+  const normalized = normalizeNumericText(value);
+  const labelled = /\b(?:coordinates?|gps|lat(?:itude)?|l(?:on|ng|ongitude))\b/iu.test(
+    normalized,
+  );
+  const numericText = labelled
+    ? normalized.replace(/(?<=\d)[,/](?=\d)/gu, ".")
+    : normalized;
+  const numericPattern =
+    /(?<![\p{L}\p{N}])[+\-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+\-]?\d+)?(?![\p{L}\p{N}])/giu;
+
+  for (const match of numericText.matchAll(numericPattern)) {
+    const token = match[0];
+    const number = Number(token);
+    if (number !== latitude && number !== longitude) {
+      continue;
+    }
+
+    const wholeField = numericText.trim() === token;
+    if (
+      wholeField ||
+      labelled ||
+      /[+\-.e]/iu.test(token)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function normalizeNumericText(value: string) {
+  return normalizeUnicodeNumbers(value.replaceAll("\uff0f", "."))
+    .toLowerCase()
+    .replace(/\p{Default_Ignorable_Code_Point}+/gu, "")
+    .replaceAll("\u2212", "-")
+    .replaceAll("\u066b", ".");
+}
+
+function isBoundedPublicText(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumPublicTextLength
+  );
 }
 
 function isIsoDate(value: unknown): value is string {

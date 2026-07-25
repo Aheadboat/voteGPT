@@ -116,8 +116,11 @@ describe("public identity shell", () => {
 
     expect(screen.getByRole("button", { name: "Sign out" })).toBeEnabled();
     expect(
+      screen.getByText(/sessions.*linked sign-in methods/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(
-        "Deleting your account permanently removes its sessions and linked sign-in methods.",
+        /(?:permanently (?:removes?|deletes?).*saved home|saved home.*permanently (?:removed|deleted))/i,
       ),
     ).toBeInTheDocument();
 
@@ -167,6 +170,9 @@ describe("public identity shell", () => {
         screen.getByText("Your account was deleted."),
       ).toBeInTheDocument(),
     );
+    expect(
+      screen.getByRole("heading", { name: "Account deleted" }),
+    ).toHaveFocus();
     expect(
       screen.getByRole("link", { name: "Return to public information" }),
     ).toHaveAttribute("href", "/");

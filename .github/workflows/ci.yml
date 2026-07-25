@@ -58,5 +58,33 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run end-to-end tests
-        run: npm run test:e2e
+      - name: Provision and run marked destructive E2E tests
+        shell: bash
+        env:
+          PGPASSWORD: postgres
+        run: |
+          marker="$(openssl rand -hex 32)"
+          echo "::add-mask::$marker"
+          database_scheme="postgresql"
+          database_user="postgres"
+          database_host="127.0.0.1"
+          database_port="5432"
+          database_name="votegpt_e2e"
+          e2e_database_url="${database_scheme}://${database_user}:${PGPASSWORD}@${database_host}:${database_port}/${database_name}"
+          echo "::add-mask::$e2e_database_url"
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'CREATE DATABASE votegpt_e2e'
+          psql -h 127.0.0.1 -U postgres -d votegpt_e2e -v ON_ERROR_STOP=1 -v marker="$marker" <<'SQL'
+          CREATE TABLE e2e_database_guard (id integer PRIMARY KEY, marker text NOT NULL);
+          INSERT INTO e2e_database_guard (id, marker) VALUES (1, :'marker');
+          SQL
+          E2E_DATABASE_MARKER="$marker" E2E_DATABASE_URL="$e2e_database_url" E2E_DESTRUCTIVE_OPT_IN="1" npm run test:e2e
+
+      - name: Destroy disposable databases
+        if: always()
+        env:
+          PGPASSWORD: postgres
+        run: |
+          cleanup_status=0
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_e2e WITH (FORCE);' || cleanup_status=$?
+          psql -h 127.0.0.1 -U postgres -d postgres -c 'DROP DATABASE IF EXISTS votegpt_test WITH (FORCE);' || cleanup_status=$?
+          exit "$cleanup_status"
