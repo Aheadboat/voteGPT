@@ -2,10 +2,8 @@ import { FEDERAL_CENSUS_DATA } from "./federal-policy.generated";
 import {
   assessCensusDistrict,
   assessClerkJurisdiction,
-  CONGRESS_CALENDAR_POLICY,
   createCongressSnapshot,
   FEDERAL_OFFICIAL_FIELD_POLICY,
-  isCensusCongressInEffectiveRange,
   type CongressSnapshot,
 } from "./federal-policy";
 import type { ResolutionResponse } from "./residence";
@@ -183,15 +181,8 @@ export function federalJurisdictionFromDivisions(
   if (congress === null) {
     return { status: "invalid" };
   }
-  if (
-    !Number.isInteger(congress.currentCongress) ||
-    congress.currentCongress <
-      CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber
-  ) {
+  if (!isCanonicalCongressSnapshot(congress)) {
     return { status: "invalid" };
-  }
-  if (!isCensusCongressInEffectiveRange(congress.currentCongress)) {
-    return { status: "policy_expired" };
   }
   if (
     divisions.some(
@@ -246,11 +237,22 @@ export function federalJurisdictionFromDivisions(
   if (clerkJurisdiction.status !== "voting_state") {
     return { status: "invalid" };
   }
+  const validDistrict = assessCensusDistrict(
+    stateCode,
+    district.number,
+    FEDERAL_CENSUS_DATA.effectiveCongress.first,
+  );
+  if (validDistrict.status !== "valid") {
+    return { status: "invalid" };
+  }
   const censusDistrict = assessCensusDistrict(
     stateCode,
     district.number,
     congress.currentCongress,
   );
+  if (censusDistrict.status === "policy_expired") {
+    return { status: "policy_expired" };
+  }
   if (censusDistrict.status !== "valid") {
     return { status: "invalid" };
   }
@@ -263,6 +265,17 @@ export function federalJurisdictionFromDivisions(
       divisionIds: [states[0].id, districts[0].id],
     },
   };
+}
+
+function isCanonicalCongressSnapshot(congress: CongressSnapshot): boolean {
+  const canonical = createCongressSnapshot(new Date(congress.checkedAt));
+  return (
+    canonical !== null &&
+    canonical.checkedAt === congress.checkedAt &&
+    canonical.currentCongress === congress.currentCongress &&
+    canonical.startYear === congress.startYear &&
+    canonical.endYear === congress.endYear
+  );
 }
 
 export function reconcileFederalOfficials(

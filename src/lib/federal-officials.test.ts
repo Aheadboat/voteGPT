@@ -201,7 +201,7 @@ describe("strict federal jurisdiction", () => {
         districtOfColumbia,
         expiredCongressSnapshot,
       ),
-    ).toEqual({ status: "policy_expired" });
+    ).toEqual({ status: "unsupported", code: "DC" });
     expect(federalJurisdictionFromDivisions(districtOfColumbia, null)).toEqual({
       status: "invalid",
     });
@@ -221,6 +221,61 @@ describe("strict federal jurisdiction", () => {
       vi.useRealTimers();
     }
   });
+
+  it.each([
+    ["missing district", [division("state", "06", "census")]],
+    [
+      "unknown scheme",
+      [
+        division("state", "06", "invented"),
+        division("congressional_district", "0612", "invented"),
+      ],
+    ],
+    [
+      "conflicting state",
+      [
+        division("state", "06", "census"),
+        division("congressional_district", "1212", "census"),
+      ],
+    ],
+    [
+      "out-of-policy district",
+      [
+        division("state", "06", "census"),
+        division("congressional_district", "0699", "census"),
+      ],
+    ],
+  ] satisfies ReadonlyArray<readonly [string, readonly FederalDivisionInput[]]>)(
+    "returns invalid for %s even when Census policy expired",
+    (_label, divisions) => {
+      expect(
+        federalJurisdictionFromDivisions(divisions, expiredCongressSnapshot),
+      ).toEqual({ status: "invalid" });
+    },
+  );
+
+  it.each([
+    ["checkedAt", { checkedAt: "not-a-date" }],
+    [
+      "currentCongress",
+      { currentCongress: expiredCongressSnapshot!.currentCongress + 1 },
+    ],
+    ["startYear", { startYear: expiredCongressSnapshot!.startYear + 1 }],
+    ["endYear", { endYear: expiredCongressSnapshot!.endYear + 1 }],
+  ])(
+    "rejects an expired Congress snapshot with corrupt %s",
+    (_field, corrupt) => {
+      expect(
+        federalJurisdictionFromDivisions(
+          [
+            division("state", "06", "census"),
+            division("congressional_district", "0612", "census"),
+          ],
+          { ...expiredCongressSnapshot!, ...corrupt },
+        ),
+      ).toEqual({ status: "invalid" });
+    },
+  );
 
   it("rejects invalid districts for a known nonlaunch jurisdiction", () => {
     const [code, fips] = unsupported[0];
