@@ -1,6 +1,6 @@
 import { asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { databaseSchema, federalOfficialCache } from "@/db/schema";
@@ -21,6 +21,7 @@ import type {
 
 const HOUR = 60 * 60 * 1_000;
 const NOW = new Date("2026-07-16T12:00:00.000Z");
+const FEDERAL_CACHE_LOCK_NAME = "votegpt:federal-official-cache-refresh";
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -877,6 +878,166 @@ describe("PostgreSQL federal official cache", () => {
     }
   }, 15_000);
 
+  it("captures database time after the refresh lock and preserves a waited-for winner", async () => {
+    const lockClient = await pool.connect();
+    const waitingPool = new Pool({ connectionString, max: 1 });
+    const waitingDatabase = drizzle(waitingPool, { schema: databaseSchema });
+    const waitingRepository =
+      createFederalOfficialCacheRepository(waitingDatabase);
+    const [{ pid }] = (
+      await waitingPool.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
+    ).rows;
+    if (pid === undefined) {
+      throw new Error("waiting PostgreSQL backend must expose its pid");
+    }
+    let committed = false;
+    let waitingWrite: Promise<unknown> | undefined;
+
+    try {
+      await lockClient.query("BEGIN");
+      await lockClient.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [FEDERAL_CACHE_LOCK_NAME],
+      );
+      waitingWrite = waitingRepository.replaceRoster(
+        replacement("O000001", ["S000001", "S000002"], NOW),
+      );
+      await waitForAdvisoryLock(pid);
+
+      const [{ databaseTime: winnerAt }] = (
+        await lockClient.query<{ databaseTime: Date }>(
+          'SELECT clock_timestamp() AS "databaseTime"',
+        )
+      ).rows;
+      if (!(winnerAt instanceof Date)) {
+        throw new Error("database clock must return a Date");
+      }
+      const winner = replacement(
+        "H000001",
+        ["S000002", "S000003"],
+        winnerAt,
+      );
+      await insertReplacement(lockClient, winner);
+      await lockClient.query("COMMIT");
+      committed = true;
+
+      await expect(
+        within(
+          waitingWrite,
+          5_000,
+          "waited-for official cache publication",
+        ),
+      ).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+      const rows = await storedRows();
+      const storedRoster = rows.find(
+        ({ cacheKey }) => cacheKey === "roster:v1:GA:13",
+      );
+      expect(storedRoster?.retrievedAt).toEqual(winnerAt);
+      expect(rosterSenateIds(storedRoster)).toEqual(["S000002", "S000003"]);
+    } finally {
+      if (!committed) {
+        await lockClient.query("ROLLBACK").catch(() => undefined);
+      }
+      lockClient.release();
+      if (waitingWrite) {
+        await Promise.allSettled([waitingWrite]);
+      }
+      await waitingPool.end();
+    }
+  }, 15_000);
+
+  it("repairs an invalid target row before publishing a valid generation", async () => {
+    const incoming = replacement(
+      "H000001",
+      ["S000001", "S000002"],
+      NOW,
+    );
+    await db.insert(federalOfficialCache).values({
+      ...incoming.roster,
+      payload: { invalid: "target roster" },
+    });
+
+    await expect(repository.replaceRoster(incoming)).resolves.toEqual({
+      status: "written",
+    });
+    const rows = await storedRows();
+    expect(rows.map(({ cacheKey }) => cacheKey)).toEqual([
+      "profile:v2:H000001",
+      "profile:v2:S000001",
+      "profile:v2:S000002",
+      "roster:v1:GA:13",
+    ]);
+    expect(
+      rosterSenateIds(
+        rows.find(({ cacheKey }) => cacheKey === "roster:v1:GA:13"),
+      ),
+    ).toEqual(["S000001", "S000002"]);
+  });
+
+  it("keeps a profile while any surviving roster references its Bioguide ID", async () => {
+    await seedCrossStateSharedSenator();
+
+    await expect(
+      repository.replaceRoster(
+        replacementForJurisdiction(
+          "GA",
+          13,
+          "H000013",
+          ["S000002", "S000003"],
+          hoursBefore(1),
+        ),
+      ),
+    ).resolves.toEqual({ status: "written" });
+
+    const rows = await storedRows();
+    expect(
+      rows.some(({ cacheKey }) => cacheKey === "profile:v2:S000001"),
+    ).toBe(true);
+    expect(
+      rosterSenateIds(
+        rows.find(({ cacheKey }) => cacheKey === "roster:v1:CA:12"),
+      ),
+    ).toContain("S000001");
+  });
+
+  it("removes a profile only after its final roster reference disappears", async () => {
+    await seedCrossStateSharedSenator();
+    await repository.replaceRoster(
+      replacementForJurisdiction(
+        "GA",
+        13,
+        "H000013",
+        ["S000002", "S000003"],
+        hoursBefore(1),
+      ),
+    );
+    expect(
+      (await storedRows()).some(
+        ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+      ),
+    ).toBe(true);
+
+    await expect(
+      repository.replaceRoster(
+        replacementForJurisdiction(
+          "CA",
+          12,
+          "C000012",
+          ["S000004", "S000005"],
+          NOW,
+        ),
+      ),
+    ).resolves.toEqual({ status: "written" });
+    expect(
+      (await storedRows()).some(
+        ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+      ),
+    ).toBe(false);
+  });
+
   it.each(profileMismatchCases())(
     "rejects a separately valid profile whose %s differs from its serving roster seat",
     async (_label, mutate) => {
@@ -983,12 +1144,28 @@ function replacementForDistrict(
   senateIds: readonly string[],
   retrievedAt: Date,
 ): FederalRosterReplacement {
+  return replacementForJurisdiction(
+    "GA",
+    district,
+    houseId,
+    senateIds,
+    retrievedAt,
+  );
+}
+
+function replacementForJurisdiction(
+  stateCode: "CA" | "GA",
+  district: number,
+  houseId: string,
+  senateIds: readonly string[],
+  retrievedAt: Date,
+): FederalRosterReplacement {
   const jurisdiction: FederalJurisdiction = {
-    stateCode: "GA",
+    stateCode,
     district,
     divisionIds: [
-      "ocd-division/country:us/state:ga",
-      `ocd-division/country:us/state:ga/cd:${district}`,
+      `ocd-division/country:us/state:${stateCode.toLowerCase()}`,
+      `ocd-division/country:us/state:${stateCode.toLowerCase()}/cd:${district}`,
     ],
   };
   const house = servingSeat("house", houseId, district, jurisdiction, retrievedAt);
@@ -1011,7 +1188,7 @@ function replacementForDistrict(
   };
   return {
     roster: cacheRecord(
-      `roster:v1:GA:${String(district).padStart(2, "0")}`,
+      `roster:v1:${stateCode}:${String(district).padStart(2, "0")}`,
       roster,
       retrievedAt,
     ),
@@ -1019,6 +1196,70 @@ function replacementForDistrict(
       cacheRecord(`profile:v2:${seat.person.bioguideId}`, profileFor(seat), retrievedAt),
     ),
   };
+}
+
+async function seedCrossStateSharedSenator() {
+  await repository.replaceRoster(
+    replacementForJurisdiction(
+      "GA",
+      13,
+      "H000013",
+      ["S000001", "S000002"],
+      hoursBefore(3),
+    ),
+  );
+  await repository.replaceRoster(
+    replacementForJurisdiction(
+      "CA",
+      12,
+      "C000012",
+      ["S000001", "S000004"],
+      hoursBefore(2),
+    ),
+  );
+}
+
+async function insertReplacement(
+  client: PoolClient,
+  replacement: FederalRosterReplacement,
+) {
+  for (const record of [replacement.roster, ...replacement.profiles]) {
+    await client.query(
+      `INSERT INTO federal_official_cache
+        (cache_key, payload, retrieved_at, refresh_after, stale_after)
+       VALUES ($1, $2::jsonb, $3, $4, $5)`,
+      [
+        record.cacheKey,
+        JSON.stringify(record.payload),
+        record.retrievedAt,
+        record.refreshAfter,
+        record.staleAfter,
+      ],
+    );
+  }
+}
+
+async function waitForAdvisoryLock(pid: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 2_000) {
+    const [{ waiting }] = (
+      await pool.query<{ waiting: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+           FROM pg_locks
+           WHERE pid = $1
+             AND locktype = 'advisory'
+             AND NOT granted
+         ) AS waiting`,
+        [pid],
+      )
+    ).rows;
+    if (waiting) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("writer did not wait for the federal cache advisory lock");
 }
 
 function orderProfiles(

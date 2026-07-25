@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
+  createFederalOfficialCacheRepository,
   createFederalOfficialsService,
   type FederalOfficialCacheKey,
   type FederalOfficialCacheRecord,
@@ -117,6 +118,80 @@ describe("federal official cache service", () => {
     expect(readFileSync(".env.example", "utf8")).not.toMatch(
       /^NEXT_PUBLIC_CONGRESS_GOV_API_KEY=/mu,
     );
+  });
+
+  it("locks before reading the database clock and target generation", async () => {
+    const winnerAt = new Date(NOW);
+    const attemptedAt = new Date(NOW.getTime() - HOUR);
+    const winner = federalReplacement(
+      verifiedRoster(jurisdiction, "N000001", winnerAt),
+      winnerAt,
+    );
+    const attempted = federalReplacement(
+      verifiedRoster(jurisdiction, "O000001", attemptedAt),
+      attemptedAt,
+    );
+    const fake = fakeFederalCacheDatabase({
+      clock: new Date(NOW.getTime() + HOUR),
+      targetRows: [winner.roster],
+    });
+    const repository = createFederalOfficialCacheRepository(
+      fake.database as never,
+    );
+
+    await expect(repository.replaceRoster(attempted)).resolves.toEqual({
+      status: "ignored",
+      reason: "older_generation",
+    });
+    expect(fake.events.slice(0, 3)).toEqual([
+      "lock",
+      "clock",
+      "read:target",
+    ]);
+  });
+
+  it("protects a displaced profile referenced by a surviving roster", async () => {
+    const oldAt = new Date(NOW.getTime() - 2 * HOUR);
+    const siblingJurisdiction: FederalJurisdiction = {
+      stateCode: "GA",
+      district: 12,
+      divisionIds: [
+        "ocd-division/country:us/state:ga",
+        "ocd-division/country:us/state:ga/cd:12",
+      ],
+    };
+    const target = federalReplacement(
+      verifiedRoster(jurisdiction, "H000001", oldAt),
+      oldAt,
+    );
+    const sibling = federalReplacement(
+      verifiedRoster(siblingJurisdiction, "H000001", oldAt),
+      oldAt,
+    );
+    const incoming = federalReplacement(
+      verifiedRoster(jurisdiction, "H000099", NOW),
+      NOW,
+    );
+    const sharedProfile = target.profiles.find(
+      ({ cacheKey }) => cacheKey === "profile:v2:H000001",
+    );
+    if (!sharedProfile) {
+      throw new Error("test fixture requires the shared House profile");
+    }
+    const fake = fakeFederalCacheDatabase({
+      clock: new Date(NOW.getTime() + HOUR),
+      globalRosterRows: [sibling.roster],
+      profileRows: [sharedProfile],
+      targetRows: [target.roster],
+    });
+    const repository = createFederalOfficialCacheRepository(
+      fake.database as never,
+    );
+
+    await expect(repository.replaceRoster(incoming)).resolves.toEqual({
+      status: "written",
+    });
+    expect(fake.events).not.toContain("delete");
   });
 
   it("starts Congress and Clerk together with one snapshot and one deadline", async () => {
@@ -996,6 +1071,101 @@ function cacheRecord(
     retrievedAt,
     refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
     staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
+  };
+}
+
+function federalReplacement(
+  roster: FederalOfficialsRoster,
+  retrievedAt: Date,
+): FederalRosterReplacement {
+  const profiles = [roster.house, ...roster.senate].flatMap((seat) =>
+    seat.status === "serving"
+      ? [
+          cacheRecord(
+            `profile:v2:${seat.person.bioguideId}`,
+            profileFor(seat),
+            retrievedAt,
+          ),
+        ]
+      : [],
+  );
+  return {
+    roster: cacheRecord(
+      `roster:v1:${roster.jurisdiction.stateCode}:${String(
+        roster.jurisdiction.district,
+      ).padStart(2, "0")}`,
+      roster,
+      retrievedAt,
+    ),
+    profiles,
+  };
+}
+
+function fakeFederalCacheDatabase(options: {
+  clock: Date;
+  globalRosterRows?: readonly FederalOfficialCacheRecord[];
+  profileRows?: readonly FederalOfficialCacheRecord[];
+  targetRows?: readonly FederalOfficialCacheRecord[];
+}) {
+  const events: string[] = [];
+  let executes = 0;
+  let recordRead = 0;
+  const transaction = {
+    async execute() {
+      executes += 1;
+      if (executes === 1) {
+        events.push("lock");
+        return;
+      }
+      events.push("clock");
+      return { rows: [{ databaseTime: options.clock }] };
+    },
+    select() {
+      recordRead += 1;
+      const label =
+        recordRead === 1
+          ? "target"
+          : recordRead === 2
+            ? "global"
+            : "profiles";
+      events.push(`read:${label}`);
+      const rows =
+        recordRead === 1
+          ? options.targetRows ?? []
+          : recordRead === 2
+            ? options.globalRosterRows ?? []
+            : options.profileRows ?? [];
+      const builder = {
+        for: async () => rows,
+        from: () => builder,
+        limit: () => builder,
+        then: (
+          resolve: (value: readonly FederalOfficialCacheRecord[]) => unknown,
+          reject?: (reason: unknown) => unknown,
+        ) => Promise.resolve(rows).then(resolve, reject),
+        where: () => builder,
+      };
+      return builder;
+    },
+    delete() {
+      events.push("delete");
+      return { where: async () => undefined };
+    },
+    insert() {
+      return {
+        values: () => ({
+          onConflictDoUpdate: async () => undefined,
+        }),
+      };
+    },
+  };
+  return {
+    database: {
+      transaction: async <T>(
+        callback: (tx: typeof transaction) => Promise<T>,
+      ) => callback(transaction),
+    },
+    events,
   };
 }
 

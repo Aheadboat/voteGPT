@@ -101,6 +101,9 @@ export type FederalOfficialProfileResult =
   | Readonly<{ status: "unavailable" }>;
 
 type Database = Awaited<ReturnType<typeof createDatabase>>;
+type FederalCacheTransaction = Parameters<
+  Parameters<Database["transaction"]>[0]
+>[0];
 
 export function createFederalOfficialCacheRepository(
   database: Database,
@@ -128,9 +131,8 @@ export function createFederalOfficialCacheRepository(
       }
 
       return database.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`lock table ${federalOfficialCache} in share row exclusive mode`,
-        );
+        await acquireFederalCacheLock(transaction);
+        const databaseTime = await readClockTimestamp(transaction);
         const [existing] = await transaction
           .select({
             cacheKey: federalOfficialCache.cacheKey,
@@ -145,25 +147,28 @@ export function createFederalOfficialCacheRepository(
           .for("update");
 
         let previousProfiles: readonly FederalProfileCachePayload[] = [];
+        let repairInvalidTarget = false;
         if (existing) {
           const prior = validateRosterRecord(
             existing,
             validated.roster.cacheKey as FederalOfficialCacheKey,
             validated.jurisdiction,
+            databaseTime,
           );
           if (prior === null) {
-            throw new Error("Invalid stored federal official roster");
-          }
-          previousProfiles = servingProfiles(prior.payload);
-          if (
-            existing.retrievedAt.getTime() >=
-            validated.roster.retrievedAt.getTime()
-          ) {
-            return { status: "ignored", reason: "older_generation" } as const;
+            repairInvalidTarget = true;
+          } else {
+            previousProfiles = servingProfiles(prior.payload);
+            if (
+              existing.retrievedAt.getTime() >=
+              validated.roster.retrievedAt.getTime()
+            ) {
+              return { status: "ignored", reason: "older_generation" } as const;
+            }
           }
         }
 
-        const siblingRows = await transaction
+        const globalRosterRows = await transaction
           .select({
             cacheKey: federalOfficialCache.cacheKey,
             payload: federalOfficialCache.payload,
@@ -174,40 +179,38 @@ export function createFederalOfficialCacheRepository(
           .from(federalOfficialCache)
           .where(
             and(
-              like(
-                federalOfficialCache.cacheKey,
-                `roster:v1:${validated.jurisdiction.stateCode}:%`,
-              ),
-              ne(
-                federalOfficialCache.cacheKey,
-                validated.roster.cacheKey,
-              ),
+              like(federalOfficialCache.cacheKey, "roster:v1:%"),
+              ne(federalOfficialCache.cacheKey, validated.roster.cacheKey),
             ),
           );
-        const siblings = siblingRows.map((sibling) => {
-          const parsedKey = parseRosterKey(sibling.cacheKey);
+        const globalRosters = globalRosterRows.map((row) => {
+          const parsedKey = parseRosterKey(row.cacheKey);
           const jurisdiction = validateJurisdiction(
-            isRecord(sibling.payload) ? sibling.payload.jurisdiction : null,
+            isRecord(row.payload) ? row.payload.jurisdiction : null,
           );
           if (
             parsedKey === null ||
             jurisdiction === null ||
-            parsedKey.stateCode !== validated.jurisdiction.stateCode ||
             jurisdiction.stateCode !== parsedKey.stateCode ||
             jurisdiction.district !== parsedKey.district
           ) {
             throw new Error("Invalid stored federal official roster");
           }
           const roster = validateRosterRecord(
-            sibling,
-            sibling.cacheKey as FederalOfficialCacheKey,
+            row,
+            row.cacheKey as FederalOfficialCacheKey,
             jurisdiction,
+            databaseTime,
           );
           if (roster === null) {
             throw new Error("Invalid stored federal official roster");
           }
           return roster;
         });
+        const siblings = globalRosters.filter(
+          ({ payload }) =>
+            payload.jurisdiction.stateCode === validated.jurisdiction.stateCode,
+        );
         const incomingSenateSnapshot = senateSnapshot(validated.roster.payload);
         const conflictingSiblings = siblings.filter(
           ({ payload }) => senateSnapshot(payload) !== incomingSenateSnapshot,
@@ -223,29 +226,25 @@ export function createFederalOfficialCacheRepository(
           })
           .from(federalOfficialCache)
           .where(like(federalOfficialCache.cacheKey, "profile:v2:%"));
-        const sameOfficeHouseProfiles = storedProfileRows.flatMap((profile) => {
-          if (!isSameHouseOffice(profile.payload, validated.jurisdiction)) {
-            return [];
-          }
+        const storedProfiles = storedProfileRows.map((profile) => {
           const match = /^profile:v2:([A-Z][0-9]{6})$/.exec(profile.cacheKey);
           const stored = match?.[1]
             ? validateProfileRecord(
                 profile,
                 profile.cacheKey as FederalOfficialCacheKey,
                 match[1],
+                databaseTime,
               )
             : null;
-          if (
-            stored === null ||
-            stored.payload.office.chamber !== "house" ||
-            stored.payload.office.stateCode !==
-              validated.jurisdiction.stateCode ||
-            stored.payload.office.district !== validated.jurisdiction.district
-          ) {
+          if (stored === null) {
             throw new Error("Invalid stored federal official profile");
           }
-          return [stored];
+          return stored;
         });
+        const sameOfficeHouseProfiles = storedProfiles.filter(
+          ({ payload }) =>
+            isSameHouseOffice(payload, validated.jurisdiction),
+        );
 
         const currentProfileIds = servingProfileIds(validated.roster.payload);
         const currentSet = new Set(currentProfileIds);
@@ -267,6 +266,27 @@ export function createFederalOfficialCacheRepository(
           )
         ) {
           return { status: "ignored", reason: "older_generation" } as const;
+        }
+        const incomingProfileConflict = validated.profiles.some((incoming) => {
+          const stored = storedProfiles.find(
+            ({ record }) => record.cacheKey === incoming.cacheKey,
+          );
+          return (
+            stored !== undefined &&
+            stored.record.retrievedAt.getTime() >= incomingTime &&
+            !isDeepStrictEqual(stored.payload, incoming.payload)
+          );
+        });
+        if (incomingProfileConflict) {
+          return { status: "ignored", reason: "older_generation" } as const;
+        }
+
+        if (repairInvalidTarget) {
+          await transaction
+            .delete(federalOfficialCache)
+            .where(
+              eq(federalOfficialCache.cacheKey, validated.roster.cacheKey),
+            );
         }
 
         for (const { record } of conflictingSiblings) {
@@ -300,6 +320,17 @@ export function createFederalOfficialCacheRepository(
         const profilesByKey = new Map(
           validated.profiles.map((profile) => [profile.cacheKey, profile]),
         );
+        const conflictingSiblingKeys = new Set(
+          conflictingSiblings.map(({ record }) => record.cacheKey),
+        );
+        const survivingProfileIds = new Set(currentProfileIds);
+        for (const { payload, record } of globalRosters) {
+          if (!conflictingSiblingKeys.has(record.cacheKey)) {
+            for (const bioguideId of servingProfileIds(payload)) {
+              survivingProfileIds.add(bioguideId);
+            }
+          }
+        }
         const affectedKeys = [
           ...new Set([...displacedKeys, ...profilesByKey.keys()]),
         ].sort();
@@ -307,7 +338,11 @@ export function createFederalOfficialCacheRepository(
           const profile = profilesByKey.get(cacheKey);
           if (profile) {
             await upsertRecord(transaction, profile);
-          } else {
+          } else if (
+            !survivingProfileIds.has(
+              cacheKey.slice("profile:v2:".length),
+            )
+          ) {
             await transaction
               .delete(federalOfficialCache)
               .where(
@@ -1641,7 +1676,7 @@ function unavailable() {
 }
 
 async function upsertRecord(
-  transaction: Parameters<Parameters<Database["transaction"]>[0]>[0],
+  transaction: FederalCacheTransaction,
   cacheRecord: FederalOfficialCacheRecord,
 ) {
   await transaction
@@ -1660,4 +1695,25 @@ async function upsertRecord(
         staleAfter: cacheRecord.staleAfter,
       },
     });
+}
+
+async function acquireFederalCacheLock(
+  tx: FederalCacheTransaction,
+): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${"votegpt:federal-official-cache-refresh"}))`,
+  );
+}
+
+async function readClockTimestamp(
+  tx: FederalCacheTransaction,
+): Promise<Date> {
+  const result = await tx.execute(
+    sql<{ databaseTime: Date }>`select clock_timestamp() as "databaseTime"`,
+  );
+  const [row] = "rows" in result ? result.rows : result;
+  if (!row || !validDate(row.databaseTime)) {
+    throw new Error("Invalid federal official cache database clock");
+  }
+  return row.databaseTime;
 }
