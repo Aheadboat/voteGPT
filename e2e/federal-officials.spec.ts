@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import {
   expect,
   test,
@@ -252,12 +252,6 @@ test("updates one authenticated dashboard from no home to GA to CA to no home wi
 }) => {
   await installSessionCookie(context, "handoff");
   const requests = auditRequests(page);
-  const navigations: string[] = [];
-  page.on("framenavigated", (frame) => {
-    if (frame === page.mainFrame()) {
-      navigations.push(frame.url());
-    }
-  });
   const gaAddress = "101 Georgia Handoff Avenue, Example, GA 30000";
   const caAddress = "202 California Handoff Boulevard, Example, CA 90000";
   const journeyTime = new Date();
@@ -293,7 +287,12 @@ test("updates one authenticated dashboard from no home to GA to CA to no home wi
   });
 
   await page.goto("/dashboard");
-  const navigationCount = navigations.length;
+  const documentMarker = randomUUID();
+  await page.evaluate((marker) => {
+    (
+      window as Window & { __f5DashboardDocumentMarker?: string }
+    ).__f5DashboardDocumentMarker = marker;
+  }, documentMarker);
   await expect(
     page.getByText("Save a voting residence to see federal officials", {
       exact: true,
@@ -345,7 +344,13 @@ test("updates one authenticated dashboard from no home to GA to CA to no home wi
   ).toHaveCount(0);
   await expect(page.getByText(caAddress)).toHaveCount(0);
 
-  expect(navigations).toHaveLength(navigationCount);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { __f5DashboardDocumentMarker?: string })
+          .__f5DashboardDocumentMarker,
+    ),
+  ).toBe(documentMarker);
   expect(resolutions).toHaveLength(0);
   expect(
     requests.filter((url) =>
