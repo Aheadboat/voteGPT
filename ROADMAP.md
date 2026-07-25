@@ -445,7 +445,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Blockers:** None.
 - **Feature merge:** [PR #16](https://github.com/Aheadboat/voteGPT/pull/16) merged to `main` as `26a40c04ae20931b39e1ec429860f2f5bbad6034` on 2026-07-25 UTC; feature head `f70430fd9c177ca5052d1b80995e44c8283682ff` is reachable from `main`.
 - **Post-merge evidence:** A clean closeout worktree at exact merge `26a40c04ae20931b39e1ec429860f2f5bbad6034` passed 18 files/326 tests, Drizzle schema check, type generation and strict TypeScript, zero-warning lint, and production build.
-- **Closeout PR/CI/merge:** This docs-only `codex/f4-closeout` branch changes only `ROADMAP.md` and `README.md`; its PR, hosted CI, and merge provide final closeout proof.
+- **Closeout PR/CI/merge:** [PR #17](https://github.com/Aheadboat/voteGPT/pull/17) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
 ## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
