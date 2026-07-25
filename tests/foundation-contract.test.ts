@@ -235,6 +235,7 @@ describe("development foundation", () => {
       [
         "BETTER_AUTH_SECRET=",
         "BETTER_AUTH_URL=",
+        "CONGRESS_GOV_API_KEY=",
         "DATABASE_URL=",
         "E2E_DATABASE_MARKER=",
         "E2E_DATABASE_URL=",
