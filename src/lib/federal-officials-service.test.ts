@@ -264,6 +264,119 @@ describe("federal official cache service", () => {
     expect(fake.events).not.toContain("delete");
   });
 
+  it("keeps a newer shared profile when publishing an older sibling roster", async () => {
+    const incomingAt = new Date(NOW.getTime() - HOUR);
+    const siblingJurisdiction: FederalJurisdiction = {
+      stateCode: "GA",
+      district: 12,
+      divisionIds: [
+        "ocd-division/country:us/state:ga",
+        "ocd-division/country:us/state:ga/cd:12",
+      ],
+    };
+    const newer = federalReplacement(
+      verifiedRoster(jurisdiction, "H000001", NOW),
+      NOW,
+    );
+    const incoming = federalReplacement(
+      verifiedRoster(siblingJurisdiction, "H000012", incomingAt),
+      incomingAt,
+    );
+    const newerSharedProfile = newer.profiles.find(
+      ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+    );
+    if (!newerSharedProfile) {
+      throw new Error("test fixture requires a shared Senate profile");
+    }
+    const fake = fakeFederalCacheDatabase({
+      clock: new Date(NOW.getTime() + HOUR),
+      globalRosterRows: [newer.roster],
+      profileRows: newer.profiles,
+    });
+    const repository = createFederalOfficialCacheRepository(
+      fake.database as never,
+    );
+
+    await expect(repository.replaceRoster(incoming)).resolves.toEqual({
+      status: "written",
+    });
+    expect(fake.records.get(newerSharedProfile.cacheKey)).toEqual(
+      newerSharedProfile,
+    );
+  });
+
+  it.each(["person", "office", "term"] as const)(
+    "rejects a same-key newer profile with conflicting stable %s identity atomically",
+    async (identity) => {
+      const incomingAt = new Date(NOW.getTime() - HOUR);
+      const alternateJurisdiction: FederalJurisdiction = {
+        stateCode: "CA",
+        district: 12,
+        divisionIds: [
+          "ocd-division/country:us/state:ca",
+          "ocd-division/country:us/state:ca/cd:12",
+        ],
+      };
+      const newer = federalReplacement(
+        verifiedRoster(jurisdiction, "H000001", NOW),
+        NOW,
+      );
+      const newerSharedProfile = newer.profiles.find(
+        ({ cacheKey }) => cacheKey === "profile:v2:S000001",
+      );
+      if (!newerSharedProfile) {
+        throw new Error("test fixture requires a shared Senate profile");
+      }
+      const incomingJurisdiction =
+        identity === "office" ? alternateJurisdiction : jurisdiction;
+      const baseRoster = verifiedRoster(
+        incomingJurisdiction,
+        identity === "office" ? "C000001" : "H000001",
+        incomingAt,
+      );
+      const firstSenator = baseRoster.senate[0];
+      if (firstSenator?.status !== "serving") {
+        throw new Error("test fixture requires a serving Senator");
+      }
+      const conflictingSenator =
+        identity === "person"
+          ? {
+              ...firstSenator,
+              person: { ...firstSenator.person, name: "Different Official" },
+            }
+          : identity === "term"
+            ? {
+                ...firstSenator,
+                term: { ...firstSenator.term, startYear: 2024 },
+              }
+            : firstSenator;
+      const incoming = federalReplacement(
+        {
+          ...baseRoster,
+          senate: [conflictingSenator, ...baseRoster.senate.slice(1)],
+        },
+        incomingAt,
+      );
+      const fake = fakeFederalCacheDatabase({
+        clock: new Date(NOW.getTime() + HOUR),
+        profileRows: [newerSharedProfile],
+      });
+      const repository = createFederalOfficialCacheRepository(
+        fake.database as never,
+      );
+
+      await expect(repository.replaceRoster(incoming)).resolves.toEqual({
+        status: "ignored",
+        reason: "older_generation",
+      });
+      expect(fake.events).not.toContain("delete");
+      expect(fake.events).not.toContain("insert");
+      expect(fake.records.get(newerSharedProfile.cacheKey)).toEqual(
+        newerSharedProfile,
+      );
+    },
+  );
+
   it("starts Congress and Clerk together with one snapshot and one deadline", async () => {
     vi.useFakeTimers();
     const cache = memoryCache();
@@ -1179,6 +1292,13 @@ function fakeFederalCacheDatabase(options: {
   targetRows?: readonly FederalOfficialCacheRecord[];
 }) {
   const events: string[] = [];
+  const records = new Map(
+    [
+      ...(options.targetRows ?? []),
+      ...(options.globalRosterRows ?? []),
+      ...(options.profileRows ?? []),
+    ].map((record) => [record.cacheKey, record]),
+  );
   let executes = 0;
   let recordRead = 0;
   const transaction = {
@@ -1232,9 +1352,18 @@ function fakeFederalCacheDatabase(options: {
       return { where: async () => undefined };
     },
     insert() {
+      events.push("insert");
       return {
-        values: () => ({
-          onConflictDoUpdate: async () => undefined,
+        values: (record: FederalOfficialCacheRecord) => ({
+          onConflictDoUpdate: async () => {
+            const existing = records.get(record.cacheKey);
+            if (
+              existing === undefined ||
+              existing.retrievedAt.getTime() <= record.retrievedAt.getTime()
+            ) {
+              records.set(record.cacheKey, record);
+            }
+          },
         }),
       };
     },
@@ -1246,6 +1375,7 @@ function fakeFederalCacheDatabase(options: {
       ) => callback(transaction),
     },
     events,
+    records,
   };
 }
 

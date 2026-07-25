@@ -274,7 +274,7 @@ export function createFederalOfficialCacheRepository(
           return (
             stored !== undefined &&
             stored.record.retrievedAt.getTime() >= incomingTime &&
-            !isDeepStrictEqual(stored.payload, incoming.payload)
+            !hasSameProfileIdentity(stored.payload, incoming.payload)
           );
         });
         if (incomingProfileConflict) {
@@ -1437,6 +1437,17 @@ function servingProfiles(roster: FederalOfficialsRoster) {
 
 function servingProfileIds(roster: FederalOfficialsRoster) {
   return servingProfiles(roster).map(({ person }) => person.bioguideId);
+}
+
+function hasSameProfileIdentity(
+  left: FederalProfileCachePayload,
+  right: FederalProfileCachePayload,
+) {
+  return (
+    isDeepStrictEqual(left.person, right.person) &&
+    isDeepStrictEqual(left.office, right.office) &&
+    isDeepStrictEqual(left.term, right.term)
+  );
 }
 
 function senateSnapshot(roster: FederalOfficialsRoster) {
