@@ -3,6 +3,7 @@ import {
   FEDERAL_CACHE_POLICY,
   FEDERAL_MILLISECONDS_PER_HOUR,
   createCongressSnapshot,
+  isCensusCongressInEffectiveRange,
   type CongressSnapshot,
 } from "../src/lib/federal-policy.ts";
 
@@ -27,6 +28,11 @@ export function createFederalFixtureClock(now: Date): FederalFixtureClock {
   const snapshot = createCongressSnapshot(now);
   if (snapshot === null) {
     throw new Error("Federal fixtures require a valid clock.");
+  }
+  if (!isCensusCongressInEffectiveRange(snapshot.currentCongress)) {
+    throw new Error(
+      `Federal fixture policy expired: checked-in Census coverage does not include Congress ${snapshot.currentCongress}.`,
+    );
   }
   const termStart = Date.UTC(
     snapshot.startYear,

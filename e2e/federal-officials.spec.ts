@@ -12,6 +12,11 @@ import {
   type ResolutionOutcome,
   type ResolutionResponse,
 } from "../src/lib/residence";
+import {
+  FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS,
+  FEDERAL_PROVIDER_HOSTS,
+  bioguidePublicUrl,
+} from "../src/lib/federal-policy";
 
 const baseURL = "http://127.0.0.1:3000";
 const authSecret = "e2e-secret-at-least-thirty-two-characters";
@@ -27,6 +32,7 @@ test("serves a sourced federal profile anonymously from SSR", async ({
   expect(html).toContain("Georgia Representative");
   expect(html).toContain("Congress.gov");
   expect(html).toContain("Office of the Clerk");
+  assertSafeFederalMarkup(html);
 
   const profile = page.getByRole("article", {
     name: /Georgia Representative.*U\.S\. Representative/,
@@ -252,23 +258,32 @@ test("updates one authenticated dashboard from no home to GA to CA to no home wi
   });
   const gaAddress = "101 Georgia Handoff Avenue, Example, GA 30000";
   const caAddress = "202 California Handoff Boulevard, Example, CA 90000";
-  const responses = [
-    signedFederalResidenceResponse(
-      { kind: "address", address: gaAddress },
-      federalResidence("GA", 13),
+  const journeyTime = new Date();
+  const resolutions = [
+    {
+      input: { kind: "address", address: gaAddress } satisfies ResidenceInput,
+      resolution: federalResidence("GA", 13, journeyTime),
+    },
+    {
+      input: { kind: "address", address: caAddress } satisfies ResidenceInput,
+      resolution: federalResidence("CA", 1, journeyTime),
+    },
+  ].map(({ input, resolution }) => ({
+    input,
+    response: signedFederalResidenceResponse(
+      input,
+      resolution,
       "e2e-federal-handoff-user",
+      journeyTime,
     ),
-    signedFederalResidenceResponse(
-      { kind: "address", address: caAddress },
-      federalResidence("CA", 1),
-      "e2e-federal-handoff-user",
-    ),
-  ];
+  }));
   await page.route("**/api/v1/location/resolve", async (route) => {
-    const response = responses.shift();
-    expect(response).toBeDefined();
+    const next = resolutions.shift();
+    expect(next).toBeDefined();
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual(next!.input);
     await route.fulfill({
-      body: JSON.stringify(response),
+      body: JSON.stringify(next!.response),
       contentType: "application/json",
       headers: { "Cache-Control": "private, no-store" },
       status: 200,
@@ -329,10 +344,10 @@ test("updates one authenticated dashboard from no home to GA to CA to no home wi
   await expect(page.getByText(caAddress)).toHaveCount(0);
 
   expect(navigations).toHaveLength(navigationCount);
-  expect(responses).toHaveLength(0);
+  expect(resolutions).toHaveLength(0);
   expect(
     requests.filter((url) =>
-      /api\.congress\.gov|clerk\.house\.gov/.test(url),
+      FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS.includes(new URL(url).hostname),
     ),
   ).toEqual([]);
   const surface = `${await page.locator("body").innerText()}\n${await page.content()}`;
@@ -525,6 +540,7 @@ type ResolvedFederalResidence = Extract<
 function federalResidence(
   stateCode: "CA" | "GA",
   district: number,
+  checkedAt: Date,
 ): ResolvedFederalResidence {
   const lower = stateCode.toLowerCase();
   return {
@@ -546,7 +562,7 @@ function federalResidence(
     source: {
       name: "Deterministic E2E fixture",
       url: "https://example.invalid/federal-fixture",
-      checkedAt: "2026-07-24T12:00:00.000Z",
+      checkedAt: checkedAt.toISOString(),
       effectiveAt: null,
     },
     coverageNotes: [],
@@ -557,6 +573,7 @@ function signedFederalResidenceResponse(
   input: ResidenceInput,
   resolution: ResolvedFederalResidence,
   userId: string,
+  now: Date,
 ): Extract<ResolutionResponse, { status: "matched" | "partial" }> {
   return {
     ...resolution,
@@ -565,7 +582,7 @@ function signedFederalResidenceResponse(
       resolution,
       userId,
       authSecret,
-      new Date(),
+      now,
     ),
   };
 }
@@ -597,6 +614,7 @@ function auditRequests(page: Page) {
 
 async function assertSafeSurface(page: Page, requests: readonly string[]) {
   const surface = `${await page.locator("body").innerText()}\n${await page.content()}\n${page.url()}\n${requests.join("\n")}`;
+  assertSafeFederalMarkup(surface);
   for (const forbidden of [
     /\bAI\b/,
     /CONGRESS_GOV_API_KEY/i,
@@ -609,9 +627,27 @@ async function assertSafeSurface(page: Page, requests: readonly string[]) {
   ]) {
     expect(surface).not.toMatch(forbidden);
   }
-  for (const request of requests) {
-    expect(new URL(request).hostname, request).toBe("127.0.0.1");
+  const externalLinks = await page.locator("a[href^='https://']").evaluateAll(
+    (links) => links.map((link) => (link as HTMLAnchorElement).href),
+  );
+  for (const href of externalLinks) {
+    const link = new URL(href);
+    expect(link.hostname, href).not.toBe(FEDERAL_PROVIDER_HOSTS.congressApi);
+    if (link.hostname === FEDERAL_PROVIDER_HOSTS.bioguidePublic) {
+      const bioguideId = link.pathname.split("/").at(-1) ?? "";
+      expect(href).toBe(bioguidePublicUrl(bioguideId));
+    }
   }
+  for (const request of requests) {
+    const hostname = new URL(request).hostname;
+    expect(FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS, request).not.toContain(hostname);
+    expect(hostname, request).toBe("127.0.0.1");
+  }
+}
+
+function assertSafeFederalMarkup(markup: string) {
+  expect(markup).not.toContain(FEDERAL_PROVIDER_HOSTS.congressApi);
+  expect(markup).not.toContain("ingestionUrl");
 }
 
 async function tabTo(page: Page, target: Locator) {

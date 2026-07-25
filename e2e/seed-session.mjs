@@ -497,7 +497,11 @@ async function startApplication(validatedDatabaseUrl) {
     ],
     {
       cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: validatedDatabaseUrl },
+      env: {
+        ...process.env,
+        DATABASE_URL: validatedDatabaseUrl,
+        NODE_OPTIONS: nextChildNodeOptions(process.env.NODE_OPTIONS),
+      },
       shell: false,
       stdio: "inherit",
       windowsHide: true,
@@ -513,4 +517,12 @@ async function startApplication(validatedDatabaseUrl) {
       resolveExit();
     });
   });
+}
+
+function nextChildNodeOptions(existingNodeOptions) {
+  const providerFetchGuardOption =
+    `--import=${pathToFileURL(resolve(process.cwd(), "e2e/provider-fetch-guard.mjs")).href}`;
+  return [existingNodeOptions?.trim(), providerFetchGuardOption]
+    .filter(Boolean)
+    .join(" ");
 }
