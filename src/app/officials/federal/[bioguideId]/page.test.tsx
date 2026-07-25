@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase } from "@/db";
 import { getRuntimeAuth } from "@/lib/auth";
 import { fetchCongressRoster } from "@/lib/congress-gov";
+import { isBioguideId } from "@/lib/federal-policy";
 import {
   createFederalOfficialCacheRepository,
   createFederalOfficialsService,
@@ -25,6 +26,13 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/db", () => ({ createDatabase: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getRuntimeAuth: vi.fn() }));
 vi.mock("@/lib/congress-gov", () => ({ fetchCongressRoster: vi.fn() }));
+vi.mock("@/lib/federal-policy", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/federal-policy")>();
+  return {
+    ...actual,
+    isBioguideId: vi.fn(actual.isBioguideId),
+  };
+});
 vi.mock("@/lib/house-clerk-vacancy", () => ({
   fetchCurrentHouseVacancies: vi.fn(),
 }));
@@ -76,6 +84,19 @@ describe("public federal official profile page", () => {
     await expect(loadPage(id)).rejects.toThrow("NEXT_NOT_FOUND");
 
     expect(notFound).toHaveBeenCalledTimes(1);
+    expect(createDatabase).not.toHaveBeenCalled();
+    expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
+    expect(createFederalOfficialsService).not.toHaveBeenCalled();
+    expect(cacheRead).not.toHaveBeenCalled();
+    expectNoProviderOrAuthWork();
+  });
+
+  it("delegates Bioguide validation to federal policy before service access", async () => {
+    vi.mocked(isBioguideId).mockReturnValueOnce(false);
+
+    await expect(loadPage("H000001")).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(isBioguideId).toHaveBeenCalledWith("H000001");
     expect(createDatabase).not.toHaveBeenCalled();
     expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
     expect(createFederalOfficialsService).not.toHaveBeenCalled();

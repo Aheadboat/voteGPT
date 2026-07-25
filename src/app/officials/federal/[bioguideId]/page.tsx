@@ -7,15 +7,14 @@ import {
   createFederalOfficialCacheRepository,
   createFederalOfficialsService,
 } from "@/lib/federal-officials-service";
+import { isBioguideId } from "@/lib/federal-policy";
 import { fetchCurrentHouseVacancies } from "@/lib/house-clerk-vacancy";
-
-const bioguidePattern = /^[A-Z][0-9]{6}$/;
 
 export default async function FederalOfficialProfilePage({
   params,
 }: Readonly<{ params: Promise<{ bioguideId: string }> }>) {
   const { bioguideId } = await params;
-  if (!bioguidePattern.test(bioguideId)) {
+  if (!isBioguideId(bioguideId)) {
     notFound();
   }
 
