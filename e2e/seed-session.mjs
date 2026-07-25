@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePostgres } from "drizzle-orm/node-postgres";
 import { migrate as migratePostgres } from "drizzle-orm/node-postgres/migrator";
@@ -11,6 +14,52 @@ import {
   requireE2eDatabase,
 } from "./database-guard.mjs";
 
+const sourceRoot = resolve(process.cwd(), "src");
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      (specifier.startsWith("./") || specifier.startsWith("../")) &&
+      context.parentURL?.startsWith("file:")
+    ) {
+      const parentPath = fileURLToPath(context.parentURL);
+      const fromSource = relative(sourceRoot, parentPath);
+      if (
+        fromSource !== ".." &&
+        !fromSource.startsWith(`..${sep}`) &&
+        !isAbsolute(fromSource)
+      ) {
+        const unresolved = fileURLToPath(new URL(specifier, context.parentURL));
+        for (const candidate of [unresolved, `${unresolved}.ts`]) {
+          const relativeCandidate = relative(sourceRoot, candidate);
+          if (
+            relativeCandidate !== ".." &&
+            !relativeCandidate.startsWith(`..${sep}`) &&
+            !isAbsolute(relativeCandidate) &&
+            existsSync(candidate) &&
+            statSync(candidate).isFile()
+          ) {
+            return {
+              format: "module-typescript",
+              shortCircuit: true,
+              url: pathToFileURL(candidate).href,
+            };
+          }
+        }
+      }
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const {
+  FEDERAL_CACHE_POLICY,
+  bioguidePublicUrl,
+  canonicalCongressIngestionUrl,
+  clerkNationalVacancyUrl,
+  clerkVacancyPublicUrl,
+  congressMemberDetailUrl,
+  createFederalFixtureClock,
+} = await import("./fixture-policy.mts");
+
 const databaseUrl = await requireE2eDatabase(
   process.env,
   readE2eDatabaseMarker,
@@ -21,6 +70,7 @@ if (process.env.CONGRESS_GOV_API_KEY?.trim()) {
 }
 process.env.CONGRESS_GOV_API_KEY = "";
 const migrationsFolder = resolve(process.cwd(), "drizzle");
+const federalFixtureClock = createFederalFixtureClock(new Date());
 const identities = [
   {
     accountId: "e2e-google-account",
@@ -43,6 +93,7 @@ const identities = [
 ];
 const federalIdentities = [
   federalIdentity("no-home", "No-home"),
+  federalIdentity("handoff", "Residence handoff"),
   federalIdentity("ga-13", "Georgia 13", "GA", 13),
   federalIdentity("ak-at-large", "Alaska At-large", "AK", 0),
   federalIdentity("ga-14-vacancy", "Georgia 14", "GA", 14),
@@ -88,7 +139,7 @@ if (process.argv.includes("--start-server")) {
 async function seedIdentities(query) {
   await query("BEGIN");
   try {
-    const cacheRecords = federalCacheRecords();
+    const cacheRecords = federalCacheRecords(federalFixtureClock);
     await query(
       `DELETE FROM "user"
        WHERE "id" = ANY($1::text[]) OR lower("email") = ANY($2::text[])`,
@@ -218,11 +269,10 @@ function federalIdentity(slug, name, stateCode, district) {
   };
 }
 
-function federalCacheRecords() {
-  const now = Date.now();
-  const freshAt = new Date(now - 60 * 60 * 1_000);
-  const staleAt = new Date(now - 25 * 60 * 60 * 1_000);
-  const expiredAt = new Date(now - 73 * 60 * 60 * 1_000);
+function federalCacheRecords(clock) {
+  const freshAt = new Date(clock.freshRetrievedAt);
+  const staleAt = new Date(clock.staleRetrievedAt);
+  const expiredAt = new Date(clock.expiredRetrievedAt);
   const gaSenators = [
     servingSeat("senate", "GA", null, "G000001", "Georgia Senator One", freshAt),
     servingSeat("senate", "GA", null, "G000002", "Georgia Senator Two", freshAt),
@@ -298,6 +348,15 @@ function servingRoster(stateCode, district, house, senate, retrievedAt) {
 
 function vacancyRoster(stateCode, district, senate, retrievedAt) {
   const office = officeFor("house", stateCode, district, null);
+  const listUrl = clerkNationalVacancyUrl().toString();
+  const districtUrl = clerkVacancyPublicUrl(
+    stateCode,
+    district,
+    federalFixtureClock.snapshot,
+  );
+  if (districtUrl === null) {
+    throw new Error("Federal vacancy fixture requires a supported district.");
+  }
   return cacheRecord(
     rosterKey(stateCode, district),
     {
@@ -307,11 +366,8 @@ function vacancyRoster(stateCode, district, senate, retrievedAt) {
         office,
         term: termFor(office, null, "vacant"),
         sources: [
-          clerkSource("https://clerk.house.gov/Members/ViewVacancies", retrievedAt),
-          clerkSource(
-            `https://clerk.house.gov/members/${stateCode}${String(district).padStart(2, "0")}/vacancy`,
-            retrievedAt,
-          ),
+          clerkSource(listUrl, retrievedAt),
+          clerkSource(districtUrl, retrievedAt),
         ],
       },
       senate,
@@ -336,7 +392,7 @@ function servingSeat(chamber, stateCode, district, bioguideId, name, retrievedAt
     sources: [
       memberSource(bioguideId, retrievedAt),
       ...(chamber === "house"
-        ? [clerkSource("https://clerk.house.gov/Members/ViewVacancies", retrievedAt)]
+        ? [clerkSource(clerkNationalVacancyUrl().toString(), retrievedAt)]
         : []),
     ],
   };
@@ -356,18 +412,32 @@ function termFor(office, personId, status) {
   return {
     officeId: office.id,
     personId,
-    congress: 119,
-    startYear: status === "vacant" ? null : 2025,
-    endYear: status === "vacant" ? null : 2027,
+    congress: federalFixtureClock.snapshot.currentCongress,
+    startYear:
+      status === "vacant"
+        ? null
+        : new Date(federalFixtureClock.servingTerm.start).getUTCFullYear(),
+    endYear:
+      status === "vacant"
+        ? null
+        : new Date(federalFixtureClock.servingTerm.end).getUTCFullYear(),
     status,
   };
 }
 
 function memberSource(bioguideId, retrievedAt) {
+  const publicUrl = bioguidePublicUrl(bioguideId);
+  const ingestionUrl = canonicalCongressIngestionUrl(
+    congressMemberDetailUrl(bioguideId, ""),
+  );
+  if (publicUrl === null || ingestionUrl === null) {
+    throw new Error("Federal member fixture requires a valid Bioguide ID.");
+  }
   return {
-    publisher: "Congress.gov",
+    publisher: "Biographical Directory of the United States Congress",
     sourceType: "member",
-    url: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
+    publicUrl,
+    ingestionUrl,
     retrievedAt: retrievedAt.toISOString(),
     recordUpdatedAt: retrievedAt.toISOString(),
     effectiveAt: null,
@@ -378,7 +448,8 @@ function clerkSource(url, retrievedAt) {
   return {
     publisher: "Office of the Clerk, U.S. House of Representatives",
     sourceType: "vacancy",
-    url,
+    publicUrl: url,
+    ingestionUrl: url,
     retrievedAt: retrievedAt.toISOString(),
     recordUpdatedAt: null,
     effectiveAt: null,
@@ -406,8 +477,12 @@ function cacheRecord(cacheKey, payload, retrievedAt) {
     cacheKey,
     payload,
     retrievedAt,
-    refreshAfter: new Date(retrievedAt.getTime() + 24 * 60 * 60 * 1_000),
-    staleAfter: new Date(retrievedAt.getTime() + 72 * 60 * 60 * 1_000),
+    refreshAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.refreshAgeMs,
+    ),
+    staleAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.staleAgeMs,
+    ),
   };
 }
 

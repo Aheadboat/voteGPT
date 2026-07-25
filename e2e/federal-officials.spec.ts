@@ -6,6 +6,12 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import {
+  createResolutionToken,
+  type ResidenceInput,
+  type ResolutionOutcome,
+  type ResolutionResponse,
+} from "../src/lib/residence";
 
 const baseURL = "http://127.0.0.1:3000";
 const authSecret = "e2e-secret-at-least-thirty-two-characters";
@@ -40,14 +46,14 @@ test("serves a sourced federal profile anonymously from SSR", async ({
     }),
   ).toBeVisible();
   const congress = sources.getByRole("link", {
-    name: "Congress.gov member source",
+    name: "Biographical Directory of the United States Congress member source",
   });
   const clerk = sources.getByRole("link", {
     name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
   });
   await expect(congress).toHaveAttribute(
     "href",
-    "https://api.congress.gov/v3/member/H000001?format=json",
+    "https://bioguide.congress.gov/search/bio/H000001",
   );
   await expect(clerk).toHaveAttribute(
     "href",
@@ -126,7 +132,9 @@ test("renders explicit recovery for an expired profile", async ({ page }) => {
   ).toHaveAttribute("href", "https://www.congress.gov/members");
   await expect(page.getByText("Texas Representative")).toHaveCount(0);
   await expect(
-    page.getByRole("link", { name: "Congress.gov member source" }),
+    page.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
   ).toHaveCount(0);
   await assertSafeSurface(page, requests);
 });
@@ -151,7 +159,9 @@ test("labels below-72-hour profiles and rosters as stale", async ({
     "This profile is stale but not expired. Verify it with the linked official source.",
   );
   await expect(
-    page.getByRole("link", { name: "Congress.gov member source" }),
+    page.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
   ).toBeVisible();
   await assertSafeSurface(page, requests);
 
@@ -179,10 +189,12 @@ test("labels below-72-hour profiles and rosters as stale", async ({
       card.getByText("Stale but not expired; verify before use."),
     ).toBeVisible();
     await expect(
-      card.getByRole("link", { name: "Congress.gov member source" }),
+      card.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
     ).toHaveAttribute(
       "href",
-      `https://api.congress.gov/v3/member/${expected.bioguideId}?format=json`,
+      `https://bioguide.congress.gov/search/bio/${expected.bioguideId}`,
     );
     await expect(
       card.getByRole("link", { name: expected.name }),
@@ -223,6 +235,108 @@ test("prompts an authenticated voter without a saved home", async ({
     }),
   ).toBeVisible();
   await expect(page.getByRole("article")).toHaveCount(0);
+  await assertSafeSurface(page, requests);
+});
+
+test("updates one authenticated dashboard from no home to GA to CA to no home without reload or provider traffic", async ({
+  context,
+  page,
+}) => {
+  await installSessionCookie(context, "handoff");
+  const requests = auditRequests(page);
+  const navigations: string[] = [];
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame()) {
+      navigations.push(frame.url());
+    }
+  });
+  const gaAddress = "101 Georgia Handoff Avenue, Example, GA 30000";
+  const caAddress = "202 California Handoff Boulevard, Example, CA 90000";
+  const responses = [
+    signedFederalResidenceResponse(
+      { kind: "address", address: gaAddress },
+      federalResidence("GA", 13),
+      "e2e-federal-handoff-user",
+    ),
+    signedFederalResidenceResponse(
+      { kind: "address", address: caAddress },
+      federalResidence("CA", 1),
+      "e2e-federal-handoff-user",
+    ),
+  ];
+  await page.route("**/api/v1/location/resolve", async (route) => {
+    const response = responses.shift();
+    expect(response).toBeDefined();
+    await route.fulfill({
+      body: JSON.stringify(response),
+      contentType: "application/json",
+      headers: { "Cache-Control": "private, no-store" },
+      status: 200,
+    });
+  });
+
+  await page.goto("/dashboard");
+  const navigationCount = navigations.length;
+  await expect(
+    page.getByText("Save a voting residence to see federal officials", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  await saveResidence(page, gaAddress);
+  await expect(
+    page.getByRole("region", {
+      name: "Federal officials for GA District 13",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", {
+      name: /U\.S\. Representative.*Georgia Representative/,
+    }),
+  ).toBeVisible();
+
+  await saveResidence(page, caAddress);
+  await expect(
+    page.getByRole("region", {
+      name: "Federal officials for CA District 1",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", {
+      name: /U\.S\. Representative.*California Representative/,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: /Georgia Representative/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText(gaAddress)).toHaveCount(0);
+
+  const saved = page.getByRole("region", {
+    exact: true,
+    name: "Saved residence",
+  });
+  await saved.getByRole("button", { name: "Delete saved residence" }).click();
+  await saved.getByRole("button", { name: "Confirm deletion" }).click();
+  await expect(
+    page.getByText("Save a voting residence to see federal officials", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(
+    page.getByRole("article", { name: /California Representative/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText(caAddress)).toHaveCount(0);
+
+  expect(navigations).toHaveLength(navigationCount);
+  expect(responses).toHaveLength(0);
+  expect(
+    requests.filter((url) =>
+      /api\.congress\.gov|clerk\.house\.gov/.test(url),
+    ),
+  ).toEqual([]);
+  const surface = `${await page.locator("body").innerText()}\n${await page.content()}`;
+  expect(surface).not.toMatch(/resolutionToken|revision|e2e-federal-handoff-session-token/);
   await assertSafeSurface(page, requests);
 });
 
@@ -276,16 +390,20 @@ test("renders the GA-13 House and Senate roster equally and deterministically", 
       card.getByRole("link", { name: expected.name }),
     ).toHaveAttribute("href", `/officials/federal/${expected.bioguideId}`);
     await expect(
-      card.getByRole("link", { name: "Congress.gov member source" }),
+      card.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
     ).toHaveAttribute(
       "href",
-      `https://api.congress.gov/v3/member/${expected.bioguideId}?format=json`,
+      `https://bioguide.congress.gov/search/bio/${expected.bioguideId}`,
     );
   }
 
   const house = cards.nth(0);
   await expect(
-    house.getByRole("link", { name: "Congress.gov member source" }),
+    house.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
   ).toBeVisible();
   await expect(
     house.getByRole("link", {
@@ -397,6 +515,78 @@ async function installSessionCookie(
       value: encodeURIComponent(`${token}.${signature}`),
     },
   ]);
+}
+
+type ResolvedFederalResidence = Extract<
+  ResolutionOutcome,
+  { status: "matched" | "partial" }
+>;
+
+function federalResidence(
+  stateCode: "CA" | "GA",
+  district: number,
+): ResolvedFederalResidence {
+  const lower = stateCode.toLowerCase();
+  return {
+    status: "matched",
+    divisions: [
+      {
+        type: "state",
+        name: stateCode,
+        id: `ocd-division/country:us/state:${lower}`,
+        idScheme: "ocd",
+      },
+      {
+        type: "congressional_district",
+        name: `${stateCode} Congressional District ${district}`,
+        id: `ocd-division/country:us/state:${lower}/cd:${district}`,
+        idScheme: "ocd",
+      },
+    ],
+    source: {
+      name: "Deterministic E2E fixture",
+      url: "https://example.invalid/federal-fixture",
+      checkedAt: "2026-07-24T12:00:00.000Z",
+      effectiveAt: null,
+    },
+    coverageNotes: [],
+  };
+}
+
+function signedFederalResidenceResponse(
+  input: ResidenceInput,
+  resolution: ResolvedFederalResidence,
+  userId: string,
+): Extract<ResolutionResponse, { status: "matched" | "partial" }> {
+  return {
+    ...resolution,
+    ...createResolutionToken(
+      input,
+      resolution,
+      userId,
+      authSecret,
+      new Date(),
+    ),
+  };
+}
+
+async function saveResidence(page: Page, address: string) {
+  const input = page.getByLabel("Voting residence address");
+  await input.fill(address);
+  await page.getByRole("button", { name: "Check residence" }).click();
+  await expect(
+    page.locator(".residence-preview").getByRole("status"),
+  ).toHaveText("Residence matched. Review the divisions and source below.");
+  await page
+    .getByRole("checkbox", {
+      name:
+        "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.",
+    })
+    .check();
+  await page.getByRole("button", { name: "Save residence" }).click();
+  await expect(
+    page.locator(".residence-preview").getByRole("status"),
+  ).toHaveText(/Saved residence was (?:saved|replaced)\./);
 }
 
 function auditRequests(page: Page) {
