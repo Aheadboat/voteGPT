@@ -406,7 +406,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 - **R1 parallel lanes:** None. The RED test, binding policy, evidence, feature merge, and closeout merge form one ordered shared-state chain. Independent review is read-only and begins only after GREEN.
 
-## F4 — Consented Saved Residence [VERIFIED]
+## F4 — Consented Saved Residence [DONE]
 
 - **Outcome:** User explicitly saves one home for personalization and can delete it.
 - **Dependencies:** F3.
@@ -433,20 +433,20 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `VERIFIED`
+- **Phase:** `DONE`
 - **Branch:** `codex/f4-main-recovery`
 - **Base commit:** `4c5fd46106013fe3a104f20de4bfcf51f2508710`
-- **Integrated-main commit:** `3212eaa330012e0d0c12ecce248e44065ac59a2e`
+- **Integrated-main commit:** `26a40c04ae20931b39e1ec429860f2f5bbad6034`
 - **Admission result:** `CONDITIONAL` — both dependencies are complete and feature-local work is useful, but shared persistence, dashboard, configuration, and integrated-test surfaces require exclusive ownership and serialization.
 - **Assigned feature lead:** `f4_main_recovery_lead` — one fresh implementation subagent per approved task; dispatch begins only after the recovery-record PR merges and that merge is integrated into this branch.
 - **Ownership:** F4 exclusively owns these shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, `.github/workflows/ci.yml`, and the shared PostgreSQL schema/migration history until F4's closeout merge. F4 also exclusively owns its new residence-consent, encryption, persistence, account-control, and focused-test files. F4 exclusively owns the encryption-key configuration and the externally provisioned E2E-database marker resource. `src/auth.test.ts` is assigned only for the Task 4 environment-name regex correction; all other auth behavior remains frozen. `AGENTS.md`, `ROADMAP.md`, `README.md`, and `tests/foundation-contract.test.ts` remain coordinator-owned; other generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F4 feature PR → post-merge verification → F4 closeout PR/CI/merge. Only after the F4 closeout may F5 integrate current `main`, take the serialized shared-surface handoff, and approach Gate B.
-- **Feature PR/CI:** Feature PR #16 is open. Exact candidate code head `6093ee6938eaa65e031d0b4db4905aa638cae9fd` passed hosted CI run `29901178884`; every task and the whole branch have independent review with no unresolved Critical or Important finding. Current-head PR CI and GitHub mergeability remain required before Gate B.
-- **Blockers:** None. F4 is `VERIFIED`; feature PR creation, current-head CI/mergeability, and Human Gate B remain.
-- **Feature merge:** Not started.
-- **Post-merge evidence:** Not applicable before the feature merge.
-- **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F4 `DONE` on `main`.
-- **Next Human Gate:** Human Gate B after exact-head focused/full/PostgreSQL/browser verification, hosted CI, mergeability, and independent review.
+- **Feature PR/CI:** [PR #16](https://github.com/Aheadboat/voteGPT/pull/16) merged after both current-head CI checks passed and GitHub reported clean mergeability. Exact candidate code head `6093ee6938eaa65e031d0b4db4905aa638cae9fd` passed hosted CI run `29901178884`; every task and the whole branch had independent review with no unresolved Critical or Important finding. The user approved Human Gate B on 2026-07-24.
+- **Blockers:** None.
+- **Feature merge:** [PR #16](https://github.com/Aheadboat/voteGPT/pull/16) merged to `main` as `26a40c04ae20931b39e1ec429860f2f5bbad6034` on 2026-07-25 UTC; feature head `f70430fd9c177ca5052d1b80995e44c8283682ff` is reachable from `main`.
+- **Post-merge evidence:** A clean closeout worktree at exact merge `26a40c04ae20931b39e1ec429860f2f5bbad6034` passed 18 files/326 tests, Drizzle schema check, type generation and strict TypeScript, zero-warning lint, and production build.
+- **Closeout PR/CI/merge:** This docs-only `codex/f4-closeout` branch changes only `ROADMAP.md` and `README.md`; its PR, hosted CI, and merge provide final closeout proof.
+- **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
 ## F5 — Federal Officials [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
