@@ -30,7 +30,9 @@ test("serves a sourced federal profile anonymously from SSR", async ({
   expect(response?.status()).toBe(200);
   const html = await response!.text();
   expect(html).toContain("Georgia Representative");
-  expect(html).toContain("Congress.gov");
+  expect(html).toContain(
+    "Biographical Directory of the United States Congress",
+  );
   expect(html).toContain("Office of the Clerk");
   assertSafeFederalMarkup(html);
 
@@ -560,8 +562,8 @@ function federalResidence(
       },
     ],
     source: {
-      name: "Deterministic E2E fixture",
-      url: "https://example.invalid/federal-fixture",
+      name: "U.S. Census Geocoder",
+      url: "https://geocoding.geo.census.gov/geocoder/",
       checkedAt: checkedAt.toISOString(),
       effectiveAt: null,
     },
