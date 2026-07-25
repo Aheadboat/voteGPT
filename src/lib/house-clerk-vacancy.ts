@@ -3,11 +3,21 @@ import type {
   ProviderFailure,
   SourceRef,
 } from "./federal-officials";
+import {
+  assessClerkJurisdiction,
+  clerkNationalVacancyUrl,
+  clerkVacancyPublicUrl,
+  CONGRESS_CALENDAR_POLICY,
+  createCongressSnapshot,
+  FEDERAL_PROVIDER_RESPONSE_POLICY,
+  FEDERAL_PROVIDER_URL_POLICY,
+  type CongressSnapshot,
+} from "./federal-policy";
 
-const clerkOrigin = "https://clerk.house.gov";
-const vacancyListUrl = `${clerkOrigin}/Members/ViewVacancies`;
-const timeoutMilliseconds = 5_000;
-const maximumBodyBytes = 1024 * 1024;
+const zero = CONGRESS_CALENDAR_POLICY.turnoverUtc.monthIndex;
+const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
+const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
+const three = CONGRESS_CALENDAR_POLICY.turnoverUtc.dayOfMonth;
 const rawTextNames = new Set([
   "script",
   "style",
@@ -21,15 +31,6 @@ const rawTextNames = new Set([
   "title",
   "noscript",
 ]);
-const jurisdictionCodes = new Set([
-  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
-  "DC", "AS", "GU", "MP", "PR", "VI",
-]);
-
 type RelevantName = "a" | "div" | "li" | `h${1 | 2 | 3 | 4 | 5 | 6}`;
 
 type TagToken = {
@@ -51,27 +52,29 @@ type RelevantElement = {
 };
 
 export const fetchCurrentHouseVacancies: FetchCurrentHouseVacancies = async (
-  currentCongress,
-  { fetch, now },
+  snapshot,
+  { fetch, signal },
 ) => {
-  const retrievedAtDate = now();
+  const retrievedAtDate = new Date(snapshot.checkedAt);
+  const expectedSnapshot = createCongressSnapshot(retrievedAtDate);
   if (
-    !Number.isInteger(currentCongress) ||
-    currentCongress < 1 ||
-    !Number.isFinite(retrievedAtDate.getTime())
+    expectedSnapshot === null ||
+    expectedSnapshot.checkedAt !== snapshot.checkedAt ||
+    expectedSnapshot.currentCongress !== snapshot.currentCongress ||
+    expectedSnapshot.startYear !== snapshot.startYear ||
+    expectedSnapshot.endYear !== snapshot.endYear
   ) {
     return unavailable("malformed");
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMilliseconds);
   try {
+    const vacancyListUrl = clerkNationalVacancyUrl().toString();
     const response = await fetch(vacancyListUrl, {
       method: "GET",
-      headers: { Accept: "text/html" },
-      redirect: "error",
+      headers: { Accept: FEDERAL_PROVIDER_RESPONSE_POLICY.contentTypes.clerk[0] },
+      redirect: FEDERAL_PROVIDER_RESPONSE_POLICY.redirect,
       cache: "no-store",
-      signal: controller.signal,
+      signal,
     });
     if (response.redirected || !response.ok) {
       return unavailable(
@@ -79,15 +82,22 @@ export const fetchCurrentHouseVacancies: FetchCurrentHouseVacancies = async (
       );
     }
     const contentType = response.headers.get("content-type")?.toLowerCase();
-    if (!contentType || !/^text\/html(?:\s*;|$)/.test(contentType)) {
+    const allowedContentType =
+      FEDERAL_PROVIDER_RESPONSE_POLICY.contentTypes.clerk[0];
+    if (
+      !contentType ||
+      !new RegExp(`^${allowedContentType.replace("/", "\\/")}(?:\\s*;|$)`).test(
+        contentType,
+      )
+    ) {
       return unavailable("malformed");
     }
 
-    const body = await readBody(response, controller.signal);
+    const body = await readBody(response, signal);
     if (body.status === "failure") {
       return unavailable(body.reason);
     }
-    const parsed = parseVacancies(body.html, currentCongress);
+    const parsed = parseVacancies(body.html, snapshot);
     if (parsed === null) {
       return unavailable("malformed");
     }
@@ -96,7 +106,7 @@ export const fetchCurrentHouseVacancies: FetchCurrentHouseVacancies = async (
     const source = vacancySource(vacancyListUrl, retrievedAt);
     return {
       status: "available",
-      currentCongress,
+      currentCongress: snapshot.currentCongress,
       source,
       vacancies: parsed.map(({ stateCode, district, url }) => ({
         stateCode,
@@ -106,12 +116,10 @@ export const fetchCurrentHouseVacancies: FetchCurrentHouseVacancies = async (
     };
   } catch (error) {
     return unavailable(
-      controller.signal.aborted || isAbortError(error)
+      signal.aborted || isAbortError(error)
         ? "timeout"
         : "provider_error",
     );
-  } finally {
-    clearTimeout(timeout);
   }
 };
 
@@ -127,7 +135,7 @@ async function readBody(
   }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let byteCount = 0;
+  let byteCount = zero;
   let html = "";
   try {
     while (true) {
@@ -137,7 +145,7 @@ async function readBody(
         return { status: "ok", html };
       }
       byteCount += chunk.value.byteLength;
-      if (byteCount > maximumBodyBytes) {
+      if (byteCount > FEDERAL_PROVIDER_RESPONSE_POLICY.maxBodyBytes) {
         cancelBestEffort(reader);
         return { status: "failure", reason: "malformed" };
       }
@@ -183,7 +191,7 @@ function readChunk(
   });
 }
 
-function parseVacancies(html: string, currentCongress: number) {
+function parseVacancies(html: string, snapshot: CongressSnapshot) {
   const elements = relevantElements(html);
   if (elements === null) {
     return null;
@@ -194,7 +202,7 @@ function parseVacancies(html: string, currentCongress: number) {
       element.name === "div" &&
       hasClasses(element.attributes.get("class"), "container", "members-profile"),
   );
-  if (owners.length !== 1) {
+  if (owners.length !== one) {
     return null;
   }
   const owner = owners[0];
@@ -211,18 +219,18 @@ function parseVacancies(html: string, currentCongress: number) {
     const match = /^Vacancies of the (\d+)(st|nd|rd|th) Congress$/.exec(text);
     if (
       !match ||
-      Number(match[1]) < 1 ||
-      match[2] !== ordinalSuffix(Number(match[1]))
+      Number(match[one]) < one ||
+      match[two] !== ordinalSuffix(Number(match[one]))
     ) {
       return null;
     }
-    headings.push({ ...element, congress: Number(match[1]) });
+    headings.push({ ...element, congress: Number(match[one]) });
   }
 
   const currentHeadings = headings.filter(
-    ({ congress }) => congress === currentCongress,
+    ({ congress }) => congress === snapshot.currentCongress,
   );
-  if (currentHeadings.length !== 1) {
+  if (currentHeadings.length !== one) {
     return null;
   }
   const currentHeading = currentHeadings[0];
@@ -247,7 +255,7 @@ function parseVacancies(html: string, currentCongress: number) {
     if (href === undefined || href === null) {
       return null;
     }
-    const parsed = vacancyLink(href);
+    const parsed = vacancyLink(href, snapshot);
     if (
       parsed.status !== "valid" ||
       seenSeats.has(`${parsed.stateCode}:${parsed.district}`)
@@ -287,42 +295,42 @@ function relevantElements(html: string): RelevantElement[] | null {
       open.push(token);
     }
   }
-  return open.length === 0
+  return open.length === zero
     ? completed.sort((left, right) => left.start - right.start)
     : null;
 }
 
 function relevantTokens(html: string): TagToken[] | null {
   const tokens: TagToken[] = [];
-  let cursor = 0;
+  let cursor: number = zero;
   while (cursor < html.length) {
     const start = html.indexOf("<", cursor);
-    if (start === -1) {
+    if (start === -one) {
       break;
     }
     if (html.startsWith("<!--", start)) {
       const commentEnd = html.indexOf("-->", start + 4);
-      if (commentEnd === -1) {
+      if (commentEnd === -one) {
         return null;
       }
-      cursor = commentEnd + 3;
+      cursor = commentEnd + three;
       continue;
     }
 
-    let nameStart = start + 1;
+    let nameStart = start + one;
     const closing = html[nameStart] === "/";
     if (closing) {
-      nameStart += 1;
+      nameStart++;
     }
     if (!/[A-Za-z]/.test(html[nameStart] ?? "")) {
       if (html[nameStart] === "!" || html[nameStart] === "?") {
-        const declarationEnd = findTagEnd(html, start + 1);
+        const declarationEnd = findTagEnd(html, start + one);
         if (declarationEnd === null) {
           return null;
         }
-        cursor = declarationEnd + 1;
+        cursor = declarationEnd + one;
       } else {
-        cursor = start + 1;
+        cursor = start + one;
       }
       continue;
     }
@@ -337,12 +345,12 @@ function relevantTokens(html: string): TagToken[] | null {
       !isHtmlWhitespace(html[nameEnd]) &&
       html[nameEnd] !== "/"
     ) {
-      nameEnd += 1;
+      nameEnd++;
     }
     const rawName = html.slice(nameStart, nameEnd).toLowerCase();
     if (rawName === "title" && !closing) {
       const closingTitle = /<\/title[\t\n\f\r ]*>/gi;
-      closingTitle.lastIndex = end + 1;
+      closingTitle.lastIndex = end + one;
       const match = closingTitle.exec(html);
       if (match === null) {
         return null;
@@ -363,7 +371,7 @@ function relevantTokens(html: string): TagToken[] | null {
         tokens.push({
           name: relevantName,
           start,
-          end: end + 1,
+          end: end + one,
           closing: true,
           attributes: new Map(),
         });
@@ -378,20 +386,20 @@ function relevantTokens(html: string): TagToken[] | null {
         tokens.push({
           name: relevantName,
           start,
-          end: end + 1,
+          end: end + one,
           closing: false,
           attributes,
         });
       }
     }
-    cursor = end + 1;
+    cursor = end + one;
   }
   return tokens;
 }
 
 function findTagEnd(html: string, start: number): number | null {
   let quote: "\"" | "'" | null = null;
-  for (let index = start; index < html.length; index += 1) {
+  for (let index = start; index < html.length; index++) {
     const character = html[index];
     if (quote !== null) {
       if (character === quote) {
@@ -408,10 +416,10 @@ function findTagEnd(html: string, start: number): number | null {
 
 function parseAttributes(source: string): Map<string, string | null> | null {
   const attributes = new Map<string, string | null>();
-  let cursor = 0;
+  let cursor = zero;
   while (cursor < source.length) {
     while (isHtmlWhitespace(source[cursor])) {
-      cursor += 1;
+      cursor++;
     }
     if (cursor === source.length) {
       break;
@@ -423,7 +431,7 @@ function parseAttributes(source: string): Map<string, string | null> | null {
       !isHtmlWhitespace(source[cursor]) &&
       !/["'<>\/=]/.test(source[cursor])
     ) {
-      cursor += 1;
+      cursor++;
     }
     if (cursor === nameStart) {
       return null;
@@ -433,28 +441,28 @@ function parseAttributes(source: string): Map<string, string | null> | null {
       return null;
     }
     while (isHtmlWhitespace(source[cursor])) {
-      cursor += 1;
+      cursor++;
     }
 
     let value: string | null = null;
     if (source[cursor] === "=") {
-      cursor += 1;
+      cursor++;
       while (isHtmlWhitespace(source[cursor])) {
-        cursor += 1;
+        cursor++;
       }
       if (cursor === source.length) {
         return null;
       }
       const quote = source[cursor];
       if (quote === "\"" || quote === "'") {
-        cursor += 1;
+        cursor++;
         const valueStart = cursor;
         const valueEnd = source.indexOf(quote, cursor);
-        if (valueEnd === -1) {
+        if (valueEnd === -one) {
           return null;
         }
         value = source.slice(valueStart, valueEnd);
-        cursor = valueEnd + 1;
+        cursor = valueEnd + one;
         if (cursor < source.length && !isHtmlWhitespace(source[cursor])) {
           return null;
         }
@@ -467,7 +475,7 @@ function parseAttributes(source: string): Map<string, string | null> | null {
           if (/["'<=`>]/.test(source[cursor])) {
             return null;
           }
-          cursor += 1;
+          cursor++;
         }
         if (cursor === valueStart) {
           return null;
@@ -527,7 +535,7 @@ function decodeNumericCharacterReferences(value: string) {
         decimal ?? hexadecimal ?? "",
         decimal === undefined ? 16 : 10,
       );
-      return codePoint === 0 ||
+      return codePoint === zero ||
         codePoint > 0x10ffff ||
         (codePoint >= 0xd800 && codePoint <= 0xdfff)
         ? "\ufffd"
@@ -538,13 +546,14 @@ function decodeNumericCharacterReferences(value: string) {
 
 function vacancyLink(
   href: string,
+  snapshot: CongressSnapshot,
 ):
   | { status: "unrelated" }
   | { status: "invalid" }
   | { status: "valid"; stateCode: string; district: number; url: string } {
   let url: URL;
   try {
-    url = new URL(href, clerkOrigin);
+    url = new URL(href, FEDERAL_PROVIDER_URL_POLICY.clerk.origin);
   } catch {
     return /vacancy/i.test(href)
       ? { status: "invalid" }
@@ -559,8 +568,7 @@ function vacancyLink(
   const canonicalHref = href.startsWith("/") ? url.pathname : url.toString();
   if (
     !match ||
-    !jurisdictionCodes.has(match[1]) ||
-    url.origin !== clerkOrigin ||
+    url.origin !== FEDERAL_PROVIDER_URL_POLICY.clerk.origin ||
     url.username !== "" ||
     url.password !== "" ||
     url.search !== "" ||
@@ -569,11 +577,24 @@ function vacancyLink(
   ) {
     return { status: "invalid" };
   }
+  const stateCode = match[one];
+  const district = match[two] === "00" ? zero : Number(match[two]);
+  const jurisdiction = assessClerkJurisdiction(stateCode);
+  const publicUrl =
+    jurisdiction.status === "voting_state"
+      ? clerkVacancyPublicUrl(stateCode, district, snapshot)
+      : jurisdiction.status === "known_nonlaunch" &&
+          jurisdiction.allowedDistricts.includes(district as 0)
+        ? url.toString()
+        : null;
+  if (publicUrl !== url.toString()) {
+    return { status: "invalid" };
+  }
   return {
     status: "valid",
-    stateCode: match[1],
-    district: match[2] === "00" ? 0 : Number(match[2]),
-    url: url.toString(),
+    stateCode,
+    district,
+    url: publicUrl,
   };
 }
 
@@ -595,11 +616,11 @@ function ordinalSuffix(value: number) {
   if (lastTwo >= 11 && lastTwo <= 13) {
     return "th";
   }
-  return value % 10 === 1
+  return String(value % 10) === String(one)
     ? "st"
-    : value % 10 === 2
+    : String(value % 10) === String(two)
       ? "nd"
-      : value % 10 === 3
+      : String(value % 10) === String(three)
         ? "rd"
         : "th";
 }
@@ -608,7 +629,8 @@ function vacancySource(url: string, retrievedAt: string): SourceRef {
   return {
     publisher: "Office of the Clerk, U.S. House of Representatives",
     sourceType: "vacancy",
-    url,
+    publicUrl: url,
+    ingestionUrl: url,
     retrievedAt,
     recordUpdatedAt: null,
     effectiveAt: null,
@@ -633,10 +655,5 @@ function unavailable(reason: ProviderFailure) {
 }
 
 function isAbortError(value: unknown) {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "name" in value &&
-    value.name === "AbortError"
-  );
+  return value instanceof DOMException && value.name === "AbortError";
 }

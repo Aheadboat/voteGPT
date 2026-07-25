@@ -36,9 +36,10 @@ const term: Term = {
   status: "serving",
 };
 const source: SourceRef = {
-  publisher: "Congress.gov",
+  publisher: "Biographical Directory of the United States Congress",
   sourceType: "member",
-  url: "https://api.congress.gov/v3/member/H000001?format=json",
+  publicUrl: "https://bioguide.congress.gov/search/bio/H000001",
+  ingestionUrl: "https://api.congress.gov/v3/member/H000001?format=json",
   retrievedAt: checkedAt,
   recordUpdatedAt: "2026-07-15T00:00:00.000Z",
   effectiveAt: "2025-01-03T00:00:00.000Z",
@@ -46,14 +47,16 @@ const source: SourceRef = {
 const clerkListSource: SourceRef = {
   publisher: "Office of the Clerk, U.S. House of Representatives",
   sourceType: "vacancy",
-  url: "https://clerk.house.gov/Members/ViewVacancies",
+  publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+  ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
   retrievedAt: checkedAt,
   recordUpdatedAt: null,
   effectiveAt: null,
 };
 const clerkDistrictSource: SourceRef = {
   ...clerkListSource,
-  url: "https://clerk.house.gov/members/GA13/vacancy",
+  publicUrl: "https://clerk.house.gov/members/GA13/vacancy",
+  ingestionUrl: "https://clerk.house.gov/members/GA13/vacancy",
 };
 const freshness: Freshness = {
   checkedAt,
@@ -90,7 +93,8 @@ const senatorTerm: Term = {
 };
 const senatorSource: SourceRef = {
   ...source,
-  url: "https://api.congress.gov/v3/member/S000001?format=json",
+  publicUrl: "https://bioguide.congress.gov/search/bio/S000001",
+  ingestionUrl: "https://api.congress.gov/v3/member/S000001?format=json",
 };
 const senatorProfile: ProfileFixture = {
   person: senatorPerson,
@@ -136,13 +140,14 @@ const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
     { ...senatorProfile, sources: [senatorSource, clerkListSource] },
   ],
   [
-    "an unrelated Congress.gov member source",
+    "an unrelated biographical member source",
     {
       ...profile,
       sources: [
         {
           ...source,
-          url: "https://api.congress.gov/v3/member/OTHER?format=json",
+          publicUrl: "https://bioguide.congress.gov/search/bio/OTHER",
+          ingestionUrl: "https://api.congress.gov/v3/member/OTHER?format=json",
         },
       ],
     },
@@ -156,7 +161,8 @@ const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
           ...source,
           publisher: "Office of the Clerk, U.S. House of Representatives",
           sourceType: "vacancy",
-          url: "https://clerk.house.gov/Members/ViewVacancies",
+          publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+          ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
         },
       ],
     },
@@ -164,6 +170,44 @@ const invalidCurrentProfiles: Array<readonly [string, ProfileFixture]> = [
 ];
 
 describe("FederalProfile", () => {
+  it("renders publicUrl only and never serializes ingestionUrl", () => {
+    const publicUrl = "https://bioguide.congress.gov/search/bio/H000001";
+    const ingestionUrl =
+      "https://api.congress.gov/v3/member/H000001?format=json";
+    const publicProfile = {
+      ...profile,
+      sources: [
+        {
+          publisher:
+            "Biographical Directory of the United States Congress" as const,
+          sourceType: "member" as const,
+          publicUrl,
+          ingestionUrl,
+          retrievedAt: checkedAt,
+          recordUpdatedAt: "2026-07-15T00:00:00.000Z",
+          effectiveAt: "2025-01-03T00:00:00.000Z",
+        },
+        {
+          ...clerkListSource,
+          publicUrl: clerkListSource.publicUrl,
+          ingestionUrl: clerkListSource.ingestionUrl,
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <FederalProfile
+        result={{
+          status: "available",
+          profile: publicProfile as unknown as ProfileFixture,
+        }}
+      />,
+    );
+
+    expect(markup).toContain(`href="${publicUrl}"`);
+    expect(markup).not.toContain(ingestionUrl);
+  });
+
   it("server-renders only a verified current profile with adjacent source times", () => {
     const { container } = render(
       <FederalProfile result={{ status: "available", profile }} />,
@@ -181,15 +225,15 @@ describe("FederalProfile", () => {
     expect(within(article).getByText("2025–2027")).toBeInTheDocument();
 
     const link = within(article).getByRole("link", {
-      name: "Congress.gov member source",
+      name: "Biographical Directory of the United States Congress member source",
     });
-    expect(link).toHaveAttribute("href", source.url);
+    expect(link).toHaveAttribute("href", source.publicUrl);
     expect(link.tabIndex).toBe(0);
     expect(
       within(article).getByRole("link", {
         name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
       }),
-    ).toHaveAttribute("href", clerkListSource.url);
+    ).toHaveAttribute("href", clerkListSource.publicUrl);
     expect(
       within(article).getByRole("heading", {
         level: 2,
@@ -219,8 +263,10 @@ describe("FederalProfile", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Verified federal profile")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Congress.gov member source" }),
-    ).toHaveAttribute("href", senatorSource.url);
+      screen.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
+    ).toHaveAttribute("href", senatorSource.publicUrl);
   });
 
   it("shows stale-below-expiry profile facts with an explicit warning", () => {
@@ -242,7 +288,11 @@ describe("FederalProfile", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Alex House" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Congress.gov member source" })).toBeVisible();
+    expect(
+      screen.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
+    ).toBeVisible();
   });
 
   it("hides expired profile facts and keeps checked-time recovery evidence", () => {
@@ -277,7 +327,11 @@ describe("FederalProfile", () => {
     );
     expect(screen.queryByText("Alex House")).toBeNull();
     expect(screen.queryByText("U.S. Representative")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Congress.gov member source" })).toBeNull();
+    expect(
+      screen.queryByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
+    ).toBeNull();
   });
 
   it.each(invalidCurrentProfiles)("fails closed for %s", (_label, invalidProfile) => {

@@ -21,14 +21,16 @@ const fresh: Freshness = {
 const clerkSource: SourceRef = {
   publisher: "Office of the Clerk, U.S. House of Representatives",
   sourceType: "vacancy",
-  url: "https://clerk.house.gov/Members/ViewVacancies",
+  publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+  ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
   retrievedAt: checkedAt,
   recordUpdatedAt: null,
   effectiveAt: null,
 };
 const clerkDistrictSource: SourceRef = {
   ...clerkSource,
-  url: "https://clerk.house.gov/members/GA13/vacancy",
+  publicUrl: "https://clerk.house.gov/members/GA13/vacancy",
+  ingestionUrl: "https://clerk.house.gov/members/GA13/vacancy",
 };
 
 const houseMember = servingSeat("house", "Alex House", "H000001", 13);
@@ -168,7 +170,9 @@ describe("FederalOfficials", () => {
   it("publishes profiles only for seats with qualifying evidence", () => {
     const partialHouse: ServingSeat = {
       ...house,
-      sources: house.sources.filter(({ url }) => url !== clerkSource.url),
+      sources: house.sources.filter(
+        ({ publicUrl }) => publicUrl !== clerkSource.publicUrl,
+      ),
     };
     const { rerender } = render(
       <FederalOfficials result={{ status: "available", view }} />,
@@ -308,12 +312,12 @@ describe("FederalOfficials", () => {
       screen.getByRole("link", {
         name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
       }),
-    ).toHaveAttribute("href", clerkSource.url);
+    ).toHaveAttribute("href", clerkSource.publicUrl);
     expect(
       screen.getByRole("link", {
         name: "Office of the Clerk, U.S. House of Representatives district vacancy record source",
       }),
-    ).toHaveAttribute("href", clerkDistrictSource.url);
+    ).toHaveAttribute("href", clerkDistrictSource.publicUrl);
 
     rerender(<FederalOfficials result={{ status: "available", view: states[1] }} />);
     expect(
@@ -525,9 +529,10 @@ function servingSeat(
     },
     sources: [
       {
-        publisher: "Congress.gov",
+        publisher: "Biographical Directory of the United States Congress",
         sourceType: "member",
-        url: `https://api.congress.gov/v3/member/${bioguideId}`,
+        publicUrl: `https://bioguide.congress.gov/search/bio/${bioguideId}`,
+        ingestionUrl: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
         retrievedAt: checkedAt,
         recordUpdatedAt: "2026-07-15T00:00:00.000Z",
         effectiveAt: "2025-01-03T00:00:00.000Z",

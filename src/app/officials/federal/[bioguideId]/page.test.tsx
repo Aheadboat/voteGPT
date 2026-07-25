@@ -105,7 +105,9 @@ describe("public federal official profile page", () => {
     expect(screen.queryByText("U.S. Representative")).toBeNull();
     expect(screen.queryByText("GA District 13")).toBeNull();
     expect(
-      screen.queryByRole("link", { name: "Congress.gov member source" }),
+      screen.queryByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
     ).toBeNull();
     expect(createDatabase).not.toHaveBeenCalled();
     expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
@@ -137,11 +139,11 @@ describe("public federal official profile page", () => {
     expect(article).toHaveTextContent("Fresh at last check.");
 
     const sourceLink = within(article).getByRole("link", {
-      name: "Congress.gov member source",
+      name: "Biographical Directory of the United States Congress member source",
     });
     expect(sourceLink).toHaveAttribute(
       "href",
-      "https://api.congress.gov/v3/member/H000001?format=json",
+      "https://bioguide.congress.gov/search/bio/H000001",
     );
     expect(
       within(article).getByRole("link", {
@@ -193,7 +195,9 @@ describe("public federal official profile page", () => {
       screen.getByRole("heading", { level: 1, name: "Alex House" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Congress.gov member source" }),
+      screen.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
     ).toBeInTheDocument();
     expect(cacheRead).toHaveBeenCalledWith("profile:v2:H000001");
     expect(notFound).not.toHaveBeenCalled();
@@ -234,7 +238,9 @@ describe("public federal official profile page", () => {
     ).toHaveAttribute("href", "https://www.congress.gov/members");
     expect(screen.queryByText("Alex House")).toBeNull();
     expect(
-      screen.queryByRole("link", { name: "Congress.gov member source" }),
+      screen.queryByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
     ).toBeNull();
     expect(cacheRead).toHaveBeenCalledWith("profile:v2:H000001");
     expectNoProviderOrAuthWork();
@@ -309,9 +315,12 @@ function profileRecord(ageHours: number): FederalOfficialCacheRecord {
     },
     sources: [
       {
-        publisher: "Congress.gov" as const,
+        publisher:
+          "Biographical Directory of the United States Congress" as const,
         sourceType: "member" as const,
-        url: "https://api.congress.gov/v3/member/H000001?format=json",
+        publicUrl: "https://bioguide.congress.gov/search/bio/H000001",
+        ingestionUrl:
+          "https://api.congress.gov/v3/member/H000001?format=json",
         retrievedAt: retrievedAt.toISOString(),
         recordUpdatedAt: new Date(
           retrievedAt.getTime() - HOUR,
@@ -322,7 +331,8 @@ function profileRecord(ageHours: number): FederalOfficialCacheRecord {
         publisher:
           "Office of the Clerk, U.S. House of Representatives" as const,
         sourceType: "vacancy" as const,
-        url: "https://clerk.house.gov/Members/ViewVacancies",
+        publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+        ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
         retrievedAt: retrievedAt.toISOString(),
         recordUpdatedAt: null,
         effectiveAt: null,

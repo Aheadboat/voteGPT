@@ -5,12 +5,19 @@ import type {
   ProviderFailure,
   SourceRef,
 } from "./federal-officials";
-
-const apiOrigin = "https://api.congress.gov";
-const timeoutMilliseconds = 5_000;
-const maximumBodyBytes = 1024 * 1024;
-const firstCongressYear = 1789;
-const bioguidePattern = /^[A-Z]\d{6}$/;
+import {
+  bioguidePublicUrl,
+  canonicalCongressIngestionUrl,
+  CONGRESS_CALENDAR_POLICY,
+  congressCurrentUrl,
+  congressMemberDetailUrl,
+  congressStateMemberListUrl,
+  createCongressSnapshot,
+  FEDERAL_OFFICIAL_FIELD_POLICY,
+  FEDERAL_PROVIDER_RESPONSE_POLICY,
+  FEDERAL_PROVIDER_URL_POLICY,
+  isBioguideId,
+} from "./federal-policy";
 
 type JsonOutcome =
   | { status: "ok"; body: unknown }
@@ -33,16 +40,28 @@ type NormalizedMember = {
   updateDate: string;
 };
 
+const senateChamber =
+  FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.chambers[1] as
+    MemberSummary["chamber"];
+const zero = CONGRESS_CALENDAR_POLICY.turnoverUtc.monthIndex;
+const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
+const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
+
 export const fetchCongressRoster: FetchCongressRoster = async (
   jurisdiction,
-  { apiKey, fetch, now },
+  { apiKey, fetch, signal, snapshot },
 ) => {
-  const retrievedAtDate = now();
+  const retrievedAtDate = new Date(snapshot.checkedAt);
+  const expectedSnapshot = createCongressSnapshot(retrievedAtDate);
   if (
-    !Number.isFinite(retrievedAtDate.getTime()) ||
-    !/^[A-Z]{2}$/.test(jurisdiction.stateCode) ||
+    expectedSnapshot === null ||
+    expectedSnapshot.checkedAt !== snapshot.checkedAt ||
+    expectedSnapshot.currentCongress !== snapshot.currentCongress ||
+    expectedSnapshot.startYear !== snapshot.startYear ||
+    expectedSnapshot.endYear !== snapshot.endYear ||
+    !FEDERAL_OFFICIAL_FIELD_POLICY.stateCodePattern.test(jurisdiction.stateCode) ||
     !Number.isInteger(jurisdiction.district) ||
-    jurisdiction.district < 0 ||
+    jurisdiction.district < zero ||
     jurisdiction.district > 99
   ) {
     return unavailable("malformed");
@@ -52,9 +71,9 @@ export const fetchCongressRoster: FetchCongressRoster = async (
   }
 
   const retrievedAt = retrievedAtDate.toISOString();
-  const requestOptions = { apiKey, fetch };
+  const requestOptions = { apiKey, fetch, signal };
   const currentResponse = await requestJson(
-    apiUrl("/v3/congress/current", [["format", "json"]]),
+    congressCurrentUrl(apiKey),
     requestOptions,
   );
   if (currentResponse.status === "failure") {
@@ -65,65 +84,38 @@ export const fetchCongressRoster: FetchCongressRoster = async (
     currentResponse.body,
     retrievedAtDate,
   );
-  if (currentCongress === null) {
+  if (currentCongress !== snapshot.currentCongress) {
     return unavailable("malformed");
   }
 
-  const houseResponse = await requestJson(
-    apiUrl(
-      `/v3/member/congress/${currentCongress}/${jurisdiction.stateCode}/${jurisdiction.district}`,
-      [
-        ["currentMember", "true"],
-        ["format", "json"],
-      ],
-    ),
+  const stateResponse = await requestJson(
+    congressStateMemberListUrl(jurisdiction.stateCode, apiKey),
     requestOptions,
   );
-  if (houseResponse.status === "failure") {
-    return unavailable(houseResponse.reason);
-  }
-  const houseMembers = parseMemberList(
-    houseResponse.body,
-    retrievedAtDate,
-    currentCongress,
-  );
-  if (houseMembers === null) {
-    return unavailable("malformed");
-  }
-  const houseSummaries = houseMembers.filter(
-    ({ chamber }) => chamber === "House of Representatives",
-  );
-  if (
-    houseSummaries.length !== houseMembers.length ||
-    houseSummaries.length > 1 ||
-    houseSummaries.some(({ district }) => district !== jurisdiction.district)
-  ) {
-    return unavailable("malformed");
-  }
-
-  const senateResponse = await requestJson(
-    apiUrl(`/v3/member/${jurisdiction.stateCode}`, [
-      ["currentMember", "true"],
-      ["limit", "250"],
-      ["format", "json"],
-    ]),
-    requestOptions,
-  );
-  if (senateResponse.status === "failure") {
-    return unavailable(senateResponse.reason);
+  if (stateResponse.status === "failure") {
+    return unavailable(stateResponse.reason);
   }
   const stateMembers = parseMemberList(
-    senateResponse.body,
+    stateResponse.body,
     retrievedAtDate,
     currentCongress,
   );
   if (stateMembers === null) {
     return unavailable("malformed");
   }
+  const houseSummaries = stateMembers.filter(
+    ({ chamber }) => chamber === "House of Representatives",
+  ).filter(({ district }) => district === jurisdiction.district);
+  if (
+    houseSummaries.length > one
+  ) {
+    return unavailable("malformed");
+  }
+
   const senateSummaries = stateMembers.filter(
-    ({ chamber }) => chamber === "Senate",
+    ({ chamber }) => chamber === senateChamber,
   );
-  if (senateSummaries.length > 2) {
+  if (senateSummaries.length > two) {
     return unavailable("malformed");
   }
 
@@ -174,13 +166,14 @@ async function fetchMember(
   requestOptions: {
     apiKey: string;
     fetch: typeof globalThis.fetch;
+    signal: AbortSignal;
   },
 ): Promise<
   | { status: "ok"; seat: Extract<FederalSeat, { status: "serving" }> }
   | { status: "failure"; reason: ProviderFailure }
 > {
   const response = await requestJson(
-    apiUrl(`/v3/member/${summary.bioguideId}`, [["format", "json"]]),
+    congressMemberDetailUrl(summary.bioguideId, requestOptions.apiKey),
     requestOptions,
   );
   if (response.status === "failure") {
@@ -204,10 +197,16 @@ async function fetchMember(
       ? `federal:house:${jurisdiction.stateCode}:${jurisdiction.district}`
       : `federal:senate:${jurisdiction.stateCode}:${summary.bioguideId}`;
   const personId = `bioguide:${summary.bioguideId}` as const;
+  const publicUrl = bioguidePublicUrl(summary.bioguideId);
+  const ingestionUrl = canonicalCongressIngestionUrl(summary.url);
+  if (publicUrl === null || ingestionUrl === null) {
+    return { status: "failure", reason: "malformed" };
+  }
   const source: SourceRef = {
-    publisher: "Congress.gov",
+    publisher: "Biographical Directory of the United States Congress",
     sourceType: "member",
-    url: summary.url,
+    publicUrl,
+    ingestionUrl,
     retrievedAt,
     recordUpdatedAt: member.updateDate,
     effectiveAt: null,
@@ -244,57 +243,48 @@ async function fetchMember(
 
 async function requestJson(
   url: URL,
-  {
-    apiKey,
-    fetch,
-  }: { apiKey: string; fetch: typeof globalThis.fetch },
+  { fetch, signal }: { fetch: typeof globalThis.fetch; signal: AbortSignal },
 ): Promise<JsonOutcome> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMilliseconds);
   let response: Response;
   try {
     response = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "X-Api-Key": apiKey,
-      },
+      headers: { Accept: FEDERAL_PROVIDER_RESPONSE_POLICY.contentTypes.congress[0] },
       cache: "no-store",
-      redirect: "error",
-      signal: controller.signal,
+      redirect: FEDERAL_PROVIDER_RESPONSE_POLICY.redirect,
+      signal,
     });
   } catch (error) {
-    clearTimeout(timeout);
     return {
       status: "failure",
       reason:
-        controller.signal.aborted || isAbortError(error)
+        signal.aborted || isAbortError(error)
           ? "timeout"
           : "provider_error",
     };
   }
 
   if (!response.ok) {
-    clearTimeout(timeout);
     return { status: "failure", reason: failureFromStatus(response.status) };
   }
   const contentType = response.headers.get("content-type")?.toLowerCase();
-  if (!contentType?.startsWith("application/json")) {
-    clearTimeout(timeout);
+  if (
+    !contentType?.startsWith(
+      FEDERAL_PROVIDER_RESPONSE_POLICY.contentTypes.congress[0],
+    )
+  ) {
     return { status: "failure", reason: "malformed" };
   }
   try {
-    return await readJsonBody(response, controller.signal);
+    return await readJsonBody(response, signal);
   } catch (error) {
     return {
       status: "failure",
       reason:
-        controller.signal.aborted || isAbortError(error)
+        signal.aborted || isAbortError(error)
           ? "timeout"
           : "malformed",
     };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -306,7 +296,7 @@ async function readJsonBody(
   if (
     contentLength !== null &&
     /^\d+$/.test(contentLength) &&
-    Number(contentLength) > maximumBodyBytes
+    Number(contentLength) > FEDERAL_PROVIDER_RESPONSE_POLICY.maxBodyBytes
   ) {
     cancelResponseBestEffort(response);
     return { status: "failure", reason: "malformed" };
@@ -317,7 +307,7 @@ async function readJsonBody(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let byteCount = 0;
+  let byteCount = zero;
   let json = "";
   try {
     while (true) {
@@ -331,7 +321,7 @@ async function readJsonBody(
         }
       }
       byteCount += chunk.value.byteLength;
-      if (byteCount > maximumBodyBytes) {
+      if (byteCount > FEDERAL_PROVIDER_RESPONSE_POLICY.maxBodyBytes) {
         cancelReaderBestEffort(reader);
         return { status: "failure", reason: "malformed" };
       }
@@ -406,15 +396,12 @@ function parseCurrentCongress(body: unknown, retrievedAt: Date): number | null {
     typeof congress.endYear === "string" && /^\d{4}$/.test(congress.endYear)
       ? Number(congress.endYear)
       : null;
-  const expectedStartYear =
-    isSafePositiveInteger(number) && Number.isSafeInteger(1787 + 2 * number)
-      ? 1787 + 2 * number
-      : null;
+  const expectedSnapshot = createCongressSnapshot(retrievedAt);
   if (
-    expectedStartYear === null ||
-    startYear !== expectedStartYear ||
-    endYear !== startYear + 1 ||
-    congressAt(retrievedAt.getTime()) !== number ||
+    expectedSnapshot === null ||
+    startYear !== expectedSnapshot.startYear ||
+    endYear !== expectedSnapshot.endYear ||
+    expectedSnapshot.currentCongress !== number ||
     typeof congress.name !== "string" ||
     congress.name.trim() === "" ||
     !Array.isArray(congress.sessions) ||
@@ -448,7 +435,7 @@ function parseMemberList(
   const bioguideIds = new Set<string>();
   const houseSeats = new Set<string>();
   for (const value of body.members) {
-    if (!isRecord(value) || !bioguidePattern.test(String(value.bioguideId))) {
+    if (!isRecord(value) || !isBioguideId(String(value.bioguideId))) {
       return null;
     }
     const bioguideId = value.bioguideId as string;
@@ -465,7 +452,7 @@ function parseMemberList(
       value.state.trim() === "" ||
       !isRecord(value.terms) ||
       !Array.isArray(value.terms.item) ||
-      value.terms.item.length === 0 ||
+      value.terms.item.length === zero ||
       value.terms.item.length > 64 ||
       !value.terms.item.every(isSummaryTerm) ||
       !canonicalItemUrl(value.url, `/v3/member/${bioguideId}`)
@@ -484,17 +471,17 @@ function parseMemberList(
     if (
       (district !== null &&
         (!Number.isInteger(district) ||
-          (district as number) < 0 ||
+          (district as number) < zero ||
           (district as number) > 99))
     ) {
       return null;
     }
     const expectedChamber =
-      district === null ? "Senate" : "House of Representatives";
+      district === null ? senateChamber : "House of Representatives";
     const currentTerms = value.terms.item.filter((term) =>
       isCurrentSummaryTerm(term, expectedChamber, currentCongress),
     );
-    if (currentTerms.length !== 1) {
+    if (currentTerms.length !== one) {
       return null;
     }
     const chamber = expectedChamber;
@@ -537,7 +524,7 @@ function parseMemberDetail(
   }
   const member = body.member;
   const expectedChamber =
-    chamber === "house" ? "House of Representatives" : "Senate";
+    chamber === "house" ? "House of Representatives" : senateChamber;
   const expectedMemberType = chamber === "house" ? "Representative" : "Senator";
   const district =
     member.district === undefined || member.district === null
@@ -577,14 +564,18 @@ function parseMemberDetail(
         ? term.district === jurisdiction.district
         : term.district === undefined || term.district === null),
   );
-  if (currentTerms.length !== 1 || !isRecord(currentTerms[0])) {
+  if (currentTerms.length !== one || !isRecord(currentTerms[zero])) {
     return null;
   }
-  const term = currentTerms[0];
+  const term = currentTerms[zero];
   const endYear =
     term.endYear === undefined || term.endYear === null ? null : term.endYear;
-  const currentStartYear = 1787 + 2 * currentCongress;
-  const currentEndYear = currentStartYear + 1;
+  const currentSnapshot = createCongressSnapshot(retrievedAt);
+  if (currentSnapshot === null) {
+    return null;
+  }
+  const currentStartYear = currentSnapshot.startYear;
+  const currentEndYear = currentSnapshot.endYear;
   if (
     term.chamber !== expectedChamber ||
     term.memberType !== expectedMemberType ||
@@ -614,7 +605,8 @@ function parseMemberDetail(
 function isSummaryTerm(value: unknown) {
   return (
     isRecord(value) &&
-    (value.chamber === "House of Representatives" || value.chamber === "Senate") &&
+    (value.chamber === "House of Representatives" ||
+      value.chamber === senateChamber) &&
     validTermYears(value.startYear, value.endYear)
   );
 }
@@ -627,8 +619,14 @@ function isCurrentSummaryTerm(
   if (!isRecord(value) || value.chamber !== expectedChamber) {
     return false;
   }
-  const startYear = firstCongressYear + (currentCongress - 1) * 2;
-  const endYear = startYear + 1;
+  const startYear =
+    CONGRESS_CALENDAR_POLICY.epoch.startYearUtc +
+    (currentCongress - CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber) *
+      CONGRESS_CALENDAR_POLICY.termLengthYears;
+  const endYear =
+    startYear +
+    CONGRESS_CALENDAR_POLICY.termLengthYears -
+    CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
   return (
     (value.startYear as number) <= endYear &&
     (value.endYear === undefined ||
@@ -647,29 +645,15 @@ function validTermYears(startYear: unknown, endYear: unknown) {
 }
 
 function isSafePositiveInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) > 0;
-}
-
-function congressAt(time: number) {
-  if (!Number.isFinite(time)) {
-    return null;
-  }
-  const date = new Date(time);
-  let startYear = date.getUTCFullYear();
-  if (startYear % 2 === 0) {
-    startYear -= 1;
-  } else if (time < Date.UTC(startYear, 0, 3, 17)) {
-    startYear -= 2;
-  }
-  const congress = (startYear - firstCongressYear) / 2 + 1;
-  return isSafePositiveInteger(congress) ? congress : null;
+  return Number.isSafeInteger(value) && (value as number) > zero;
 }
 
 function validRequest(value: unknown) {
   return (
     isRecord(value) &&
-    value.contentType === "application/json" &&
-    value.format === "json"
+    value.contentType ===
+      FEDERAL_PROVIDER_RESPONSE_POLICY.contentTypes.congress[0] &&
+    value.format === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryValue
   );
 }
 
@@ -692,15 +676,17 @@ function canonicalItemUrl(value: unknown, expectedPath: string) {
     const url = new URL(value);
     const keys = [...url.searchParams.keys()];
     return (
-      url.origin === apiOrigin &&
+      url.origin === FEDERAL_PROVIDER_URL_POLICY.congress.origin &&
       url.pathname === expectedPath &&
       url.username === "" &&
       url.password === "" &&
       url.hash === "" &&
-      (keys.length === 0 ||
-        (keys.length === 1 &&
-          keys[0] === "format" &&
-          url.searchParams.get("format") === "json"))
+      (keys.length === zero ||
+        (keys.length === one &&
+          keys[zero] === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryName &&
+          url.searchParams.get(
+            FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryName,
+          ) === FEDERAL_PROVIDER_URL_POLICY.congress.formatQueryValue))
     );
   } catch {
     return false;
@@ -726,14 +712,6 @@ function timestamp(value: unknown, retrievedAt: Date): string | null {
   return normalized === expected && date.getTime() <= retrievedAt.getTime()
     ? normalized
     : null;
-}
-
-function apiUrl(path: string, parameters: readonly (readonly [string, string])[]) {
-  const url = new URL(path, apiOrigin);
-  for (const [name, value] of parameters) {
-    url.searchParams.set(name, value);
-  }
-  return url;
 }
 
 function failureFromStatus(status: number): ProviderFailure {

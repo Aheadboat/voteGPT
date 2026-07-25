@@ -9,6 +9,7 @@ import {
   vi,
 } from "vitest";
 import { fetchCurrentHouseVacancies } from "./house-clerk-vacancy";
+import { createCongressSnapshot } from "./federal-policy";
 import type {
   FetchCurrentHouseVacancies,
   HouseVacancyOutcome,
@@ -128,6 +129,20 @@ describe("House Clerk current-vacancy adapter", () => {
     ]);
   });
 
+  it("rejects invalid national Clerk evidence before selecting the requested state", async () => {
+    const invalidNationalEvidence = fixture.replace(
+      '<a href="/members/GA13/vacancy">Current vacancy</a>',
+      [
+        '<a href="/members/GA13/vacancy">Current vacancy</a>',
+        '<a href="/members/CA99/vacancy">Invalid national vacancy</a>',
+      ].join(""),
+    );
+
+    await expect(
+      lookup(vi.fn(async () => htmlResponse(invalidNationalEvidence))),
+    ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
   it.each([
     ["missing matching heading", fixture, 120],
     [
@@ -153,9 +168,9 @@ describe("House Clerk current-vacancy adapter", () => {
     ],
   ] as const)("fails closed on %s", async (_label, html, currentCongress) => {
     await expect(
-      fetchCurrentHouseVacancies(currentCongress, {
+      fetchCurrentHouseVacancies(snapshotForCongress(currentCongress), {
         fetch: vi.fn(async () => htmlResponse(html)),
-        now: () => now,
+        signal: new AbortController().signal,
       }),
     ).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
@@ -549,8 +564,8 @@ describe("House Clerk current-vacancy adapter", () => {
     expect(cancelled).toBe(true);
   });
 
-  it("applies the five-second timeout through the whole response body", async () => {
-    vi.useFakeTimers();
+  it("uses the shared abort signal through the whole response body", async () => {
+    const controller = new AbortController();
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -567,10 +582,10 @@ describe("House Clerk current-vacancy adapter", () => {
       }),
     );
 
-    const pending = lookup(providerFetch);
-    await vi.advanceTimersByTimeAsync(4_999);
+    const pending = lookup(providerFetch, controller.signal);
+    await Promise.resolve();
     expect(providerFetch).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(1);
+    controller.abort();
 
     await expect(pending).resolves.toEqual({
       status: "unavailable",
@@ -579,8 +594,8 @@ describe("House Clerk current-vacancy adapter", () => {
     expect(cancelled).toBe(true);
   });
 
-  it("returns timeout when stream cancellation never settles", async () => {
-    vi.useFakeTimers();
+  it("returns timeout from the shared signal when stream cancellation never settles", async () => {
+    const controller = new AbortController();
     let cancelled = false;
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -598,10 +613,10 @@ describe("House Clerk current-vacancy adapter", () => {
           headers: { "content-type": "text/html; charset=utf-8" },
         }),
       ),
+      controller.signal,
     );
 
-    await vi.advanceTimersByTimeAsync(5_000);
-    vi.useRealTimers();
+    controller.abort();
 
     await expect(settlesWithin(pending)).resolves.toEqual({
       status: "unavailable",
@@ -612,11 +627,26 @@ describe("House Clerk current-vacancy adapter", () => {
 
 });
 
-function lookup(providerFetch: typeof globalThis.fetch) {
-  return fetchCurrentHouseVacancies(119, {
+function lookup(
+  providerFetch: typeof globalThis.fetch,
+  signal = new AbortController().signal,
+) {
+  return fetchCurrentHouseVacancies(snapshotForCongress(119), {
     fetch: providerFetch,
-    now: () => now,
+    signal,
   });
+}
+
+function snapshotForCongress(currentCongress: number) {
+  const checkedAt =
+    currentCongress === 119
+      ? now
+      : new Date("2028-07-16T12:00:00.000Z");
+  const snapshot = createCongressSnapshot(checkedAt);
+  if (snapshot === null || snapshot.currentCongress !== currentCongress) {
+    throw new Error("Expected requested Congress snapshot.");
+  }
+  return snapshot;
 }
 
 function htmlResponse(body: string, status = 200) {
@@ -637,7 +667,8 @@ function vacancySource(url: string) {
   return {
     publisher: "Office of the Clerk, U.S. House of Representatives" as const,
     sourceType: "vacancy" as const,
-    url,
+    publicUrl: url,
+    ingestionUrl: url,
     retrievedAt: now.toISOString(),
     recordUpdatedAt: null,
     effectiveAt: null,

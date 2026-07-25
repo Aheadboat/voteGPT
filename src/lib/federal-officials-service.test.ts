@@ -20,9 +20,15 @@ import {
   type FederalJurisdiction,
   type FederalOfficialsRoster,
   type FederalSeat,
+  type FetchCongressRoster,
+  type FetchCurrentHouseVacancies,
   type HouseVacancyOutcome,
   type SourceRef,
 } from "./federal-officials";
+import {
+  createCongressSnapshot,
+  FEDERAL_REFRESH_DEADLINE_MS,
+} from "./federal-policy";
 
 // RED: this suite must first fail because the F5 cache/service module is absent.
 // The service receives normalized jurisdiction only; exact residence and identity
@@ -42,9 +48,10 @@ const jurisdiction: FederalJurisdiction = {
 };
 
 const memberSource: SourceRef = {
-  publisher: "Congress.gov",
+  publisher: "Biographical Directory of the United States Congress",
   sourceType: "member",
-  url: "https://api.congress.gov/v3/member/H000001?format=json",
+  publicUrl: "https://bioguide.congress.gov/search/bio/H000001",
+  ingestionUrl: "https://api.congress.gov/v3/member/H000001?format=json",
   retrievedAt: NOW.toISOString(),
   recordUpdatedAt: "2026-07-15T09:30:00.000Z",
   effectiveAt: null,
@@ -53,7 +60,8 @@ const memberSource: SourceRef = {
 const clerkSource: SourceRef = {
   publisher: "Office of the Clerk, U.S. House of Representatives",
   sourceType: "vacancy",
-  url: "https://clerk.house.gov/Members/ViewVacancies",
+  publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+  ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
   retrievedAt: NOW.toISOString(),
   recordUpdatedAt: null,
   effectiveAt: null,
@@ -109,6 +117,76 @@ describe("federal official cache service", () => {
     expect(readFileSync(".env.example", "utf8")).not.toMatch(
       /^NEXT_PUBLIC_CONGRESS_GOV_API_KEY=/mu,
     );
+  });
+
+  it("starts Congress and Clerk together with one snapshot and one deadline", async () => {
+    vi.useFakeTimers();
+    const cache = memoryCache();
+    let congressResolved = false;
+    let resolveCongress!: (outcome: CongressRosterOutcome) => void;
+    let resolveClerk!: (outcome: HouseVacancyOutcome) => void;
+    let congressOptions: unknown;
+    let clerkSnapshot: unknown;
+    let clerkOptions: unknown;
+    const fetchCongressRoster = vi.fn<FetchCongressRoster>(
+      async (_selected, providerOptions) => {
+        congressOptions = providerOptions;
+        return new Promise((resolve) => {
+          resolveCongress = resolve;
+        });
+      },
+    );
+    const fetchCurrentHouseVacancies = vi.fn<FetchCurrentHouseVacancies>(
+      async (snapshot, providerOptions) => {
+        clerkSnapshot = snapshot;
+        clerkOptions = providerOptions;
+        return new Promise((resolve) => {
+          resolveClerk = resolve;
+        });
+      },
+    );
+    const timeout = vi.spyOn(globalThis, "setTimeout");
+    const service = createFederalOfficialsService({
+      cache: cache.repository,
+      environment: { CONGRESS_GOV_API_KEY: API_KEY },
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+      fetchCongressRoster,
+      fetchCurrentHouseVacancies,
+      now: () => new Date(NOW),
+    });
+
+    const pending = service.getOfficials(jurisdiction);
+    await vi.advanceTimersByTimeAsync(0);
+    const clerkStartedBeforeCongressResolved =
+      !congressResolved && fetchCurrentHouseVacancies.mock.calls.length === 1;
+    const timerCountDuringRefresh = vi.getTimerCount();
+
+    congressResolved = true;
+    resolveCongress(availableCongress([], []));
+    await vi.advanceTimersByTimeAsync(0);
+    resolveClerk(availableClerk());
+    await pending;
+
+    const expectedSnapshot = createCongressSnapshot(NOW);
+    expect(expectedSnapshot).not.toBeNull();
+    expect(clerkStartedBeforeCongressResolved).toBe(true);
+    expect(congressOptions).toMatchObject({
+      snapshot: expectedSnapshot,
+      signal: expect.any(AbortSignal),
+    });
+    expect(clerkSnapshot).toBe(
+      (congressOptions as { snapshot: unknown }).snapshot,
+    );
+    expect((clerkOptions as { signal: AbortSignal }).signal).toBe(
+      (congressOptions as { signal: AbortSignal }).signal,
+    );
+    expect(timeout).toHaveBeenCalledTimes(1);
+    expect(timeout).toHaveBeenCalledWith(
+      expect.any(Function),
+      FEDERAL_REFRESH_DEADLINE_MS,
+    );
+    expect(timerCountDuringRefresh).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it.each([
@@ -190,7 +268,9 @@ describe("federal official cache service", () => {
       expect(harness.fetchCongressRoster).toHaveBeenCalledTimes(
         expectedRefreshes,
       );
-      expect(harness.fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+      expect(harness.fetchCurrentHouseVacancies).toHaveBeenCalledTimes(
+        expectedRefreshes,
+      );
       expect(cache.replacements).toEqual([]);
     },
   );
@@ -220,10 +300,15 @@ describe("federal official cache service", () => {
       },
     });
     expect(harness.fetchCurrentHouseVacancies).toHaveBeenCalledWith(
-      119,
+      {
+        checkedAt: NOW.toISOString(),
+        currentCongress: 119,
+        startYear: 2025,
+        endYear: 2026,
+      },
       expect.objectContaining({
         fetch: expect.any(Function),
-        now: expect.any(Function),
+        signal: expect.any(AbortSignal),
       }),
     );
     expect(harness.fetchCongressRoster).toHaveBeenCalledWith(
@@ -260,7 +345,8 @@ describe("federal official cache service", () => {
           district: 0,
           source: {
             ...clerkSource,
-            url: `https://clerk.house.gov/members/${stateCode}00/vacancy`,
+            publicUrl: `https://clerk.house.gov/members/${stateCode}00/vacancy`,
+            ingestionUrl: `https://clerk.house.gov/members/${stateCode}00/vacancy`,
           },
         }),
       ),
@@ -307,7 +393,8 @@ describe("federal official cache service", () => {
         district: 0,
         source: {
           ...clerkSource,
-          url: "https://clerk.house.gov/members/ZZ00/vacancy",
+          publicUrl: "https://clerk.house.gov/members/ZZ00/vacancy",
+          ingestionUrl: "https://clerk.house.gov/members/ZZ00/vacancy",
         },
       },
     ]);
@@ -434,7 +521,8 @@ describe("federal official cache service", () => {
           district: 13,
           source: {
             ...clerkSource,
-            url: "https://clerk.house.gov/members/GA13/vacancy",
+            publicUrl: "https://clerk.house.gov/members/GA13/vacancy",
+            ingestionUrl: "https://clerk.house.gov/members/GA13/vacancy",
           },
         },
       ]),
@@ -948,7 +1036,8 @@ function houseEvidenceCases(
           source: {
             ...clerkSource,
             retrievedAt: retrievedAt.toISOString(),
-            url: "https://clerk.house.gov/members/GA13/vacancy",
+            publicUrl: "https://clerk.house.gov/members/GA13/vacancy",
+            ingestionUrl: "https://clerk.house.gov/members/GA13/vacancy",
           },
         },
       ],
@@ -962,10 +1051,12 @@ function houseEvidenceCases(
     ({ sourceType }) => sourceType === "member",
   );
   const clerkListOnly = vacant.house.sources.filter(
-    ({ url }) => url === "https://clerk.house.gov/Members/ViewVacancies",
+    ({ publicUrl }) =>
+      publicUrl === "https://clerk.house.gov/Members/ViewVacancies",
   );
   const districtClerkOnly = vacant.house.sources.filter(
-    ({ url }) => url === "https://clerk.house.gov/members/GA13/vacancy",
+    ({ publicUrl }) =>
+      publicUrl === "https://clerk.house.gov/members/GA13/vacancy",
   );
 
   return [
@@ -1053,7 +1144,8 @@ function servingSeat(
         ...memberSource,
         retrievedAt: retrievedAt.toISOString(),
         recordUpdatedAt: new Date(retrievedAt.getTime() - HOUR).toISOString(),
-        url: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
+        publicUrl: `https://bioguide.congress.gov/search/bio/${bioguideId}`,
+        ingestionUrl: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
       },
     ],
   };
@@ -1129,7 +1221,9 @@ function invalidProfileCases() {
         sources: [
           {
             ...fresh.payload.sources[0],
-            url: "https://api.congress.gov/v3/member/X000001?format=json",
+            publicUrl: "https://bioguide.congress.gov/search/bio/X000001",
+            ingestionUrl:
+              "https://api.congress.gov/v3/member/X000001?format=json",
           },
         ],
       }),
@@ -1193,7 +1287,8 @@ function invalidProfileCases() {
           {
             ...clerkSource,
             retrievedAt: fresh.record.retrievedAt.toISOString(),
-            url: "https://clerk.house.gov/members/GA13/vacancy",
+            publicUrl: "https://clerk.house.gov/members/GA13/vacancy",
+            ingestionUrl: "https://clerk.house.gov/members/GA13/vacancy",
           },
         ],
       }),

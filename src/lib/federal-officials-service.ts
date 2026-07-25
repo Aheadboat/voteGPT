@@ -19,36 +19,38 @@ import {
   type SourceRef,
   type Term,
 } from "./federal-officials";
+import {
+  assessClerkJurisdiction,
+  bioguidePublicUrl,
+  canonicalCongressIngestionUrl,
+  clerkNationalVacancyUrl,
+  CONGRESS_CALENDAR_POLICY,
+  createCongressSnapshot,
+  FEDERAL_CACHE_POLICY,
+  FEDERAL_OFFICIAL_FIELD_POLICY,
+  FEDERAL_PROVIDER_URL_POLICY,
+  FEDERAL_REFRESH_DEADLINE_MS,
+  isBioguideId,
+  isCanonicalOfficialName,
+} from "./federal-policy";
+import { FEDERAL_CENSUS_DATA } from "./federal-policy.generated";
 
-const HOUR = 60 * 60 * 1_000;
-const REFRESH_AGE = 24 * HOUR;
-const STALE_AGE = 72 * HOUR;
-const bioguidePattern = /^[A-Z][0-9]{6}$/;
-const clerkListUrl = "https://clerk.house.gov/Members/ViewVacancies";
-const firstCongressYear = 1789;
-const supportedStateFips = new Map<string, string>([
-  ["AL", "01"], ["AK", "02"], ["AZ", "04"], ["AR", "05"],
-  ["CA", "06"], ["CO", "08"], ["CT", "09"], ["DE", "10"],
-  ["FL", "12"], ["GA", "13"], ["HI", "15"], ["ID", "16"],
-  ["IL", "17"], ["IN", "18"], ["IA", "19"], ["KS", "20"],
-  ["KY", "21"], ["LA", "22"], ["ME", "23"], ["MD", "24"],
-  ["MA", "25"], ["MI", "26"], ["MN", "27"], ["MS", "28"],
-  ["MO", "29"], ["MT", "30"], ["NE", "31"], ["NV", "32"],
-  ["NH", "33"], ["NJ", "34"], ["NM", "35"], ["NY", "36"],
-  ["NC", "37"], ["ND", "38"], ["OH", "39"], ["OK", "40"],
-  ["OR", "41"], ["PA", "42"], ["RI", "44"], ["SC", "45"],
-  ["SD", "46"], ["TN", "47"], ["TX", "48"], ["UT", "49"],
-  ["VT", "50"], ["VA", "51"], ["WA", "53"], ["WV", "54"],
-  ["WI", "55"], ["WY", "56"],
-]);
-const knownNonLaunchJurisdictions = new Set([
-  "AS",
-  "DC",
-  "GU",
-  "MP",
-  "PR",
-  "VI",
-]);
+const clerkListUrl = clerkNationalVacancyUrl().toString();
+const supportedStateFips = new Map<string, string>(
+  FEDERAL_CENSUS_DATA.votingStates.map(({ code, fips }) => [code, fips]),
+);
+const knownNonLaunchJurisdictions = new Set<string>(
+  FEDERAL_CENSUS_DATA.nonlaunchJurisdictions,
+);
+const congressCurrentKeys =
+  FEDERAL_OFFICIAL_FIELD_POLICY.congressCurrent.requiredKeys;
+const congressMemberKeys =
+  FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.requiredKeys;
+const clerkVacancyKeys =
+  FEDERAL_OFFICIAL_FIELD_POLICY.clerkVacancy.requiredKeys;
+const zero = FEDERAL_CACHE_POLICY.futureTimestampToleranceMs;
+const one = CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber;
+const two = CONGRESS_CALENDAR_POLICY.termLengthYears;
 
 export type FederalOfficialCacheKey =
   | `roster:v1:${string}:${string}`
@@ -118,7 +120,7 @@ export function createFederalOfficialCacheRepository(
         })
         .from(federalOfficialCache)
         .where(eq(federalOfficialCache.cacheKey, cacheKey))
-        .limit(1);
+        .limit(one);
       return record ?? null;
     },
 
@@ -142,7 +144,7 @@ export function createFederalOfficialCacheRepository(
           })
           .from(federalOfficialCache)
           .where(eq(federalOfficialCache.cacheKey, validated.roster.cacheKey))
-          .limit(1)
+          .limit(one)
           .for("update");
 
         let previousProfiles: readonly FederalProfileCachePayload[] = [];
@@ -384,7 +386,7 @@ export function createFederalOfficialsService(options: {
       bioguideId: string,
     ): Promise<FederalOfficialProfileResult> {
       const currentTime = finiteClock(options.now);
-      if (currentTime === null || !bioguidePattern.test(bioguideId)) {
+      if (currentTime === null || !isBioguideId(bioguideId)) {
         return unavailable();
       }
       const cacheKey = profileKey(bioguideId);
@@ -427,13 +429,30 @@ async function refreshRoster(
   currentTime: Date,
   apiKey: string,
 ): Promise<FederalOfficialsServiceResult | null> {
-  const stableNow = () => new Date(currentTime.getTime());
+  const snapshot = createCongressSnapshot(currentTime);
+  if (snapshot === null) {
+    return null;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    FEDERAL_REFRESH_DEADLINE_MS,
+  );
   try {
-    const congress = await options.fetchCongressRoster(jurisdiction, {
+    const congressPromise = options.fetchCongressRoster(jurisdiction, {
       apiKey,
       fetch: options.fetch,
-      now: stableNow,
+      signal: controller.signal,
+      snapshot,
     });
+    const clerkPromise = options.fetchCurrentHouseVacancies(snapshot, {
+      fetch: options.fetch,
+      signal: controller.signal,
+    });
+    const [congress, clerk] = await Promise.all([
+      congressPromise,
+      clerkPromise,
+    ]);
     const validCongress = validateCongressOutcome(
       congress,
       jurisdiction,
@@ -442,10 +461,6 @@ async function refreshRoster(
     if (validCongress === null) {
       return null;
     }
-    const clerk = await options.fetchCurrentHouseVacancies(
-      validCongress.currentCongress,
-      { fetch: options.fetch, now: stableNow },
-    );
     const validClerk = validateClerkOutcome(
       clerk,
       validCongress.currentCongress,
@@ -501,6 +516,8 @@ async function refreshRoster(
     return availableRoster(validatedRoster, "fresh");
   } catch {
     return null;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -647,7 +664,7 @@ function validateRosterRecord(
   const senateIds = senate.map((seat) =>
     seat.status === "serving" ? seat.person.bioguideId : "",
   );
-  if (senate.length > 2 || new Set(senateIds).size !== senateIds.length) {
+  if (senate.length > two || new Set(senateIds).size !== senateIds.length) {
     return null;
   }
   const coverage = validateCoverage(
@@ -676,7 +693,7 @@ function validateProfileRecord(
   now?: Date,
 ) {
   if (
-    !bioguidePattern.test(expectedBioguideId) ||
+    !isBioguideId(expectedBioguideId) ||
     !validateRecord(recordValue, expectedKey, now)
   ) {
     return null;
@@ -769,8 +786,10 @@ function validateRecord(
     !validDate(value.retrievedAt) ||
     !validDate(value.refreshAfter) ||
     !validDate(value.staleAfter) ||
-    value.refreshAfter.getTime() - value.retrievedAt.getTime() !== REFRESH_AGE ||
-    value.staleAfter.getTime() - value.retrievedAt.getTime() !== STALE_AGE ||
+    value.refreshAfter.getTime() - value.retrievedAt.getTime() !==
+      FEDERAL_CACHE_POLICY.refreshAgeMs ||
+    value.staleAfter.getTime() - value.retrievedAt.getTime() !==
+      FEDERAL_CACHE_POLICY.staleAgeMs ||
     (now !== undefined && value.retrievedAt.getTime() > now.getTime())
   ) {
     return false;
@@ -780,12 +799,16 @@ function validateRecord(
 
 function validateJurisdiction(value: unknown): FederalJurisdiction | null {
   if (
-    !isExactRecord(value, ["stateCode", "district", "divisionIds"]) ||
+    !isExactRecord(value, [
+      clerkVacancyKeys[0],
+      congressMemberKeys[3],
+      "divisionIds",
+    ]) ||
     typeof value.stateCode !== "string" ||
     !supportedStateFips.has(value.stateCode) ||
     !isDistrict(value.district) ||
     !Array.isArray(value.divisionIds) ||
-    value.divisionIds.length !== 2 ||
+    value.divisionIds.length !== two ||
     !value.divisionIds.every((id) => typeof id === "string")
   ) {
     return null;
@@ -938,14 +961,18 @@ function validateSeat(
 
 function validatePerson(value: unknown, expectedBioguideId?: string) {
   if (
-    !isExactRecord(value, ["id", "bioguideId", "name"]) ||
+    !isExactRecord(value, [
+      "id",
+      congressMemberKeys[0],
+      congressMemberKeys[1],
+    ]) ||
     typeof value.bioguideId !== "string" ||
-    !bioguidePattern.test(value.bioguideId) ||
+    !isBioguideId(value.bioguideId) ||
     (expectedBioguideId !== undefined &&
       value.bioguideId !== expectedBioguideId) ||
     value.id !== `bioguide:${value.bioguideId}` ||
     typeof value.name !== "string" ||
-    value.name.trim() === ""
+    !isCanonicalOfficialName(value.name)
   ) {
     return null;
   }
@@ -963,7 +990,13 @@ function validateOffice(
     chamber === "house" ? district : (bioguideId ?? "unknown")
   }`;
   if (
-    !isExactRecord(value, ["id", "chamber", "stateCode", "district", "title"]) ||
+    !isExactRecord(value, [
+      "id",
+      "chamber",
+      clerkVacancyKeys[0],
+      congressMemberKeys[3],
+      "title",
+    ]) ||
     value.id !== expectedId ||
     value.chamber !== chamber ||
     value.stateCode !== stateCode ||
@@ -989,8 +1022,8 @@ function validateTerm(
       "officeId",
       "personId",
       "congress",
-      "startYear",
-      "endYear",
+      congressCurrentKeys[1],
+      congressCurrentKeys[2],
       "status",
     ]) ||
     value.officeId !== officeId ||
@@ -1000,8 +1033,8 @@ function validateTerm(
     value.congress !== currentCongress ||
     !nullableYear(value.startYear) ||
     !nullableYear(value.endYear) ||
-    (typeof value.startYear === "number" &&
-      typeof value.endYear === "number" &&
+    (isNumber(value.startYear) &&
+      isNumber(value.endYear) &&
       value.endYear <= value.startYear) ||
     !isCurrentTermWindow(
       value.startYear,
@@ -1033,7 +1066,10 @@ function validateSources(
     }
     sources.push(source);
   }
-  const identities = sources.map(({ retrievedAt, url }) => `${url}:${retrievedAt}`);
+  const identities = sources.map(
+    ({ ingestionUrl, publicUrl, retrievedAt }) =>
+      `${publicUrl}:${ingestionUrl}:${retrievedAt}`,
+  );
   return new Set(identities).size === identities.length ? sources : null;
 }
 
@@ -1047,12 +1083,14 @@ function validateSource(
     !isExactRecord(value, [
       "publisher",
       "sourceType",
-      "url",
+      clerkVacancyKeys[2],
+      "ingestionUrl",
       "retrievedAt",
       "recordUpdatedAt",
       "effectiveAt",
     ]) ||
-    typeof value.url !== "string"
+    typeof value.publicUrl !== "string" ||
+    typeof value.ingestionUrl !== "string"
   ) {
     return null;
   }
@@ -1064,19 +1102,27 @@ function validateSource(
     retrievedAt !== maxTime ||
     recordUpdatedAt === false ||
     effectiveAt === false ||
-    (typeof recordUpdatedAt === "number" && recordUpdatedAt > retrievedAt) ||
-    (typeof effectiveAt === "number" && effectiveAt > retrievedAt)
+    (isNumber(recordUpdatedAt) && recordUpdatedAt > retrievedAt) ||
+    (isNumber(effectiveAt) && effectiveAt > retrievedAt)
   ) {
     return null;
   }
   if (value.sourceType === "member") {
+    const expectedPublicUrl =
+      bioguideId === null ? null : bioguidePublicUrl(bioguideId);
+    const canonicalIngestionUrl = canonicalCongressIngestionUrl(
+      value.ingestionUrl,
+    );
     if (
-      value.publisher !== "Congress.gov" ||
+      value.publisher !==
+        "Biographical Directory of the United States Congress" ||
       bioguideId === null ||
-      typeof recordUpdatedAt !== "number" ||
+      !isNumber(recordUpdatedAt) ||
       effectiveAt !== null ||
-      value.url !==
-        `https://api.congress.gov/v3/member/${bioguideId}?format=json`
+      value.publicUrl !== expectedPublicUrl ||
+      canonicalIngestionUrl === null ||
+      canonicalIngestionUrl !== value.ingestionUrl ||
+      !canonicalIngestionUrl.includes(bioguideId)
     ) {
       return null;
     }
@@ -1086,7 +1132,8 @@ function validateSource(
         "Office of the Clerk, U.S. House of Representatives" ||
       recordUpdatedAt !== null ||
       effectiveAt !== null ||
-      !validClerkUrl(value.url, office)
+      value.ingestionUrl !== value.publicUrl ||
+      !validClerkUrl(value.publicUrl, office)
     ) {
       return null;
     }
@@ -1120,9 +1167,9 @@ function validateCoverage(value: unknown, house: FederalSeat, senateCount: numbe
           ? value.house === "partial"
           : value.house === "unknown" || value.house === "partial";
   const validSenate =
-    senateCount === 2
+    senateCount === two
       ? value.senate === "verified"
-      : senateCount === 1
+      : senateCount === one
         ? value.senate === "partial"
         : value.senate === "unknown";
   return validHouse && validSenate
@@ -1214,7 +1261,7 @@ function validateClerkOutcome(
     return null;
   }
   const source = validateSource(value.source, now.getTime(), null, null);
-  if (source === null || source.url !== clerkListUrl) {
+  if (source === null || source.publicUrl !== clerkListUrl) {
     return null;
   }
   const vacancies: Array<{
@@ -1224,7 +1271,11 @@ function validateClerkOutcome(
   }> = [];
   for (const vacancy of value.vacancies) {
     if (
-      !isExactRecord(vacancy, ["stateCode", "district", "source"]) ||
+      !isExactRecord(vacancy, [
+        clerkVacancyKeys[0],
+        congressMemberKeys[3],
+        "source",
+      ]) ||
       typeof vacancy.stateCode !== "string" ||
       (!supportedStateFips.has(vacancy.stateCode) &&
         !knownNonLaunchJurisdictions.has(vacancy.stateCode)) ||
@@ -1245,7 +1296,7 @@ function validateClerkOutcome(
       null,
       office,
     );
-    if (vacancySource === null || vacancySource.url === clerkListUrl) {
+    if (vacancySource === null || vacancySource.publicUrl === clerkListUrl) {
       return null;
     }
     vacancies.push({
@@ -1273,15 +1324,32 @@ function validClerkUrl(url: string, office: Office | null) {
   if (!office || office.chamber !== "house" || office.district === null) {
     return false;
   }
+  const jurisdiction = assessClerkJurisdiction(office.stateCode);
+  const districtIsAllowed =
+    jurisdiction.status === "voting_state"
+      ? office.district <= jurisdiction.maximumDistrict &&
+        (jurisdiction.maximumDistrict === one
+          ? office.district === zero
+          : office.district > zero)
+      : jurisdiction.status === "known_nonlaunch" &&
+        jurisdiction.allowedDistricts.includes(office.district as 0);
+  if (!districtIsAllowed) {
+    return false;
+  }
   const district = String(office.district).padStart(2, "0");
-  return url ===
-    `https://clerk.house.gov/members/${office.stateCode}${district}/vacancy`;
+  return (
+    url ===
+    new URL(
+      `${FEDERAL_PROVIDER_URL_POLICY.clerk.vacancyPathPrefix}${office.stateCode}${district}${FEDERAL_PROVIDER_URL_POLICY.clerk.vacancyPathSuffix}`,
+      FEDERAL_PROVIDER_URL_POLICY.clerk.origin,
+    ).toString()
+  );
 }
 
 function hasClerkListEvidence(sources: readonly SourceRef[]) {
   return sources.some(
-    ({ sourceType, url }) =>
-      sourceType === "vacancy" && url === clerkListUrl,
+    ({ publicUrl, sourceType }) =>
+      sourceType === "vacancy" && publicUrl === clerkListUrl,
   );
 }
 
@@ -1290,24 +1358,24 @@ function hasClerkDistrictEvidence(
   office: Office,
 ) {
   return sources.some(
-    ({ sourceType, url }) =>
+    ({ publicUrl, sourceType }) =>
       sourceType === "vacancy" &&
-      url !== clerkListUrl &&
-      validClerkUrl(url, office),
+      publicUrl !== clerkListUrl &&
+      validClerkUrl(publicUrl, office),
   );
 }
 
 function isProfileEvidence(office: Office, sources: readonly SourceRef[]) {
   const memberUrl = office.id.startsWith("federal:senate:")
-    ? `https://api.congress.gov/v3/member/${office.id.split(":").at(-1)}?format=json`
+    ? bioguidePublicUrl(office.id.split(":").at(-1) ?? "")
     : null;
   const memberSources = sources.filter(
-    ({ publisher, sourceType, url }) =>
-      publisher === "Congress.gov" &&
+    ({ publicUrl, publisher, sourceType }) =>
+      publisher === "Biographical Directory of the United States Congress" &&
       sourceType === "member" &&
-      (memberUrl === null || url === memberUrl),
+      (memberUrl === null || publicUrl === memberUrl),
   );
-  if (memberSources.length === 0) {
+  if (memberSources.length === zero) {
     return false;
   }
   if (office.chamber === "senate") {
@@ -1372,8 +1440,12 @@ function record(
     cacheKey,
     payload,
     retrievedAt: new Date(retrievedAt),
-    refreshAfter: new Date(retrievedAt.getTime() + REFRESH_AGE),
-    staleAfter: new Date(retrievedAt.getTime() + STALE_AGE),
+    refreshAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.refreshAgeMs,
+    ),
+    staleAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.staleAgeMs,
+    ),
   };
 }
 
@@ -1404,7 +1476,7 @@ function freshness(
 
 function rosterKey(jurisdiction: FederalJurisdiction): FederalOfficialCacheKey {
   const district =
-    jurisdiction.district === 0
+    jurisdiction.district === zero
       ? "AL"
       : String(jurisdiction.district).padStart(2, "0");
   return `roster:v1:${jurisdiction.stateCode}:${district}`;
@@ -1419,11 +1491,14 @@ function parseRosterKey(value: string) {
   if (!match?.[1] || !match[2] || !supportedStateFips.has(match[1])) {
     return null;
   }
-  const district = match[2] === "AL" ? 0 : Number(match[2]);
-  if (!isDistrict(district) || (district === 0) !== (match[2] === "AL")) {
+  const district = match[two] === "AL" ? zero : Number(match[two]);
+  if (
+    !isDistrict(district) ||
+    (district === zero) !== (match[two] === "AL")
+  ) {
     return null;
   }
-  return { stateCode: match[1], district };
+  return { stateCode: match[one], district };
 }
 
 function sameTimes(
@@ -1483,35 +1558,28 @@ function nullableCanonicalTime(value: unknown): number | null | false {
 }
 
 function isDistrict(value: unknown): value is number {
-  return Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 99;
+  return (
+    Number.isInteger(value) &&
+    (value as number) >= zero &&
+    (value as number) <= 99
+  );
 }
 
 function nullableYear(value: unknown) {
   return (
     value === null ||
     (Number.isSafeInteger(value) &&
-      (value as number) >= firstCongressYear &&
+      (value as number) >= CONGRESS_CALENDAR_POLICY.epoch.startYearUtc &&
       (value as number) <= 9999)
   );
 }
 
 function isSafePositiveInteger(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) > 0;
+  return Number.isSafeInteger(value) && (value as number) > zero;
 }
 
 function congressAt(time: number) {
-  if (!Number.isFinite(time)) {
-    return null;
-  }
-  const date = new Date(time);
-  let startYear = date.getUTCFullYear();
-  if (startYear % 2 === 0) {
-    startYear -= 1;
-  } else if (time < Date.UTC(startYear, 0, 3, 17)) {
-    startYear -= 2;
-  }
-  const congress = (startYear - firstCongressYear) / 2 + 1;
-  return isSafePositiveInteger(congress) ? congress : null;
+  return createCongressSnapshot(new Date(time))?.currentCongress ?? null;
 }
 
 function isCurrentTermWindow(
@@ -1524,19 +1592,27 @@ function isCurrentTermWindow(
   if (status === "vacant") {
     return startYear === null && endYear === null;
   }
-  if (typeof startYear !== "number") {
+  if (!isNumber(startYear)) {
     return false;
   }
-  const congressStart = firstCongressYear + (currentCongress - 1) * 2;
-  const congressEnd = congressStart + 2;
+  const congressStart =
+    CONGRESS_CALENDAR_POLICY.epoch.startYearUtc +
+    (currentCongress - CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber) *
+      CONGRESS_CALENDAR_POLICY.termLengthYears;
+  const congressEnd =
+    congressStart + CONGRESS_CALENDAR_POLICY.termLengthYears;
   return (
     startYear < congressEnd &&
     (chamber === "senate" || startYear >= congressStart) &&
     (endYear === null ||
-      (typeof endYear === "number" &&
+      (isNumber(endYear) &&
         endYear > congressStart &&
-        endYear <= congressEnd + (chamber === "senate" ? 4 : 0)))
+        endYear <= congressEnd + (chamber === "senate" ? 4 : zero)))
   );
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === typeof FEDERAL_REFRESH_DEADLINE_MS;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -311,19 +311,23 @@ describe("signed-in dashboard", () => {
         article: /U\.S\. Representative.*Alex House/i,
         heading: /U\.S\. Representative.*District 13/i,
         sources: [
-          "Congress.gov member source",
+          "Biographical Directory of the United States Congress member source",
           "Office of the Clerk, U.S. House of Representatives current vacancies list source",
         ],
       },
       {
         article: /U\.S\. Senator.*Bailey Senate/i,
         heading: "U.S. Senator",
-        sources: ["Congress.gov member source"],
+        sources: [
+          "Biographical Directory of the United States Congress member source",
+        ],
       },
       {
         article: /U\.S\. Senator.*Casey Senate/i,
         heading: "U.S. Senator",
-        sources: ["Congress.gov member source"],
+        sources: [
+          "Biographical Directory of the United States Congress member source",
+        ],
       },
     ] as const;
 
@@ -459,9 +463,10 @@ function servingSeat(
     },
     sources: [
       {
-        publisher: "Congress.gov",
+        publisher: "Biographical Directory of the United States Congress",
         sourceType: "member",
-        url: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
+        publicUrl: `https://bioguide.congress.gov/search/bio/${bioguideId}`,
+        ingestionUrl: `https://api.congress.gov/v3/member/${bioguideId}?format=json`,
         retrievedAt: checkedAt,
         recordUpdatedAt: "2026-07-15T00:00:00.000Z",
         effectiveAt: "2025-01-03T00:00:00.000Z",
@@ -472,7 +477,8 @@ function servingSeat(
               publisher:
                 "Office of the Clerk, U.S. House of Representatives" as const,
               sourceType: "vacancy" as const,
-              url: "https://clerk.house.gov/Members/ViewVacancies",
+              publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+              ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
               retrievedAt: checkedAt,
               recordUpdatedAt: null,
               effectiveAt: null,

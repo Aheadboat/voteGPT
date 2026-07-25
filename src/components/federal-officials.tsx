@@ -189,12 +189,14 @@ function hasProfileEvidence(
   seat: Extract<FederalSeat, { status: "serving" }>,
 ) {
   const isMemberSource = (source: SourceRef) =>
-    source.publisher === "Congress.gov" && source.sourceType === "member";
+    source.publisher ===
+      "Biographical Directory of the United States Congress" &&
+    source.sourceType === "member";
   const isClerkListSource = (source: SourceRef) =>
     source.publisher ===
       "Office of the Clerk, U.S. House of Representatives" &&
     source.sourceType === "vacancy" &&
-    source.url === clerkListUrl;
+    source.publicUrl === clerkListUrl;
 
   if (!seat.sources.some(isMemberSource)) {
     return false;
@@ -220,8 +222,8 @@ function SourceEvidence({
       {sources.length > 0 ? (
         <ul>
           {sources.map((source) => (
-            <li key={`${source.url}:${source.retrievedAt}`}>
-              <a className={styles.sourceLink} href={source.url}>
+            <li key={`${source.publicUrl}:${source.retrievedAt}`}>
+              <a className={styles.sourceLink} href={source.publicUrl}>
                 {sourceLinkName(source)}
               </a>
               <span>
@@ -287,7 +289,8 @@ function sourceLinkName(source: SourceRef) {
   if (
     source.publisher === "Office of the Clerk, U.S. House of Representatives"
   ) {
-    const record = source.url === "https://clerk.house.gov/Members/ViewVacancies"
+    const record =
+      source.publicUrl === "https://clerk.house.gov/Members/ViewVacancies"
       ? "current vacancies list"
       : "district vacancy record";
     return `${source.publisher} ${record} source`;

@@ -58,9 +58,10 @@ const jurisdiction: FederalJurisdiction = {
 };
 
 const memberSource: SourceRef = {
-  publisher: "Congress.gov",
+  publisher: "Biographical Directory of the United States Congress",
   sourceType: "member",
-  url: "https://api.congress.gov/v3/member/H000001?format=json",
+  publicUrl: "https://bioguide.congress.gov/search/bio/H000001",
+  ingestionUrl: "https://api.congress.gov/v3/member/H000001?format=json",
   retrievedAt: "2026-07-16T12:00:00.000Z",
   recordUpdatedAt: "2026-07-15T09:30:00.000Z",
   effectiveAt: null,
@@ -69,7 +70,8 @@ const memberSource: SourceRef = {
 const clerkListSource: SourceRef = {
   publisher: "Office of the Clerk, U.S. House of Representatives",
   sourceType: "vacancy",
-  url: "https://clerk.house.gov/Members/ViewVacancies",
+  publicUrl: "https://clerk.house.gov/Members/ViewVacancies",
+  ingestionUrl: "https://clerk.house.gov/Members/ViewVacancies",
   retrievedAt: "2026-07-16T12:00:00.000Z",
   recordUpdatedAt: null,
   effectiveAt: null,
@@ -77,7 +79,8 @@ const clerkListSource: SourceRef = {
 
 const clerkSeatSource: SourceRef = {
   ...clerkListSource,
-  url: "https://clerk.house.gov/members/CA12/vacancy",
+  publicUrl: "https://clerk.house.gov/members/CA12/vacancy",
+  ingestionUrl: "https://clerk.house.gov/members/CA12/vacancy",
 };
 
 describe("strict federal jurisdiction", () => {
@@ -504,7 +507,8 @@ describe("federal roster reconciliation", () => {
   it("retains all matching Clerk provenance when Congress is unavailable", () => {
     const secondVacancySource: SourceRef = {
       ...clerkSeatSource,
-      url: "https://clerk.house.gov/members/CA12/vacancy-second-record",
+      publicUrl: "https://clerk.house.gov/members/CA12/vacancy-second-record",
+      ingestionUrl: "https://clerk.house.gov/members/CA12/vacancy-second-record",
     };
     const roster = reconcileFederalOfficials(
       jurisdiction,
@@ -527,11 +531,13 @@ describe("federal roster reconciliation", () => {
   it("retains deduplicated provenance from ambiguous House candidates and Clerk matches", () => {
     const secondMemberSource: SourceRef = {
       ...memberSource,
-      url: "https://api.congress.gov/v3/member/H000002?format=json",
+      publicUrl: "https://bioguide.congress.gov/search/bio/H000002",
+      ingestionUrl: "https://api.congress.gov/v3/member/H000002?format=json",
     };
     const secondVacancySource: SourceRef = {
       ...clerkSeatSource,
-      url: "https://clerk.house.gov/members/CA12/vacancy-second-record",
+      publicUrl: "https://clerk.house.gov/members/CA12/vacancy-second-record",
+      ingestionUrl: "https://clerk.house.gov/members/CA12/vacancy-second-record",
     };
     const firstCandidate = servingSeat("house", "H000001", 12);
     const secondCandidate: Extract<FederalSeat, { status: "serving" }> = {
@@ -566,12 +572,20 @@ describe("federal roster reconciliation", () => {
         {
           stateCode: "CA",
           district: 11,
-          source: { ...clerkSeatSource, url: "https://clerk.house.gov/members/CA11/vacancy" },
+          source: {
+            ...clerkSeatSource,
+            publicUrl: "https://clerk.house.gov/members/CA11/vacancy",
+            ingestionUrl: "https://clerk.house.gov/members/CA11/vacancy",
+          },
         },
         {
           stateCode: "OR",
           district: 12,
-          source: { ...clerkSeatSource, url: "https://clerk.house.gov/members/OR12/vacancy" },
+          source: {
+            ...clerkSeatSource,
+            publicUrl: "https://clerk.house.gov/members/OR12/vacancy",
+            ingestionUrl: "https://clerk.house.gov/members/OR12/vacancy",
+          },
         },
       ]),
     );
@@ -587,7 +601,8 @@ describe("federal roster reconciliation", () => {
     };
     const atLargeSource: SourceRef = {
       ...clerkSeatSource,
-      url: "https://clerk.house.gov/members/AK00/vacancy",
+      publicUrl: "https://clerk.house.gov/members/AK00/vacancy",
+      ingestionUrl: "https://clerk.house.gov/members/AK00/vacancy",
     };
     const atLarge = reconcileFederalOfficials(
       atLargeJurisdiction,

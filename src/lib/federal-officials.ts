@@ -3,6 +3,7 @@ import {
   assessCensusDistrict,
   assessClerkJurisdiction,
   createCongressSnapshot,
+  FEDERAL_OFFICIAL_FIELD_POLICY,
   isCensusCongressInEffectiveRange,
   type CongressSnapshot,
 } from "./federal-policy";
@@ -34,10 +35,11 @@ export type FederalJurisdictionResult =
 
 export type SourceRef = Readonly<{
   publisher:
-    | "Congress.gov"
+    | "Biographical Directory of the United States Congress"
     | "Office of the Clerk, U.S. House of Representatives";
   sourceType: "member" | "vacancy";
-  url: string;
+  publicUrl: string;
+  ingestionUrl: string;
   retrievedAt: string;
   recordUpdatedAt: string | null;
   effectiveAt: string | null;
@@ -148,13 +150,14 @@ export type FetchCongressRoster = (
   options: {
     apiKey: string;
     fetch: typeof globalThis.fetch;
-    now: () => Date;
+    snapshot: CongressSnapshot;
+    signal: AbortSignal;
   },
 ) => Promise<CongressRosterOutcome>;
 
 export type FetchCurrentHouseVacancies = (
-  currentCongress: number,
-  options: { fetch: typeof globalThis.fetch; now: () => Date },
+  snapshot: CongressSnapshot,
+  options: { fetch: typeof globalThis.fetch; signal: AbortSignal },
 ) => Promise<HouseVacancyOutcome>;
 
 const codeByFips: ReadonlyMap<string, string> = new Map(
@@ -189,7 +192,9 @@ export function federalJurisdictionFromDivisions(
     return { status: "invalid" };
   }
 
-  const states = divisions.filter(({ type }) => type === "state");
+  const stateDivisionType =
+    FEDERAL_OFFICIAL_FIELD_POLICY.congressMember.requiredKeys[2];
+  const states = divisions.filter(({ type }) => type === stateDivisionType);
   const districts = divisions.filter(
     ({ type }) => type === "congressional_district",
   );
@@ -404,7 +409,8 @@ function deduplicateSources(sources: readonly SourceRef[]): readonly SourceRef[]
         (candidate) =>
           candidate.publisher === source.publisher &&
           candidate.sourceType === source.sourceType &&
-          candidate.url === source.url &&
+          candidate.ingestionUrl === source.ingestionUrl &&
+          candidate.publicUrl === source.publicUrl &&
           candidate.retrievedAt === source.retrievedAt &&
           candidate.recordUpdatedAt === source.recordUpdatedAt &&
           candidate.effectiveAt === source.effectiveAt,

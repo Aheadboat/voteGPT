@@ -5,11 +5,16 @@ import type {
   SourceRef,
   Term,
 } from "@/lib/federal-officials";
+import {
+  bioguidePublicUrl,
+  clerkNationalVacancyUrl,
+  CONGRESS_CALENDAR_POLICY,
+  createCongressSnapshot,
+} from "@/lib/federal-policy";
 
 import styles from "./federal-officials.module.css";
 
-const clerkListUrl = "https://clerk.house.gov/Members/ViewVacancies";
-const firstCongressYear = 1789;
+const clerkListUrl = clerkNationalVacancyUrl().toString();
 
 type CurrentProfile = Readonly<{
   person: Person;
@@ -86,8 +91,8 @@ export function FederalProfile({ result }: { result: FederalProfileResult }) {
         <h2>Sources and retrieval times</h2>
         <ul>
           {profile.sources.map((source) => (
-            <li key={`${source.url}:${source.retrievedAt}`}>
-              <a className={styles.sourceLink} href={source.url}>
+            <li key={`${source.publicUrl}:${source.retrievedAt}`}>
+              <a className={styles.sourceLink} href={source.publicUrl}>
                 {sourceLinkName(source)}
               </a>
               <span>
@@ -138,18 +143,19 @@ function ProfileRecovery({
 
 function isCurrentProfile(profile: CurrentProfile) {
   const checkedAt = Date.parse(profile.freshness.checkedAt);
-  const currentCongress = congressAt(checkedAt);
-  const memberUrl =
-    `https://api.congress.gov/v3/member/${profile.person.bioguideId}?format=json`;
+  const currentCongress =
+    createCongressSnapshot(new Date(checkedAt))?.currentCongress ?? null;
+  const memberUrl = bioguidePublicUrl(profile.person.bioguideId);
   const isMemberSource = (source: SourceRef) =>
-    source.publisher === "Congress.gov" &&
+    source.publisher ===
+      "Biographical Directory of the United States Congress" &&
     source.sourceType === "member" &&
-    source.url === memberUrl;
+    source.publicUrl === memberUrl;
   const isClerkListSource = (source: SourceRef) =>
     source.publisher ===
       "Office of the Clerk, U.S. House of Representatives" &&
     source.sourceType === "vacancy" &&
-    source.url === clerkListUrl;
+    source.publicUrl === clerkListUrl;
   const validSources =
     profile.office.chamber === "house"
       ? profile.sources.some(isMemberSource) &&
@@ -176,21 +182,6 @@ function isCurrentProfile(profile: CurrentProfile) {
   );
 }
 
-function congressAt(time: number) {
-  if (!Number.isFinite(time)) {
-    return null;
-  }
-  const date = new Date(time);
-  let startYear = date.getUTCFullYear();
-  if (startYear % 2 === 0) {
-    startYear -= 1;
-  } else if (time < Date.UTC(startYear, 0, 3, 17)) {
-    startYear -= 2;
-  }
-  const congress = (startYear - firstCongressYear) / 2 + 1;
-  return Number.isSafeInteger(congress) && congress > 0 ? congress : null;
-}
-
 function validCurrentTerm(
   term: Term,
   chamber: "house" | "senate",
@@ -204,10 +195,15 @@ function validCurrentTerm(
   ) {
     return false;
   }
-  const congressStart = firstCongressYear + (currentCongress - 1) * 2;
-  const congressEnd = congressStart + 2;
+  const congressStart =
+    CONGRESS_CALENDAR_POLICY.epoch.startYearUtc +
+    (currentCongress - CONGRESS_CALENDAR_POLICY.epoch.firstCongressNumber) *
+      CONGRESS_CALENDAR_POLICY.termLengthYears;
+  const congressEnd =
+    congressStart + CONGRESS_CALENDAR_POLICY.termLengthYears;
   return (
-    (term.startYear as number) >= firstCongressYear &&
+    (term.startYear as number) >=
+      CONGRESS_CALENDAR_POLICY.epoch.startYearUtc &&
     (term.startYear as number) < congressEnd &&
     (chamber === "senate" || (term.startYear as number) >= congressStart) &&
     (term.endYear === null ||
@@ -221,7 +217,7 @@ function sourceLinkName(source: SourceRef) {
   if (
     source.publisher === "Office of the Clerk, U.S. House of Representatives"
   ) {
-    const record = source.url === "https://clerk.house.gov/Members/ViewVacancies"
+    const record = source.publicUrl === clerkListUrl
       ? "current vacancies list"
       : "district vacancy record";
     return `${source.publisher} ${record} source`;
