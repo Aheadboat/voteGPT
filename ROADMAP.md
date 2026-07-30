@@ -448,7 +448,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #17](https://github.com/Aheadboat/voteGPT/pull/17) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## F5 — Federal Officials [VERIFIED]
+## F5 — Federal Officials [DONE]
 
 - **Outcome:** User sees current House and Senate officials with provenance and freshness.
 - **Dependencies:** F3.
@@ -472,7 +472,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `VERIFIED`
+- **Phase:** `DONE`
 - **Branch:** `codex/f5-main-recovery` — current with the completed F4 closeout and ready for the approved task graph.
 - **Base commit:** `4c5fd46106013fe3a104f20de4bfcf51f2508710`
 - **Integrated-main commit:** `b22f152a8dc719bbffa7295456ba218351821f76`
@@ -480,12 +480,12 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** `f5_main_recovery_lead` — one fresh implementation subagent per approved task, with separate independent review after each task.
 - **Ownership:** F5 exclusively owns new federal-only domain, fixture, Congress.gov adapter, source/freshness, public-profile route/component/module-style, and focused-test files. F5 exclusively owns the Congress.gov request/configuration external resource. F5 defers these F4-owned shared surfaces: `src/db/schema.ts`, `src/db/index.ts`, `drizzle/**`, `drizzle.config.ts`, `src/db/index.test.ts`, `integration/postgres-auth.test.ts`, `e2e/seed-session.mjs`, `src/lib/residence.ts`, `src/lib/account.test.ts`, `src/components/residence-preview.tsx`, `src/components/residence-preview.test.tsx`, `src/components/account-controls.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/page.test.tsx`, `src/app/identity-shell.test.tsx`, `src/app/globals.css`, `e2e/residence.spec.ts`, `.env.example`, `package.json`, `package-lock.json`, `next.config.ts`, `vitest.config.mts`, `vitest.postgres.config.mts`, `playwright.config.ts`, and the shared PostgreSQL schema/migration history until F4's closeout merge. That closeout is now integrated, so F5 accepts only the shared surfaces explicitly named by its approved tasks; the shared CI configuration and generated artifacts remain frozen unless a new coordinator record assigns them.
 - **Merge order:** F5 remains active in isolated lanes but cannot reach Gate B until it integrates completed F4 from `main` after the F4 closeout. It then accepts the coordinator-recorded shared-surface handoff, completes deferred cache/dashboard/runtime integration, and reruns focused, database, full, E2E, review, and hosted-CI gates; only then may approach Gate B. Its feature PR, post-merge verification, and closeout follow F4's completed sequence.
-- **Feature PR/CI:** [PR #18](https://github.com/Aheadboat/voteGPT/pull/18) is open and non-draft. Exact code head `b091a04193c6fd90db87ef17f88afb43181c74a1` passed hosted run `30148324094`; both push and pull-request checks passed on VERIFIED head `a09281a5286ff5ca19ea2479a6c842de5692b15e`, and GitHub reported `CLEAN` and `MERGEABLE`. This coordinator PR-state record becomes the candidate head and must receive the same current-head checks before Gate B. Historical staging PRs and CI are evidence only.
+- **Feature PR/CI:** [PR #18](https://github.com/Aheadboat/voteGPT/pull/18) merged after both push and pull-request checks passed on exact feature head `fc72df06d592cb8b13928d9ac0d3174410c926ce`, GitHub reported `CLEAN` and `MERGEABLE`, and the user approved Human Gate B on 2026-07-30. Historical staging PRs and CI are evidence only.
 - **Blockers:** None.
-- **Feature merge:** Not started.
-- **Post-merge evidence:** Not applicable before the feature merge.
-- **Closeout PR/CI/merge:** Not started; this slot remains active until the closeout merge places F5 `DONE` on `main`.
-- **Next Human Gate:** Human Gate B after PR #18's coordinator PR-state head passes both current-head checks and remains cleanly mergeable.
+- **Feature merge:** [PR #18](https://github.com/Aheadboat/voteGPT/pull/18) merged to `main` as `6ed1edef7b2579cd4c0d16e1b3802da71b7c93e7`.
+- **Post-merge evidence:** Feature head `fc72df06d592cb8b13928d9ac0d3174410c926ce` is reachable from `origin/main`, the merge tree matches the verified candidate, the delayed local replay passed 734/734 tests, and exact-main hosted run `30585623322` passed migrations, every PostgreSQL contract, non-E2E verification, and all guarded Chromium journeys.
+- **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
+- **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
 ## R2 — Repository Context and Hygiene Contract [TODO]
 

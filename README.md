@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, and F4 — Consented Saved Residence are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. The recovery began with this recorded state: F4 and F5 remain active under approved lean recovery plans. F4 is now complete; F5 remains active and may integrate the completed F4 handoff. R2 is queued as the next roadmap step after F4 and F5 are `DONE`; it remains TODO and inactive pending a fresh audit and explicit activation. F6 and every later product item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 is queued as the next roadmap step after F4 and F5 are `DONE`; it remains TODO and inactive pending a fresh audit and explicit activation. F6 and every later product item remain TODO pending separate authorization.
 
 ## Local identity setup
 
