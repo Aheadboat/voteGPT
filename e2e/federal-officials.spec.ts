@@ -1,0 +1,706 @@
+import { createHmac, randomUUID } from "node:crypto";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import {
+  createResolutionToken,
+  type ResidenceInput,
+  type ResolutionOutcome,
+  type ResolutionResponse,
+} from "../src/lib/residence";
+import {
+  FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS,
+  FEDERAL_PROVIDER_HOSTS,
+  bioguidePublicUrl,
+} from "../src/lib/federal-policy";
+
+const baseURL = "http://127.0.0.1:3000";
+const authSecret = "e2e-secret-at-least-thirty-two-characters";
+
+test("serves a sourced federal profile anonymously from SSR", async ({
+  page,
+}) => {
+  const requests = auditRequests(page);
+  const response = await page.goto("/officials/federal/H000001");
+
+  expect(response?.status()).toBe(200);
+  const html = await response!.text();
+  expect(html).toContain("Georgia Representative");
+  expect(html).toContain(
+    "Biographical Directory of the United States Congress",
+  );
+  expect(html).toContain("Office of the Clerk");
+  assertSafeFederalMarkup(html);
+
+  const profile = page.getByRole("article", {
+    name: /Georgia Representative.*U\.S\. Representative/,
+  });
+  await expect(profile).toBeVisible();
+  await expect(
+    profile.getByRole("heading", { level: 1, name: "Georgia Representative" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(profile.getByText("Fresh at last check.")).toBeVisible();
+
+  const sources = profile.getByRole("region", { name: "Profile sources" });
+  await expect(
+    sources.getByRole("heading", {
+      level: 2,
+      name: "Sources and retrieval times",
+    }),
+  ).toBeVisible();
+  const congress = sources.getByRole("link", {
+    name: "Biographical Directory of the United States Congress member source",
+  });
+  const clerk = sources.getByRole("link", {
+    name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+  });
+  await expect(congress).toHaveAttribute(
+    "href",
+    "https://bioguide.congress.gov/search/bio/H000001",
+  );
+  await expect(clerk).toHaveAttribute(
+    "href",
+    "https://clerk.house.gov/Members/ViewVacancies",
+  );
+  await expect(sources.getByText(/^Retrieved /)).toHaveCount(2);
+  await tabTo(page, congress);
+
+  await assertSafeSurface(page, requests);
+});
+
+test("keeps the public federal profile usable without JavaScript", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  const page = await context.newPage();
+  const requests = auditRequests(page);
+
+  try {
+    const response = await page.goto("/officials/federal/H000001");
+    expect(response?.status()).toBe(200);
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "Georgia Representative",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Profile sources" }),
+    ).toBeVisible();
+    await assertSafeSurface(page, requests);
+  } finally {
+    await context.close();
+  }
+});
+
+test("returns not-found only for malformed and missing profiles", async ({
+  page,
+}) => {
+  const requests = auditRequests(page);
+
+  for (const path of [
+    "/officials/federal/not-a-bioguide",
+    "/officials/federal/M000001",
+  ]) {
+    const response = await page.goto(path);
+    expect(response?.status(), path).toBe(404);
+    await expect(page.getByText("This page could not be found.")).toBeVisible();
+    await expect(page.getByRole("link", { name: /source/i })).toHaveCount(0);
+    await assertSafeSurface(page, requests);
+  }
+});
+
+test("renders explicit recovery for an expired profile", async ({ page }) => {
+  const requests = auditRequests(page);
+  const response = await page.goto("/officials/federal/T000001");
+
+  expect(response?.status()).toBe(200);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Federal official profile",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText(
+    "Federal profile data has expired. Refresh before relying on this officeholder.",
+  );
+  const lastChecked = page.getByText(/^Last checked /);
+  await expect(lastChecked).toBeVisible();
+  await expect(lastChecked.locator("time")).toHaveAttribute(
+    "datetime",
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+  );
+  await expect(
+    page.getByRole("link", { name: "Check Congress.gov" }),
+  ).toHaveAttribute("href", "https://www.congress.gov/members");
+  await expect(page.getByText("Texas Representative")).toHaveCount(0);
+  await expect(
+    page.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
+  ).toHaveCount(0);
+  await assertSafeSurface(page, requests);
+});
+
+test("labels below-72-hour profiles and rosters as stale", async ({
+  context,
+  page,
+}) => {
+  const requests = auditRequests(page);
+  const response = await page.goto("/officials/federal/C000001");
+
+  expect(response?.status()).toBe(200);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "California Representative",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status"),
+  ).toHaveText(
+    "This profile is stale but not expired. Verify it with the linked official source.",
+  );
+  await expect(
+    page.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
+  ).toBeVisible();
+  await assertSafeSurface(page, requests);
+
+  await installSessionCookie(context, "ca-01-stale");
+  await page.goto("/dashboard");
+  const roster = page.getByRole("region", {
+    name: "Federal officials for CA District 1",
+  });
+  await expect(roster.getByRole("status")).toHaveText(
+    "This roster is stale but not expired.",
+  );
+  const expectedCards = [
+    {
+      bioguideId: "C000001",
+      name: "California Representative",
+    },
+    { bioguideId: "C000002", name: "California Senator One" },
+    { bioguideId: "C000003", name: "California Senator Two" },
+  ];
+  const cards = roster.getByRole("article");
+  await expect(cards).toHaveCount(expectedCards.length);
+  for (const [index, expected] of expectedCards.entries()) {
+    const card = cards.nth(index);
+    await expect(
+      card.getByText("Stale but not expired; verify before use."),
+    ).toBeVisible();
+    await expect(
+      card.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
+    ).toHaveAttribute(
+      "href",
+      `https://bioguide.congress.gov/search/bio/${expected.bioguideId}`,
+    );
+    await expect(
+      card.getByRole("link", { name: expected.name }),
+    ).toHaveAttribute("href", `/officials/federal/${expected.bioguideId}`);
+  }
+  await expect(
+    cards.nth(0).getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://clerk.house.gov/Members/ViewVacancies",
+  );
+  await assertSafeSurface(page, requests);
+});
+
+test("prompts an authenticated voter without a saved home", async ({
+  context,
+  page,
+}) => {
+  await installSessionCookie(context, "no-home");
+  const requests = auditRequests(page);
+  await page.goto("/dashboard");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Your dashboard" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "In office" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Federal officials" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Save a voting residence to see federal officials", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await assertSafeSurface(page, requests);
+});
+
+test("updates one authenticated dashboard from no home to GA to CA to no home without reload or provider traffic", async ({
+  context,
+  page,
+}) => {
+  await installSessionCookie(context, "handoff");
+  const requests = auditRequests(page);
+  const gaAddress = "101 Georgia Handoff Avenue, Example, GA 30000";
+  const caAddress = "202 California Handoff Boulevard, Example, CA 90000";
+  const journeyTime = new Date();
+  const resolutions = [
+    {
+      input: { kind: "address", address: gaAddress } satisfies ResidenceInput,
+      resolution: federalResidence("GA", 13, journeyTime),
+    },
+    {
+      input: { kind: "address", address: caAddress } satisfies ResidenceInput,
+      resolution: federalResidence("CA", 1, journeyTime),
+    },
+  ].map(({ input, resolution }) => ({
+    input,
+    response: signedFederalResidenceResponse(
+      input,
+      resolution,
+      "e2e-federal-handoff-user",
+      journeyTime,
+    ),
+  }));
+  await page.route("**/api/v1/location/resolve", async (route) => {
+    const next = resolutions.shift();
+    expect(next).toBeDefined();
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual(next!.input);
+    await route.fulfill({
+      body: JSON.stringify(next!.response),
+      contentType: "application/json",
+      headers: { "Cache-Control": "private, no-store" },
+      status: 200,
+    });
+  });
+
+  await page.goto("/dashboard");
+  const documentMarker = randomUUID();
+  await page.evaluate((marker) => {
+    (
+      window as Window & { __f5DashboardDocumentMarker?: string }
+    ).__f5DashboardDocumentMarker = marker;
+  }, documentMarker);
+  await expect(
+    page.getByText("Save a voting residence to see federal officials", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  await saveResidence(page, gaAddress);
+  await expect(
+    page.getByRole("region", {
+      name: "Federal officials for GA District 13",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", {
+      name: /U\.S\. Representative.*Georgia Representative/,
+    }),
+  ).toBeVisible();
+
+  await saveResidence(page, caAddress);
+  await expect(
+    page.getByRole("region", {
+      name: "Federal officials for CA District 1",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", {
+      name: /U\.S\. Representative.*California Representative/,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: /Georgia Representative/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText(gaAddress)).toHaveCount(0);
+
+  const saved = page.getByRole("region", {
+    exact: true,
+    name: "Saved residence",
+  });
+  await saved.getByRole("button", { name: "Delete saved residence" }).click();
+  await saved.getByRole("button", { name: "Confirm deletion" }).click();
+  await expect(
+    page.getByText("Save a voting residence to see federal officials", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await expect(
+    page.getByRole("article", { name: /California Representative/ }),
+  ).toHaveCount(0);
+  await expect(page.getByText(caAddress)).toHaveCount(0);
+
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { __f5DashboardDocumentMarker?: string })
+          .__f5DashboardDocumentMarker,
+    ),
+  ).toBe(documentMarker);
+  expect(resolutions).toHaveLength(0);
+  expect(
+    requests.filter((url) =>
+      FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS.includes(new URL(url).hostname),
+    ),
+  ).toEqual([]);
+  const surface = `${await page.locator("body").innerText()}\n${await page.content()}`;
+  expect(surface).not.toMatch(/resolutionToken|revision|e2e-federal-handoff-session-token/);
+  await assertSafeSurface(page, requests);
+});
+
+test("renders the GA-13 House and Senate roster equally and deterministically", async ({
+  context,
+  page,
+}) => {
+  await installSessionCookie(context, "ga-13");
+  const requests = auditRequests(page);
+  await page.goto("/dashboard");
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Your dashboard" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "In office" }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Federal officials" }),
+  ).toHaveCount(0);
+  const roster = page.getByRole("region", {
+    name: "Federal officials for GA District 13",
+  });
+  const list = roster.getByRole("list", { name: "Federal offices" });
+  const cards = list.getByRole("article");
+  await expect(cards).toHaveCount(3);
+  expect(
+    await cards.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("aria-label")),
+    ),
+  ).toEqual([
+    "U.S. Representative \u2014 District 13: Georgia Representative",
+    "U.S. Senator: Georgia Senator One",
+    "U.S. Senator: Georgia Senator Two",
+  ]);
+
+  const expectedCards = [
+    { bioguideId: "H000001", name: "Georgia Representative" },
+    { bioguideId: "G000001", name: "Georgia Senator One" },
+    { bioguideId: "G000002", name: "Georgia Senator Two" },
+  ];
+  for (const [index, expected] of expectedCards.entries()) {
+    const card = cards.nth(index);
+    await expect(card.getByRole("heading", { level: 3 })).toBeVisible();
+    await expect(card.getByText(/^Checked /)).toBeVisible();
+    await expect(
+      card.getByRole("heading", { name: "Sources and retrieval times" }),
+    ).toBeVisible();
+    await expect(
+      card.getByRole("link", { name: expected.name }),
+    ).toHaveAttribute("href", `/officials/federal/${expected.bioguideId}`);
+    await expect(
+      card.getByRole("link", {
+        name: "Biographical Directory of the United States Congress member source",
+      }),
+    ).toHaveAttribute(
+      "href",
+      `https://bioguide.congress.gov/search/bio/${expected.bioguideId}`,
+    );
+  }
+
+  const house = cards.nth(0);
+  await expect(
+    house.getByRole("link", {
+      name: "Biographical Directory of the United States Congress member source",
+    }),
+  ).toBeVisible();
+  await expect(
+    house.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://clerk.house.gov/Members/ViewVacancies",
+  );
+  const deepLink = house.getByRole("link", { name: "Georgia Representative" });
+  await expect(deepLink).toHaveAttribute(
+    "href",
+    "/officials/federal/H000001",
+  );
+  await tabTo(page, deepLink);
+
+  await assertResponsiveRoster(page, list);
+  await assertSafeSurface(page, requests);
+});
+
+test("renders at-large and verified-vacancy House seats honestly", async ({
+  context,
+  page,
+}) => {
+  const requests = auditRequests(page);
+
+  await installSessionCookie(context, "ak-at-large");
+  await page.goto("/dashboard");
+  const alaska = page.getByRole("region", {
+    name: "Federal officials for AK at-large",
+  });
+  await expect(
+    alaska.getByRole("article", {
+      name: /U\.S\. Representative.*At-large: Alaska Representative/,
+    }),
+  ).toBeVisible();
+  await assertSafeSurface(page, requests);
+
+  await installSessionCookie(context, "ga-14-vacancy");
+  await page.goto("/dashboard");
+  const georgia = page.getByRole("region", {
+    name: "Federal officials for GA District 14",
+  });
+  const vacancy = georgia.getByRole("article", {
+    name: /U\.S\. Representative.*District 14: vacant/,
+  });
+  await expect(vacancy.getByText("This seat is verified vacant.")).toBeVisible();
+  await expect(
+    vacancy.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives current vacancies list source",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://clerk.house.gov/Members/ViewVacancies",
+  );
+  await expect(
+    vacancy.getByRole("link", {
+      name: "Office of the Clerk, U.S. House of Representatives district vacancy record source",
+    }),
+  ).toHaveAttribute(
+    "href",
+    "https://clerk.house.gov/members/GA14/vacancy",
+  );
+  await assertSafeSurface(page, requests);
+});
+
+test("renders expired and unsupported dashboard recovery states", async ({
+  context,
+  page,
+}) => {
+  const requests = auditRequests(page);
+
+  await installSessionCookie(context, "tx-01-expired");
+  await page.goto("/dashboard");
+  await expect(
+    page.getByRole("region", { exact: true, name: "Federal officials" }),
+  ).toContainText("Federal roster information is unavailable.");
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await assertSafeSurface(page, requests);
+
+  await installSessionCookie(context, "dc-unsupported");
+  await page.goto("/dashboard");
+  await expect(
+    page.getByText(
+      "Federal official coverage is not available for this jurisdiction yet.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("article")).toHaveCount(0);
+  await assertSafeSurface(page, requests);
+});
+
+async function installSessionCookie(
+  context: BrowserContext,
+  slug: string,
+) {
+  const token = `e2e-federal-${slug}-session-token`;
+  const signature = createHmac("sha256", authSecret)
+    .update(token)
+    .digest("base64");
+
+  await context.addCookies([
+    {
+      httpOnly: true,
+      name: "better-auth.session_token",
+      sameSite: "Lax",
+      secure: false,
+      url: baseURL,
+      value: encodeURIComponent(`${token}.${signature}`),
+    },
+  ]);
+}
+
+type ResolvedFederalResidence = Extract<
+  ResolutionOutcome,
+  { status: "matched" | "partial" }
+>;
+
+function federalResidence(
+  stateCode: "CA" | "GA",
+  district: number,
+  checkedAt: Date,
+): ResolvedFederalResidence {
+  const lower = stateCode.toLowerCase();
+  return {
+    status: "matched",
+    divisions: [
+      {
+        type: "state",
+        name: stateCode,
+        id: `ocd-division/country:us/state:${lower}`,
+        idScheme: "ocd",
+      },
+      {
+        type: "congressional_district",
+        name: `${stateCode} Congressional District ${district}`,
+        id: `ocd-division/country:us/state:${lower}/cd:${district}`,
+        idScheme: "ocd",
+      },
+    ],
+    source: {
+      name: "U.S. Census Geocoder",
+      url: "https://geocoding.geo.census.gov/geocoder/",
+      checkedAt: checkedAt.toISOString(),
+      effectiveAt: null,
+    },
+    coverageNotes: [],
+  };
+}
+
+function signedFederalResidenceResponse(
+  input: ResidenceInput,
+  resolution: ResolvedFederalResidence,
+  userId: string,
+  now: Date,
+): Extract<ResolutionResponse, { status: "matched" | "partial" }> {
+  return {
+    ...resolution,
+    ...createResolutionToken(
+      input,
+      resolution,
+      userId,
+      authSecret,
+      now,
+    ),
+  };
+}
+
+async function saveResidence(page: Page, address: string) {
+  const input = page.getByLabel("Voting residence address");
+  await input.fill(address);
+  await page.getByRole("button", { name: "Check residence" }).click();
+  await expect(
+    page.locator(".residence-preview").getByRole("status"),
+  ).toHaveText("Residence matched. Review the divisions and source below.");
+  await page
+    .getByRole("checkbox", {
+      name:
+        "Save this residence to my account. voteGPT will encrypt the address and use these matched political divisions for personalization until I delete or replace it.",
+    })
+    .check();
+  await page.getByRole("button", { name: "Save residence" }).click();
+  await expect(
+    page.locator(".residence-preview").getByRole("status"),
+  ).toHaveText(/Saved residence was (?:saved|replaced)\./);
+}
+
+function auditRequests(page: Page) {
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(request.url()));
+  return requests;
+}
+
+async function assertSafeSurface(page: Page, requests: readonly string[]) {
+  const surface = `${await page.locator("body").innerText()}\n${await page.content()}\n${page.url()}\n${requests.join("\n")}`;
+  assertSafeFederalMarkup(surface);
+  for (const forbidden of [
+    /\bAI\b/,
+    /CONGRESS_GOV_API_KEY/i,
+    /e2e-secret/i,
+    /session-token/i,
+    /profile:v2:/i,
+    /roster:v1:/i,
+    /fixture-(?:ciphertext|iv|tag)/i,
+    /123 Main St/i,
+  ]) {
+    expect(surface).not.toMatch(forbidden);
+  }
+  const externalLinks = await page.locator("a[href^='https://']").evaluateAll(
+    (links) => links.map((link) => (link as HTMLAnchorElement).href),
+  );
+  for (const href of externalLinks) {
+    const link = new URL(href);
+    expect(link.hostname, href).not.toBe(FEDERAL_PROVIDER_HOSTS.congressApi);
+    if (link.hostname === FEDERAL_PROVIDER_HOSTS.bioguidePublic) {
+      const bioguideId = link.pathname.split("/").at(-1) ?? "";
+      expect(href).toBe(bioguidePublicUrl(bioguideId));
+    }
+  }
+  for (const request of requests) {
+    const hostname = new URL(request).hostname;
+    expect(FEDERAL_E2E_BLOCKED_PROVIDER_HOSTS, request).not.toContain(hostname);
+    expect(hostname, request).toBe("127.0.0.1");
+  }
+}
+
+function assertSafeFederalMarkup(markup: string) {
+  expect(markup).not.toContain(FEDERAL_PROVIDER_HOSTS.congressApi);
+  expect(markup).not.toContain("ingestionUrl");
+}
+
+async function tabTo(page: Page, target: Locator) {
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((element) => element === document.activeElement)) {
+      await expect(target).toBeFocused();
+      return;
+    }
+  }
+  throw new Error("Keyboard focus did not reach the federal link.");
+}
+
+async function assertResponsiveRoster(page: Page, list: Locator) {
+  const layouts: Array<{ rows: number }> = [];
+  for (const viewport of [
+    { height: 812, width: 375 },
+    { height: 720, width: 1280 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const layout = await list.evaluate((element) => {
+      const boxes = [element, ...element.querySelectorAll("*")]
+        .map((node) => node.getBoundingClientRect())
+        .filter((box) => box.width > 0 && box.height > 0);
+      const itemTops = Array.from(element.children, (child) =>
+        Math.round(child.getBoundingClientRect().top),
+      );
+      return {
+        clippedNodes: boxes.filter(
+          (box) => box.left < 0 || box.right > window.innerWidth,
+        ).length,
+        horizontalOverflow:
+          document.documentElement.scrollWidth > window.innerWidth,
+        rows: new Set(itemTops).size,
+        visibleCards: itemTops.length,
+      };
+    });
+    expect(layout).toMatchObject({
+      clippedNodes: 0,
+      horizontalOverflow: false,
+      visibleCards: 3,
+    });
+    for (const card of await list.getByRole("article").all()) {
+      await expect(card).toBeVisible();
+    }
+    layouts.push({ rows: layout.rows });
+  }
+  expect(layouts[0].rows).toBeGreaterThan(layouts[1].rows);
+}

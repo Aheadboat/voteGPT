@@ -1,0 +1,15 @@
+{
+  "congress": {
+    "number": 119,
+    "name": "119th Congress",
+    "startYear": "2025",
+    "endYear": "2026",
+    "updateDate": "2026-07-15T10:00:00Z",
+    "url": "https://api.congress.gov/v3/congress/119?format=json",
+    "sessions": []
+  },
+  "request": {
+    "contentType": "application/json",
+    "format": "json"
+  }
+}

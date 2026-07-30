@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
-import { resolve } from "node:path";
+import { existsSync, statSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle as drizzlePostgres } from "drizzle-orm/node-postgres";
 import { migrate as migratePostgres } from "drizzle-orm/node-postgres/migrator";
@@ -11,12 +14,63 @@ import {
   requireE2eDatabase,
 } from "./database-guard.mjs";
 
+const sourceRoot = resolve(process.cwd(), "src");
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (
+      (specifier.startsWith("./") || specifier.startsWith("../")) &&
+      context.parentURL?.startsWith("file:")
+    ) {
+      const parentPath = fileURLToPath(context.parentURL);
+      const fromSource = relative(sourceRoot, parentPath);
+      if (
+        fromSource !== ".." &&
+        !fromSource.startsWith(`..${sep}`) &&
+        !isAbsolute(fromSource)
+      ) {
+        const unresolved = fileURLToPath(new URL(specifier, context.parentURL));
+        for (const candidate of [unresolved, `${unresolved}.ts`]) {
+          const relativeCandidate = relative(sourceRoot, candidate);
+          if (
+            relativeCandidate !== ".." &&
+            !relativeCandidate.startsWith(`..${sep}`) &&
+            !isAbsolute(relativeCandidate) &&
+            existsSync(candidate) &&
+            statSync(candidate).isFile()
+          ) {
+            return {
+              format: "module-typescript",
+              shortCircuit: true,
+              url: pathToFileURL(candidate).href,
+            };
+          }
+        }
+      }
+    }
+    return nextResolve(specifier, context);
+  },
+});
+const {
+  FEDERAL_CACHE_POLICY,
+  bioguidePublicUrl,
+  canonicalCongressIngestionUrl,
+  clerkNationalVacancyUrl,
+  clerkVacancyPublicUrl,
+  congressMemberDetailUrl,
+  createFederalFixtureClock,
+} = await import("./fixture-policy.mts");
+
 const databaseUrl = await requireE2eDatabase(
   process.env,
   readE2eDatabaseMarker,
 );
 process.env.DATABASE_URL = databaseUrl;
+if (process.env.CONGRESS_GOV_API_KEY?.trim()) {
+  throw new Error("E2E federal fixtures require a blank Congress.gov credential.");
+}
+process.env.CONGRESS_GOV_API_KEY = "";
 const migrationsFolder = resolve(process.cwd(), "drizzle");
+const federalFixtureClock = createFederalFixtureClock(new Date());
 const identities = [
   {
     accountId: "e2e-google-account",
@@ -37,6 +91,17 @@ const identities = [
     userId: "e2e-secondary-user",
   },
 ];
+const federalIdentities = [
+  federalIdentity("no-home", "No-home"),
+  federalIdentity("handoff", "Residence handoff"),
+  federalIdentity("ga-13", "Georgia 13", "GA", 13),
+  federalIdentity("ak-at-large", "Alaska At-large", "AK", 0),
+  federalIdentity("ga-14-vacancy", "Georgia 14", "GA", 14),
+  federalIdentity("ca-01-stale", "California 1", "CA", 1),
+  federalIdentity("tx-01-expired", "Texas 1", "TX", 1),
+  federalIdentity("dc-unsupported", "District of Columbia", "DC", 0),
+];
+const fixtureIdentities = [...identities, ...federalIdentities];
 
 const pgliteDirectory = databaseUrl.startsWith("pglite://")
   ? databaseUrl.slice("pglite://".length)
@@ -74,16 +139,22 @@ if (process.argv.includes("--start-server")) {
 async function seedIdentities(query) {
   await query("BEGIN");
   try {
+    const cacheRecords = federalCacheRecords(federalFixtureClock);
     await query(
       `DELETE FROM "user"
        WHERE "id" = ANY($1::text[]) OR lower("email") = ANY($2::text[])`,
       [
-        identities.map(({ userId }) => userId),
-        identities.map(({ email }) => email.toLowerCase()),
+        fixtureIdentities.map(({ userId }) => userId),
+        fixtureIdentities.map(({ email }) => email.toLowerCase()),
       ],
     );
+    await query(
+      `DELETE FROM "federal_official_cache"
+       WHERE "cache_key" = ANY($1::text[])`,
+      [cacheRecords.map(({ cacheKey }) => cacheKey)],
+    );
 
-    for (const identity of identities) {
+    for (const identity of fixtureIdentities) {
       await query(
         `INSERT INTO "user" (
           "id", "name", "email", "email_verified", "created_at", "updated_at"
@@ -109,11 +180,310 @@ async function seedIdentities(query) {
       );
     }
 
+    for (const identity of federalIdentities) {
+      if (!identity.divisions) {
+        continue;
+      }
+      await query(
+        `INSERT INTO "saved_residence" (
+          "user_id", "envelope_version", "key_version", "iv", "ciphertext",
+          "tag", "resolution_status", "source_name", "source_url",
+          "source_checked_at", "source_effective_at", "source_benchmark",
+          "source_vintage", "coverage_notes", "consent_version",
+          "consented_at", "created_at", "updated_at"
+        ) VALUES (
+          $1, 'v1', 'e2e-current', 'fixture-iv', 'fixture-ciphertext',
+          'fixture-tag', 'matched', 'Deterministic E2E fixture',
+          'https://example.invalid/federal-fixture', NOW(), NULL, NULL, NULL,
+          '[]'::jsonb, 'saved-residence-v1', NOW(), NOW(), NOW()
+        )`,
+        [identity.userId],
+      );
+      for (const [displayOrder, division] of identity.divisions.entries()) {
+        await query(
+          `INSERT INTO "saved_residence_division" (
+            "user_id", "type", "id_scheme", "division_id", "name",
+            "display_order"
+          ) VALUES ($1, $2, 'ocd', $3, $4, $5)`,
+          [
+            identity.userId,
+            division.type,
+            division.id,
+            division.name,
+            displayOrder,
+          ],
+        );
+      }
+    }
+
+    for (const record of cacheRecords) {
+      await query(
+        `INSERT INTO "federal_official_cache" (
+          "cache_key", "payload", "retrieved_at", "refresh_after", "stale_after"
+        ) VALUES ($1, $2::jsonb, $3::timestamptz, $4::timestamptz, $5::timestamptz)`,
+        [
+          record.cacheKey,
+          JSON.stringify(record.payload),
+          record.retrievedAt.toISOString(),
+          record.refreshAfter.toISOString(),
+          record.staleAfter.toISOString(),
+        ],
+      );
+    }
+
     await query("COMMIT");
   } catch (error) {
     await query("ROLLBACK");
     throw error;
   }
+}
+
+function federalIdentity(slug, name, stateCode, district) {
+  const userId = `e2e-federal-${slug}-user`;
+  return {
+    accountId: `e2e-federal-${slug}-google-account`,
+    accountRowId: `e2e-federal-${slug}-account`,
+    email: `e2e-federal-${slug}@example.invalid`,
+    name: `${name} E2E Voter`,
+    sessionId: `e2e-federal-${slug}-session`,
+    sessionToken: `e2e-federal-${slug}-session-token`,
+    userId,
+    divisions:
+      stateCode === undefined || district === undefined
+        ? null
+        : [
+            {
+              type: "state",
+              id: `ocd-division/country:us/state:${stateCode.toLowerCase()}`,
+              name: stateCode === "DC" ? "District of Columbia" : stateCode,
+            },
+            {
+              type: "congressional_district",
+              id: `ocd-division/country:us/state:${stateCode.toLowerCase()}/cd:${district}`,
+              name:
+                district === 0
+                  ? `${stateCode} At-large Congressional District`
+                  : `${stateCode} Congressional District ${district}`,
+            },
+          ],
+  };
+}
+
+function federalCacheRecords(clock) {
+  const freshAt = new Date(clock.freshRetrievedAt);
+  const staleAt = new Date(clock.staleRetrievedAt);
+  const expiredAt = new Date(clock.expiredRetrievedAt);
+  const gaSenators = [
+    servingSeat("senate", "GA", null, "G000001", "Georgia Senator One", freshAt),
+    servingSeat("senate", "GA", null, "G000002", "Georgia Senator Two", freshAt),
+  ];
+  const ga13 = servingRoster(
+    "GA",
+    13,
+    servingSeat("house", "GA", 13, "H000001", "Georgia Representative", freshAt),
+    gaSenators,
+    freshAt,
+  );
+  const ak = servingRoster(
+    "AK",
+    0,
+    servingSeat("house", "AK", 0, "A000001", "Alaska Representative", freshAt),
+    [
+      servingSeat("senate", "AK", null, "A000002", "Alaska Senator One", freshAt),
+      servingSeat("senate", "AK", null, "A000003", "Alaska Senator Two", freshAt),
+    ],
+    freshAt,
+  );
+  const ga14 = vacancyRoster("GA", 14, gaSenators, freshAt);
+  const ca = servingRoster(
+    "CA",
+    1,
+    servingSeat("house", "CA", 1, "C000001", "California Representative", staleAt),
+    [
+      servingSeat("senate", "CA", null, "C000002", "California Senator One", staleAt),
+      servingSeat("senate", "CA", null, "C000003", "California Senator Two", staleAt),
+    ],
+    staleAt,
+  );
+  const tx = servingRoster(
+    "TX",
+    1,
+    servingSeat("house", "TX", 1, "T000001", "Texas Representative", expiredAt),
+    [
+      servingSeat("senate", "TX", null, "T000002", "Texas Senator One", expiredAt),
+      servingSeat("senate", "TX", null, "T000003", "Texas Senator Two", expiredAt),
+    ],
+    expiredAt,
+  );
+  const rosters = [ga13, ak, ga14, ca, tx];
+  const profiles = [ga13, ak, ca, tx].flatMap(({ payload, retrievedAt }) =>
+    [payload.house, ...payload.senate].map((seat) =>
+      cacheRecord(
+        `profile:v2:${seat.person.bioguideId}`,
+        {
+          person: seat.person,
+          office: seat.office,
+          term: seat.term,
+          sources: seat.sources,
+        },
+        retrievedAt,
+      ),
+    ),
+  );
+  return [...rosters, ...profiles];
+}
+
+function servingRoster(stateCode, district, house, senate, retrievedAt) {
+  return cacheRecord(
+    rosterKey(stateCode, district),
+    {
+      jurisdiction: jurisdiction(stateCode, district),
+      house,
+      senate,
+      coverage: { house: "verified", senate: "verified" },
+    },
+    retrievedAt,
+  );
+}
+
+function vacancyRoster(stateCode, district, senate, retrievedAt) {
+  const office = officeFor("house", stateCode, district, null);
+  const listUrl = clerkNationalVacancyUrl().toString();
+  const districtUrl = clerkVacancyPublicUrl(
+    stateCode,
+    district,
+    federalFixtureClock.snapshot,
+  );
+  if (districtUrl === null) {
+    throw new Error("Federal vacancy fixture requires a supported district.");
+  }
+  return cacheRecord(
+    rosterKey(stateCode, district),
+    {
+      jurisdiction: jurisdiction(stateCode, district),
+      house: {
+        status: "vacant",
+        office,
+        term: termFor(office, null, "vacant"),
+        sources: [
+          clerkSource(listUrl, retrievedAt),
+          clerkSource(districtUrl, retrievedAt),
+        ],
+      },
+      senate,
+      coverage: { house: "vacant", senate: "verified" },
+    },
+    retrievedAt,
+  );
+}
+
+function servingSeat(chamber, stateCode, district, bioguideId, name, retrievedAt) {
+  const person = {
+    id: `bioguide:${bioguideId}`,
+    bioguideId,
+    name,
+  };
+  const office = officeFor(chamber, stateCode, district, bioguideId);
+  return {
+    status: "serving",
+    office,
+    person,
+    term: termFor(office, person.id, "serving"),
+    sources: [
+      memberSource(bioguideId, retrievedAt),
+      ...(chamber === "house"
+        ? [clerkSource(clerkNationalVacancyUrl().toString(), retrievedAt)]
+        : []),
+    ],
+  };
+}
+
+function officeFor(chamber, stateCode, district, bioguideId) {
+  return {
+    id: `federal:${chamber}:${stateCode}:${chamber === "house" ? district : bioguideId}`,
+    chamber,
+    stateCode,
+    district,
+    title: chamber === "house" ? "U.S. Representative" : "U.S. Senator",
+  };
+}
+
+function termFor(office, personId, status) {
+  return {
+    officeId: office.id,
+    personId,
+    congress: federalFixtureClock.snapshot.currentCongress,
+    startYear:
+      status === "vacant"
+        ? null
+        : new Date(federalFixtureClock.servingTerm.start).getUTCFullYear(),
+    endYear:
+      status === "vacant"
+        ? null
+        : new Date(federalFixtureClock.servingTerm.end).getUTCFullYear(),
+    status,
+  };
+}
+
+function memberSource(bioguideId, retrievedAt) {
+  const publicUrl = bioguidePublicUrl(bioguideId);
+  const ingestionUrl = canonicalCongressIngestionUrl(
+    congressMemberDetailUrl(bioguideId, ""),
+  );
+  if (publicUrl === null || ingestionUrl === null) {
+    throw new Error("Federal member fixture requires a valid Bioguide ID.");
+  }
+  return {
+    publisher: "Biographical Directory of the United States Congress",
+    sourceType: "member",
+    publicUrl,
+    ingestionUrl,
+    retrievedAt: retrievedAt.toISOString(),
+    recordUpdatedAt: retrievedAt.toISOString(),
+    effectiveAt: null,
+  };
+}
+
+function clerkSource(url, retrievedAt) {
+  return {
+    publisher: "Office of the Clerk, U.S. House of Representatives",
+    sourceType: "vacancy",
+    publicUrl: url,
+    ingestionUrl: url,
+    retrievedAt: retrievedAt.toISOString(),
+    recordUpdatedAt: null,
+    effectiveAt: null,
+  };
+}
+
+function jurisdiction(stateCode, district) {
+  const lower = stateCode.toLowerCase();
+  return {
+    stateCode,
+    district,
+    divisionIds: [
+      `ocd-division/country:us/state:${lower}`,
+      `ocd-division/country:us/state:${lower}/cd:${district}`,
+    ],
+  };
+}
+
+function rosterKey(stateCode, district) {
+  return `roster:v1:${stateCode}:${district === 0 ? "AL" : String(district).padStart(2, "0")}`;
+}
+
+function cacheRecord(cacheKey, payload, retrievedAt) {
+  return {
+    cacheKey,
+    payload,
+    retrievedAt,
+    refreshAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.refreshAgeMs,
+    ),
+    staleAfter: new Date(
+      retrievedAt.getTime() + FEDERAL_CACHE_POLICY.staleAgeMs,
+    ),
+  };
 }
 
 async function startApplication(validatedDatabaseUrl) {
@@ -127,7 +497,11 @@ async function startApplication(validatedDatabaseUrl) {
     ],
     {
       cwd: process.cwd(),
-      env: { ...process.env, DATABASE_URL: validatedDatabaseUrl },
+      env: {
+        ...process.env,
+        DATABASE_URL: validatedDatabaseUrl,
+        NODE_OPTIONS: nextChildNodeOptions(process.env.NODE_OPTIONS),
+      },
       shell: false,
       stdio: "inherit",
       windowsHide: true,
@@ -143,4 +517,12 @@ async function startApplication(validatedDatabaseUrl) {
       resolveExit();
     });
   });
+}
+
+function nextChildNodeOptions(existingNodeOptions) {
+  const providerFetchGuardOption =
+    `--import=${pathToFileURL(resolve(process.cwd(), "e2e/provider-fetch-guard.mjs")).href}`;
+  return [existingNodeOptions?.trim(), providerFetchGuardOption]
+    .filter(Boolean)
+    .join(" ");
 }
