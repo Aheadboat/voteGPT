@@ -43,9 +43,69 @@ const PER_PAGE = 20;
 const MAX_PAGES = 5;
 const MAX_RECORDS = 100;
 const MAX_BODY_BYTES = 262_144;
+const MAX_OFFICIAL_SOURCES = 8;
+const MAX_SOURCE_URL_LENGTH = 2_048;
+const MAX_SOURCE_QUERY_LENGTH = 1_024;
+const MAX_SOURCE_QUERY_PARAMETERS = 20;
 const publicText = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identifier = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const stateCode = /^[A-Z]{2}$/;
+
+// Conservative institutional baseline verified 2026-07-31 against current
+// OpenStates people scrapers and the Congress.gov state-legislature directory.
+// Party, caucus, social, reference, and personal hosts are intentionally absent.
+const OFFICIAL_LEGISLATIVE_HOSTS = {
+  ak: ["akleg.gov"],
+  al: ["legislature.state.al.us"],
+  ar: ["arkleg.state.ar.us"],
+  az: ["azleg.gov"],
+  ca: ["assembly.ca.gov", "senate.ca.gov"],
+  co: ["leg.colorado.gov"],
+  ct: ["cga.ct.gov"],
+  de: ["legis.delaware.gov"],
+  fl: ["flsenate.gov", "myfloridahouse.gov", "flhouse.gov"],
+  ga: ["legis.ga.gov", "house.ga.gov", "senate.ga.gov"],
+  hi: ["capitol.hawaii.gov"],
+  ia: ["legis.iowa.gov", "senate.iowa.gov"],
+  id: ["legislature.idaho.gov"],
+  il: ["ilga.gov"],
+  in: ["iga.in.gov"],
+  ks: ["kslegislature.gov", "kslegislature.org"],
+  ky: ["legislature.ky.gov", "lrc.ky.gov"],
+  la: ["house.louisiana.gov", "senate.la.gov"],
+  ma: ["malegislature.gov"],
+  md: ["mgaleg.maryland.gov"],
+  me: ["legislature.maine.gov"],
+  mi: ["house.mi.gov", "senate.michigan.gov"],
+  mn: ["house.mn.gov", "house.leg.state.mn.us", "senate.mn"],
+  mo: ["house.mo.gov", "senate.mo.gov"],
+  ms: ["billstatus.ls.state.ms.us", "legislature.ms.gov"],
+  mt: ["leg.mt.gov", "legmt.gov"],
+  nc: ["ncleg.gov", "ncga.state.nc.us"],
+  nd: ["legis.nd.gov", "ndlegis.gov"],
+  ne: ["nebraskalegislature.gov"],
+  nh: ["gencourt.state.nh.us", "gc.nh.gov"],
+  nj: ["njleg.state.nj.us"],
+  nm: ["nmlegis.gov"],
+  nv: ["leg.state.nv.us"],
+  ny: ["assembly.state.ny.us", "nyassembly.gov", "nysenate.gov"],
+  oh: ["legislature.ohio.gov", "ohiohouse.gov", "ohiosenate.gov"],
+  ok: ["okhouse.gov", "oksenate.gov", "oklegislature.gov"],
+  or: ["oregonlegislature.gov"],
+  pa: ["legis.state.pa.us", "palegis.us"],
+  ri: ["rilegislature.gov", "rilin.state.ri.us"],
+  sc: ["scstatehouse.gov"],
+  sd: ["sdlegislature.gov", "legis.sd.gov"],
+  tn: ["capitol.tn.gov", "legislature.state.tn.us"],
+  tx: ["house.texas.gov", "senate.texas.gov", "capitol.texas.gov"],
+  ut: ["le.utah.gov", "house.utah.gov", "house.utleg.gov", "senate.utah.gov"],
+  va: ["virginiageneralassembly.gov", "lis.virginia.gov", "senate.virginia.gov", "house.vga.virginia.gov"],
+  vt: ["legislature.vermont.gov"],
+  wa: ["leg.wa.gov"],
+  wi: ["legis.wisconsin.gov"],
+  wv: ["wvlegislature.gov", "legis.state.wv.us"],
+  wy: ["wyoleg.gov", "legisweb.state.wy.us"],
+} as const;
 
 export const fetchStateLegislators: FetchStateLegislators = async (
   jurisdiction,
@@ -316,23 +376,37 @@ function parsePerson(
 }
 
 function parseSources(values: readonly unknown[], state: string, checkedAt: string, effectiveAt: string) {
-  if (values.length === 0 || values.length > 8) return null;
+  if (values.length === 0) return null;
   const urls = new Set<string>();
   const sources: Array<StateRosterInput["seats"][number]["people"][number]["sources"][number]> = [];
   for (const value of values) {
-    if (!isRecord(value) || !Object.hasOwn(value, "url") || (Object.keys(value).length !== 1 && !(Object.keys(value).length === 2 && Object.hasOwn(value, "note"))) || typeof value.url !== "string" || !isOfficialSourceUrl(value.url, state) || urls.has(value.url)) {
+    if (
+      !isRecord(value) ||
+      !Object.hasOwn(value, "url") ||
+      (Object.keys(value).length !== 1 && !(Object.keys(value).length === 2 && Object.hasOwn(value, "note"))) ||
+      typeof value.url !== "string" ||
+      (Object.hasOwn(value, "note") &&
+        (typeof value.note !== "string" || value.note.length > 500 || /[\u0000-\u001f\u007f]/.test(value.note)))
+    ) {
       return null;
     }
+    const url = parseCanonicalSourceUrl(value.url);
+    if (url === null) return null;
+    if (!isOfficialSourceHost(url.hostname, state)) continue;
+    if (urls.has(value.url)) continue;
+    if (sources.length >= MAX_OFFICIAL_SOURCES) return null;
     urls.add(value.url);
     sources.push({ sourceType: "official", publicUrl: value.url, retrievedAt: checkedAt, effectiveAt });
   }
-  return sources.sort((left, right) => compareText(left.publicUrl, right.publicUrl));
+  return sources.length === 0
+    ? null
+    : sources.sort((left, right) => compareText(left.publicUrl, right.publicUrl));
 }
 
 function isCanonicalJurisdiction(value: StateJurisdiction): boolean {
   if (!isRecord(value) || !stateCode.test(value.stateCode) || !Array.isArray(value.districts) || value.districts.length === 0 || value.districts.length > 2 || (value.legislature !== "bicameral" && value.legislature !== "unicameral")) return false;
   const state = value.stateCode.toLowerCase();
-  if (value.stateDivisionId !== `ocd-division/country:us/state:${state}` || value.jurisdictionId !== `ocd-jurisdiction/country:us/state:${state}/government`) return false;
+  if (!isSupportedState(state) || value.stateDivisionId !== `ocd-division/country:us/state:${state}` || value.jurisdictionId !== `ocd-jurisdiction/country:us/state:${state}/government`) return false;
   const chambers = new Set<string>();
   for (const district of value.districts) {
     if (!isExactRecord(district, ["chamber", "district", "divisionId"]) || (district.chamber !== "upper" && district.chamber !== "lower") || typeof district.district !== "string" || typeof district.divisionId !== "string" || !publicText.test(district.district) || !identifier.test(district.divisionId) || district.divisionId !== `ocd-division/country:us/state:${state}/sld${district.chamber === "upper" ? "u" : "l"}:${district.district}` || chambers.has(district.chamber)) return false;
@@ -341,24 +415,35 @@ function isCanonicalJurisdiction(value: StateJurisdiction): boolean {
   return value.legislature === "bicameral" ? chambers.size === 2 : chambers.size === 1 && value.stateCode === "NE" && chambers.has("upper");
 }
 
-function isOfficialSourceUrl(value: string, state: string): boolean {
+function parseCanonicalSourceUrl(value: string): URL | null {
+  if (value.length === 0 || value.length > MAX_SOURCE_URL_LENGTH) return null;
   try {
     const url = new URL(value);
-    const stateSuffix = `.state.${state}.us`;
+    const queryParameterCount = [...url.searchParams].length;
     return (
       url.toString() === value &&
       url.protocol === "https:" &&
       url.username === "" &&
       url.password === "" &&
       url.port === "" &&
-      url.search === "" &&
       url.hash === "" &&
-      ((url.hostname.length > 4 && url.hostname.endsWith(".gov")) ||
-        (url.hostname.length > stateSuffix.length && url.hostname.endsWith(stateSuffix)))
-    );
+      url.search.length <= MAX_SOURCE_QUERY_LENGTH &&
+      queryParameterCount <= MAX_SOURCE_QUERY_PARAMETERS
+    ) ? url : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isOfficialSourceHost(hostname: string, state: string): boolean {
+  if (!isSupportedState(state)) return false;
+  return OFFICIAL_LEGISLATIVE_HOSTS[state].some(
+    (allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`),
+  );
+}
+
+function isSupportedState(value: string): value is keyof typeof OFFICIAL_LEGISLATIVE_HOSTS {
+  return Object.hasOwn(OFFICIAL_LEGISLATIVE_HOSTS, value);
 }
 
 function parseCanonicalInstant(value: string): Date | null {

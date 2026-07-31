@@ -5,8 +5,8 @@
       "name": "Member 01",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -24,11 +24,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-01"
+          "url": "https://www.assembly.ca.gov/members/multi-01"
         }
       ]
     },
@@ -37,8 +37,8 @@
       "name": "Member 02",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -56,11 +56,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-02"
+          "url": "https://www.assembly.ca.gov/members/multi-02"
         }
       ]
     },
@@ -69,8 +69,8 @@
       "name": "Member 03",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -88,11 +88,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-03"
+          "url": "https://www.assembly.ca.gov/members/multi-03"
         }
       ]
     },
@@ -101,8 +101,8 @@
       "name": "Member 04",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -120,11 +120,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-04"
+          "url": "https://www.assembly.ca.gov/members/multi-04"
         }
       ]
     },
@@ -133,8 +133,8 @@
       "name": "Member 05",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -152,11 +152,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-05"
+          "url": "https://www.assembly.ca.gov/members/multi-05"
         }
       ]
     },
@@ -165,8 +165,8 @@
       "name": "Member 06",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -184,11 +184,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-06"
+          "url": "https://www.assembly.ca.gov/members/multi-06"
         }
       ]
     },
@@ -197,8 +197,8 @@
       "name": "Member 07",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -216,11 +216,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-07"
+          "url": "https://www.assembly.ca.gov/members/multi-07"
         }
       ]
     },
@@ -229,8 +229,8 @@
       "name": "Member 08",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -248,11 +248,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-08"
+          "url": "https://www.assembly.ca.gov/members/multi-08"
         }
       ]
     },
@@ -261,8 +261,8 @@
       "name": "Member 09",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -280,11 +280,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-09"
+          "url": "https://www.assembly.ca.gov/members/multi-09"
         }
       ]
     },
@@ -293,8 +293,8 @@
       "name": "Member 10",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -312,11 +312,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-10"
+          "url": "https://www.assembly.ca.gov/members/multi-10"
         }
       ]
     },
@@ -325,8 +325,8 @@
       "name": "Member 11",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -344,11 +344,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-11"
+          "url": "https://www.assembly.ca.gov/members/multi-11"
         }
       ]
     },
@@ -357,8 +357,8 @@
       "name": "Member 12",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -376,11 +376,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-12"
+          "url": "https://www.assembly.ca.gov/members/multi-12"
         }
       ]
     },
@@ -389,8 +389,8 @@
       "name": "Member 13",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -408,11 +408,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-13"
+          "url": "https://www.assembly.ca.gov/members/multi-13"
         }
       ]
     },
@@ -421,8 +421,8 @@
       "name": "Member 14",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -440,11 +440,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-14"
+          "url": "https://www.assembly.ca.gov/members/multi-14"
         }
       ]
     },
@@ -453,8 +453,8 @@
       "name": "Member 15",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -472,11 +472,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-15"
+          "url": "https://www.assembly.ca.gov/members/multi-15"
         }
       ]
     },
@@ -485,8 +485,8 @@
       "name": "Member 16",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -504,11 +504,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-16"
+          "url": "https://www.assembly.ca.gov/members/multi-16"
         }
       ]
     },
@@ -517,8 +517,8 @@
       "name": "Member 17",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -536,11 +536,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-17"
+          "url": "https://www.assembly.ca.gov/members/multi-17"
         }
       ]
     },
@@ -549,8 +549,8 @@
       "name": "Member 18",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -568,11 +568,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-18"
+          "url": "https://www.assembly.ca.gov/members/multi-18"
         }
       ]
     },
@@ -581,8 +581,8 @@
       "name": "Member 19",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -600,11 +600,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-19"
+          "url": "https://www.assembly.ca.gov/members/multi-19"
         }
       ]
     },
@@ -613,8 +613,8 @@
       "name": "Member 20",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -632,11 +632,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-20"
+          "url": "https://www.assembly.ca.gov/members/multi-20"
         }
       ]
     }

@@ -4,7 +4,7 @@
       "id": "ocd-person/alex-rivera",
       "name": "Alex Rivera",
       "party": "Independent",
-      "jurisdiction": { "id": "ocd-jurisdiction/country:us/state:ex/government", "name": "Example", "classification": "state" },
+      "jurisdiction": { "id": "ocd-jurisdiction/country:us/state:ca/government", "name": "California", "classification": "state" },
       "given_name": "Alex",
       "family_name": "Rivera",
       "image": "",
@@ -20,9 +20,9 @@
         "title": "State Senator",
         "org_classification": "upper",
         "district": 2,
-        "division_id": "ocd-division/country:us/state:ex/sldu:2"
+        "division_id": "ocd-division/country:us/state:ca/sldu:2"
       },
-      "sources": [{ "url": "https://legislature.example.gov/members/alex-rivera" }]
+      "sources": [{ "url": "https://www.senate.ca.gov/members/alex-rivera" }]
     }
   ],
   "pagination": { "per_page": 20, "page": 1, "max_page": 1, "total_items": 1 }

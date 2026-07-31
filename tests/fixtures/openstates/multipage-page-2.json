@@ -5,8 +5,8 @@
       "name": "Member 21",
       "party": "Independent",
       "jurisdiction": {
-        "id": "ocd-jurisdiction/country:us/state:ex/government",
-        "name": "Example",
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
         "classification": "state"
       },
       "given_name": "Member",
@@ -24,11 +24,11 @@
         "title": "Delegate",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
       "sources": [
         {
-          "url": "https://legislature.example.gov/members/multi-21"
+          "url": "https://www.assembly.ca.gov/members/multi-21"
         }
       ]
     }

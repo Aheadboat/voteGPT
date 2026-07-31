@@ -4,7 +4,7 @@
       "id": "ocd-person/blair-chen",
       "name": "Blair Chen",
       "party": "Independent",
-      "jurisdiction": { "id": "ocd-jurisdiction/country:us/state:ex/government", "name": "Example", "classification": "state" },
+      "jurisdiction": { "id": "ocd-jurisdiction/country:us/state:ca/government", "name": "California", "classification": "state" },
       "given_name": "Blair",
       "family_name": "Chen",
       "image": "",
@@ -20,9 +20,9 @@
         "title": "State Representative",
         "org_classification": "lower",
         "district": "10",
-        "division_id": "ocd-division/country:us/state:ex/sldl:10"
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
       },
-      "sources": [{ "url": "https://legislature.example.gov/members/blair-chen", "note": "official profile" }]
+      "sources": [{ "url": "https://www.assembly.ca.gov/members/blair-chen", "note": "official profile" }]
     }
   ],
   "pagination": { "per_page": 20, "page": 1, "max_page": 1, "total_items": 1 }
