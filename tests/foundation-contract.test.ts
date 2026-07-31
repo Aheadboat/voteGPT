@@ -862,27 +862,45 @@ describe("concurrent roadmap delivery contract", () => {
       "r2_context_hygiene_lead",
     )
     const r2Ownership = readCoordinationField(r2, "Ownership")
+    const featureLeadOwnershipStart = r2Ownership.indexOf(
+      "The R2 feature lead exclusively owns",
+    )
+    const frozenProductionStart = r2Ownership.indexOf(
+      "Application production code remains frozen",
+    )
+
+    expect(featureLeadOwnershipStart).toBeGreaterThan(0)
+    expect(frozenProductionStart).toBeGreaterThan(featureLeadOwnershipStart)
+    const coordinatorOwnership = r2Ownership.slice(0, featureLeadOwnershipStart)
+    const featureLeadOwnership = r2Ownership.slice(
+      featureLeadOwnershipStart,
+      frozenProductionStart,
+    )
     for (const coordinatorFile of [
       "AGENTS.md",
       "ROADMAP.md",
       "README.md",
       "tests/foundation-contract.test.ts",
     ]) {
-      expect(r2Ownership).toContain(coordinatorFile)
+      expect(coordinatorOwnership).toContain(coordinatorFile)
     }
     for (const featureFile of [
       "PROJECT-MAP.md",
       "TEMPORARY.md",
       ".gitignore",
     ]) {
-      expect(r2Ownership).toContain(featureFile)
+      expect(featureLeadOwnership).toContain(featureFile)
     }
     expect(r2Ownership.toLowerCase()).toContain(
       "application production code remains frozen",
     )
-    expect(readCoordinationField(r2, "Merge order")).toContain(
+    const r2MergeOrder = readCoordinationField(r2, "Merge order")
+    expectTokensInOrder(r2MergeOrder, [
       "R2 feature PR",
-    )
+      "post-merge verification on `main`",
+      "R2 closeout PR/CI/merge",
+      "No later item activates automatically",
+    ])
     expect(readCoordinationField(r2, "Feature PR/CI")).toContain("Pending")
     expect(readCoordinationField(r2, "Blockers")).toBe("None.")
     expect(readCoordinationField(r2, "Feature merge")).toContain("Pending")
