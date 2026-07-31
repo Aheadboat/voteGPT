@@ -774,7 +774,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps R1, F4, and F5 closed while R2 is the sole active item", () => {
+  it("keeps R1, F4, and F5 closed through R2 verification and closeout", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -897,8 +897,10 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r1Status).toBe("DONE")
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
-    expect(r2Status).toBe("VERIFIED")
-    expect(activeIds).toEqual(["R2"])
+    const r2IsDone = r2Status === "DONE"
+
+    expect(["VERIFIED", "DONE"]).toContain(r2Status)
+    expect(activeIds).toEqual(r2IsDone ? [] : ["R2"])
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
       expectedAuthorizedPairActiveIds(
@@ -972,8 +974,13 @@ describe("concurrent roadmap delivery contract", () => {
         "F4 and F5 remain active under approved lean recovery plans.",
       )
     }
-    expect(readme).toContain("R2 is `VERIFIED` locally")
-    expect(readme).toContain("Human Gate B")
+    if (r2IsDone) {
+      expect(readme).toMatch(/R2[^.\n]*complete/i)
+      expect(readme).toContain("No roadmap item is active")
+    } else {
+      expect(readme).toContain("R2 is `VERIFIED`")
+      expect(readme).toContain("Human Gate B is approved")
+    }
     expectTokensInOrder(roadmap, ["## F5 ", "## R2 ", "## F6 "])
     expect(r2).toContain("PROJECT-MAP.md")
     expect(r2).toContain("TEMPORARY.md")
@@ -987,7 +994,10 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2).toContain("root plus one child level")
     expect(r2).toContain("codegraph init .")
     expect(r2).toContain("codegraph sync .")
-    expect(readCoordinationField(r2, "Phase")).toBe("`VERIFIED`")
+    expect(r2).toContain(
+      "Human Gate B evidence:** User explicitly approved R2 on 2026-07-30",
+    )
+    expect(readCoordinationField(r2, "Phase")).toBe("`" + r2Status + "`")
     expect(readCoordinationField(r2, "Branch")).toContain(
       "codex/r2-context-hygiene",
     )
@@ -1051,17 +1061,37 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2FeaturePr).toContain("mergeability")
     expect(r2FeaturePr).toContain("Human Gate B")
     expect(r2FeaturePr).not.toContain("Human Gate A")
+    if (!r2IsDone) {
+      expect(r2FeaturePr).toContain("draft")
+    }
     expect(readCoordinationField(r2, "Blockers")).toBe("None.")
-    expect(readCoordinationField(r2, "Feature merge")).toContain("Pending")
-    expect(readCoordinationField(r2, "Post-merge evidence")).toContain(
-      "Pending",
-    )
-    expect(readCoordinationField(r2, "Closeout PR/CI/merge")).toContain(
-      "Pending",
-    )
-    expect(readCoordinationField(r2, "Next Human Gate")).toContain(
-      "Human Gate B",
-    )
+    const r2FeatureMerge = readCoordinationField(r2, "Feature merge")
+    const r2PostMerge = readCoordinationField(r2, "Post-merge evidence")
+    const r2Closeout = readCoordinationField(r2, "Closeout PR/CI/merge")
+    const r2NextGate = readCoordinationField(r2, "Next Human Gate")
+
+    if (r2IsDone) {
+      expect(r2FeatureMerge).not.toContain("Pending")
+      expect(r2FeatureMerge).toContain(
+        "[PR #21](https://github.com/Aheadboat/voteGPT/pull/21)",
+      )
+      expect(r2FeatureMerge).toContain("merged")
+      expect(r2PostMerge).not.toContain("Pending")
+      expect(r2PostMerge).toContain("main")
+      expect(r2PostMerge).toContain("codegraph sync .")
+      expect(r2PostMerge).toContain("codegraph status --json .")
+      expect(r2Closeout).not.toContain("Pending")
+      expect(r2Closeout).toContain("ROADMAP.md")
+      expect(r2Closeout).toContain("README.md")
+      expect(r2Closeout).toContain("current-head hosted CI")
+      expect(r2Closeout).toContain("merge")
+    } else {
+      expect(r2FeatureMerge).toContain("Pending")
+      expect(r2PostMerge).toContain("Pending")
+      expect(r2Closeout).toContain("Pending")
+    }
+    expect(r2NextGate).toContain("None")
+    expect(r2NextGate).toContain("Human Gate B")
     expect(f6).toContain("**Dependencies:** F5 and R2.")
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
