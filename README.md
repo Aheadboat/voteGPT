@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 is active in GREEN after Human Gate A; its state-jurisdiction domain is reviewed, and the provider contract is next. Human Gate B remains the next human stop after implementation, verification, feature PR CI, mergeability, and independent review. G1 and every later roadmap item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 is active in GREEN after Human Gate A; its state-jurisdiction domain and bounded OpenStates provider adapter are independently reviewed, with cache/service and navigation work next. Human Gate B remains the next human stop after implementation, verification, feature PR CI, mergeability, and independent review. G1 and every later roadmap item remain TODO pending separate authorization.
 
 ## Local identity setup
 

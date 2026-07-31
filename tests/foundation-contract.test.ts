@@ -272,6 +272,7 @@ describe("development foundation", () => {
         "GOOGLE_CLIENT_ID=",
         "GOOGLE_CLIENT_SECRET=",
         "GOOGLE_CIVIC_API_KEY=",
+        "OPENSTATES_API_KEY=",
         "RESIDENCE_ENCRYPTION_ACTIVE_KEY=",
         "RESIDENCE_ENCRYPTION_KEYS=",
       ].sort(),
@@ -979,6 +980,9 @@ describe("concurrent roadmap delivery contract", () => {
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
       expect(readme).toContain("F6 is active in GREEN")
+      expect(readme).toContain(
+        "state-jurisdiction domain and bounded OpenStates provider adapter are independently reviewed",
+      )
       expect(readme).toContain("Human Gate B")
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
@@ -1156,8 +1160,19 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("43c9b0b00ae810c27ec587d93fd786e24511a941")
     expect(f6).toContain("5581edc645729fd74cde8ae720ed9e0175406e76")
     expect(f6).toContain("f9f10a3f59d5f796ebdc1937fe18f95f1e2fa049")
-    expect(f6).toContain("16/16")
-    expect(f6).toContain("31 files/754 tests")
+    expect(f6).toContain("c1ed4a3b77191ff679936961b3b6b7133d96d366")
+    expect(f6).toContain("a58e64f9c46a73639a45130fc680f8279e35da56")
+    expect(f6).toContain("18/18")
+    expect(f6).toContain("**F6-T2 RED/GREEN/review evidence:**")
+    expect(f6).toContain("090c865abe4c43abc7b77eee15a6cf44e50b725e")
+    expect(f6).toContain("d3f29429ad844862941af51eb30c8680b1a206eb")
+    expect(f6).toContain("1402e4cd8e3b2d4ab28c2cd471b802302e64ed6c")
+    expect(f6).toContain("471d13721a4117e9fb7efe8ca5d9740f02229a1c")
+    expect(f6).toContain("server-only@0.0.1")
+    expect(f6).toContain("50-state institutional host policy")
+    expect(f6).toContain("public legislative query-key allowlist")
+    expect(f6).toContain("29/29")
+    expect(f6).toContain("32 files/767 tests")
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
