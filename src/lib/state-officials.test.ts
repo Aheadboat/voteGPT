@@ -430,6 +430,91 @@ describe("reconcileStateOfficials", () => {
     });
   });
 
+  it("keeps distinct people who share an OpenStates role title in one ordered serving seat", () => {
+    const result = stateJurisdictionFromDivisions([
+      {
+        type: "state",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
+        idScheme: "ocd",
+      },
+      {
+        type: "state_upper",
+        name: "Nebraska Legislative District 8",
+        id: "ocd-division/country:us/state:ne/sldu:8",
+        idScheme: "ocd",
+      },
+    ]);
+    if (result.status !== "available") {
+      throw new Error("fixture requires a jurisdiction");
+    }
+
+    expect(
+      reconcileStateOfficials(result.jurisdiction, {
+        freshness,
+        seats: [
+          {
+            chamber: "upper",
+            district: "8",
+            seat: "Senator",
+            people: [
+              {
+                id: "openstates:zoe",
+                name: "Zoe Stone",
+                role: {
+                  chamber: "upper",
+                  district: "8",
+                  seat: "Senator",
+                  current: true,
+                },
+                sources: [
+                  {
+                    ...officialSource,
+                    publicUrl:
+                      "https://legislature.example.gov/members/zoe-stone",
+                  },
+                ],
+              },
+              {
+                id: "openstates:alex",
+                name: "Alex Rivera",
+                role: {
+                  chamber: "upper",
+                  district: "8",
+                  seat: "Senator",
+                  current: true,
+                },
+                sources: [officialSource],
+              },
+            ],
+            vacancySources: [],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      chambers: [
+        {
+          chamber: "upper",
+          districts: [
+            {
+              district: "8",
+              seats: [
+                {
+                  status: "serving",
+                  seat: "Senator",
+                  people: [
+                    { id: "openstates:alex", name: "Alex Rivera" },
+                    { id: "openstates:zoe", name: "Zoe Stone" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("marks serving, explicit vacancy, and absent evidence without inferring a vacancy", () => {
     const result = stateJurisdictionFromDivisions([
       {

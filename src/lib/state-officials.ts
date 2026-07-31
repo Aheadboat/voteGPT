@@ -171,7 +171,6 @@ export function reconcileStateOfficials(
 
   const seatKeys = new Set<string>();
   const personIds = new Set<string>();
-  const roleKeys = new Set<string>();
   const seats: Array<{
     chamber: StateChamber;
     district: string;
@@ -179,7 +178,7 @@ export function reconcileStateOfficials(
   }> = [];
 
   for (const candidate of value.seats) {
-    const seat = reconcileSeat(candidate, jurisdiction, seatKeys, personIds, roleKeys);
+    const seat = reconcileSeat(candidate, jurisdiction, seatKeys, personIds);
     if (seat === null) {
       return null;
     }
@@ -257,7 +256,6 @@ function reconcileSeat(
   jurisdiction: StateJurisdiction,
   seatKeys: Set<string>,
   personIds: Set<string>,
-  roleKeys: Set<string>,
 ): { chamber: StateChamber; district: string; seat: StateSeat } | null {
   if (!isRecord(value) || !hasExactKeys(value, ["chamber", "district", "seat", "people", "vacancySources"])) {
     return null;
@@ -290,7 +288,7 @@ function reconcileSeat(
   }
 
   const people = value.people.map((person) =>
-    parsePerson(person, chamber, district, seat, personIds, roleKeys),
+    parsePerson(person, chamber, district, seat, personIds),
   );
   if (people.some((person) => person === null)) {
     return null;
@@ -341,7 +339,6 @@ function parsePerson(
   district: string,
   seat: string,
   personIds: Set<string>,
-  roleKeys: Set<string>,
 ): { person: StateOfficialPerson; currentOfficial: boolean; sources: readonly StateSource[] } | null {
   if (!isRecord(value) || !hasExactKeys(value, ["id", "name", "role", "sources"])) {
     return null;
@@ -360,16 +357,11 @@ function parsePerson(
   ) {
     return null;
   }
-  const roleKey = `${chamber}\u0000${district}\u0000${seat}`;
-  if (roleKeys.has(roleKey)) {
-    return null;
-  }
   const sources = parseSources(value.sources);
   if (sources === null || sources.some(({ sourceType }) => sourceType !== "official")) {
     return null;
   }
   personIds.add(value.id);
-  roleKeys.add(roleKey);
   return {
     person: { id: value.id, name: value.name, sources },
     currentOfficial: value.role.current && sources.length > 0,
