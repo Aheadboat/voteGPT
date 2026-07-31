@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { StateJurisdiction, StateRosterInput } from "./state-officials";
 
 export type OpenStatesFailureReason =
@@ -49,7 +51,7 @@ export const fetchStateLegislators: FetchStateLegislators = async (
   jurisdiction,
   { apiKey, checkedAt, fetch, signal },
 ) => {
-  const retrievedAt = parseInstant(checkedAt);
+  const retrievedAt = parseCanonicalInstant(checkedAt);
   if (retrievedAt === null || !isCanonicalJurisdiction(jurisdiction)) {
     return unavailable("malformed");
   }
@@ -62,10 +64,10 @@ export const fetchStateLegislators: FetchStateLegislators = async (
 
   const people: Person[] = [];
   const personIds = new Set<string>();
-  const roleKeys = new Set<string>();
   for (const district of jurisdiction.districts) {
     const response = await fetchDistrict(
       jurisdiction.jurisdictionId,
+      jurisdiction.stateCode.toLowerCase(),
       district,
       apiKey,
       checkedAt,
@@ -77,12 +79,10 @@ export const fetchStateLegislators: FetchStateLegislators = async (
       return response;
     }
     for (const person of response.people) {
-      const roleKey = `${person.chamber}\u0000${person.district}\u0000${person.seat}`;
-      if (personIds.has(person.id) || roleKeys.has(roleKey)) {
+      if (personIds.has(person.id)) {
         return unavailable("malformed");
       }
       personIds.add(person.id);
-      roleKeys.add(roleKey);
       people.push(person);
     }
   }
@@ -136,6 +136,7 @@ export const fetchStateLegislators: FetchStateLegislators = async (
 
 async function fetchDistrict(
   jurisdiction: string,
+  state: string,
   district: StateJurisdiction["districts"][number],
   apiKey: string,
   checkedAt: string,
@@ -154,13 +155,14 @@ async function fetchDistrict(
     url.searchParams.set("jurisdiction", jurisdiction);
     url.searchParams.set("org_classification", district.chamber);
     url.searchParams.set("district", district.district);
+    url.searchParams.set("include", "sources");
     url.searchParams.set("page", String(page));
     url.searchParams.set("per_page", String(PER_PAGE));
     const response = await requestJson(url, apiKey, fetch, signal);
     if (response.status === "unavailable") {
       return response;
     }
-    const parsed = parsePage(response.body, jurisdiction, district, page, checkedAt, retrievedAt);
+    const parsed = parsePage(response.body, jurisdiction, state, district, page, checkedAt, retrievedAt);
     if (parsed === "partial") {
       return unavailable("partial");
     }
@@ -170,10 +172,16 @@ async function fetchDistrict(
     if (parsed.maxPage > MAX_PAGES || parsed.totalItems > MAX_RECORDS) {
       return unavailable("oversize");
     }
+    const expectedMaxPage = Math.max(1, Math.ceil(parsed.totalItems / PER_PAGE));
+    const expectedPageSize =
+      page < parsed.maxPage
+        ? PER_PAGE
+        : parsed.totalItems - PER_PAGE * (parsed.maxPage - 1);
     if (
+      parsed.maxPage !== expectedMaxPage ||
+      parsed.results.length !== expectedPageSize ||
       (totalItems !== undefined && totalItems !== parsed.totalItems) ||
       (maxPage !== undefined && maxPage !== parsed.maxPage) ||
-      parsed.results.length > PER_PAGE ||
       people.length + parsed.results.length > MAX_RECORDS
     ) {
       return unavailable("partial");
@@ -266,6 +274,7 @@ async function readJson(response: Response, signal: AbortSignal): Promise<JsonOu
 function parsePage(
   value: unknown,
   jurisdiction: string,
+  state: string,
   district: StateJurisdiction["districts"][number],
   expectedPage: number,
   checkedAt: string,
@@ -279,13 +288,14 @@ function parsePage(
     return null;
   }
   if (page !== expectedPage) return "partial";
-  const people = value.results.map((person) => parsePerson(person, jurisdiction, district, checkedAt, retrievedAt));
+  const people = value.results.map((person) => parsePerson(person, jurisdiction, state, district, checkedAt, retrievedAt));
   return people.some((person) => person === null) ? null : { results: people as Person[], maxPage, totalItems };
 }
 
 function parsePerson(
   value: unknown,
   jurisdiction: string,
+  state: string,
   district: StateJurisdiction["districts"][number],
   checkedAt: string,
   retrievedAt: Date,
@@ -297,20 +307,20 @@ function parsePerson(
   const role = value.current_role;
   if (typeof role.title !== "string" || typeof role.org_classification !== "string" || typeof role.division_id !== "string") return null;
   const roleDistrict = typeof role.district === "string" || typeof role.district === "number" ? String(role.district) : null;
-  const updatedAt = parseInstant(value.updated_at);
+  const updatedAt = parseProviderInstant(value.updated_at);
   if (role.org_classification !== district.chamber || roleDistrict !== district.district || role.division_id !== district.divisionId || !publicText.test(role.title) || updatedAt === null || updatedAt > retrievedAt) {
     return null;
   }
-  const sources = parseSources(value.sources, checkedAt, value.updated_at);
+  const sources = parseSources(value.sources, state, checkedAt, updatedAt.toISOString());
   return sources === null ? null : { id: value.id, name: value.name, chamber: district.chamber, district: district.district, seat: role.title, sources };
 }
 
-function parseSources(values: readonly unknown[], checkedAt: string, effectiveAt: string) {
+function parseSources(values: readonly unknown[], state: string, checkedAt: string, effectiveAt: string) {
   if (values.length === 0 || values.length > 8) return null;
   const urls = new Set<string>();
   const sources: Array<StateRosterInput["seats"][number]["people"][number]["sources"][number]> = [];
   for (const value of values) {
-    if (!isRecord(value) || !Object.hasOwn(value, "url") || (Object.keys(value).length !== 1 && !(Object.keys(value).length === 2 && Object.hasOwn(value, "note"))) || typeof value.url !== "string" || !isOfficialSourceUrl(value.url) || urls.has(value.url)) {
+    if (!isRecord(value) || !Object.hasOwn(value, "url") || (Object.keys(value).length !== 1 && !(Object.keys(value).length === 2 && Object.hasOwn(value, "note"))) || typeof value.url !== "string" || !isOfficialSourceUrl(value.url, state) || urls.has(value.url)) {
       return null;
     }
     urls.add(value.url);
@@ -331,18 +341,41 @@ function isCanonicalJurisdiction(value: StateJurisdiction): boolean {
   return value.legislature === "bicameral" ? chambers.size === 2 : chambers.size === 1 && value.stateCode === "NE" && chambers.has("upper");
 }
 
-function isOfficialSourceUrl(value: string): boolean {
+function isOfficialSourceUrl(value: string, state: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && url.username === "" && url.password === "" && (url.hostname.endsWith(".gov") || url.hostname.endsWith(".us"));
+    const stateSuffix = `.state.${state}.us`;
+    return (
+      url.toString() === value &&
+      url.protocol === "https:" &&
+      url.username === "" &&
+      url.password === "" &&
+      url.port === "" &&
+      url.search === "" &&
+      url.hash === "" &&
+      ((url.hostname.length > 4 && url.hostname.endsWith(".gov")) ||
+        (url.hostname.length > stateSuffix.length && url.hostname.endsWith(stateSuffix)))
+    );
   } catch {
     return false;
   }
 }
 
-function parseInstant(value: string): Date | null {
+function parseCanonicalInstant(value: string): Date | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) || date.toISOString() !== value ? null : date;
+}
+
+function parseProviderInstant(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value);
+  if (match === null) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const dateOnly = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1 || dateOnly.getUTCFullYear() !== year || dateOnly.getUTCMonth() !== month - 1 || dateOnly.getUTCDate() !== day) return null;
+  const milliseconds = Date.parse(value);
+  return Number.isNaN(milliseconds) ? null : new Date(milliseconds);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }

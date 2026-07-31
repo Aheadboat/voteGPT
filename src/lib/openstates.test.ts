@@ -1,13 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import bicameralPage1 from "../../tests/fixtures/openstates/bicameral-page-1.json";
 import bicameralPage2 from "../../tests/fixtures/openstates/bicameral-page-2.json";
 import emptyPage from "../../tests/fixtures/openstates/empty.json";
 import multiMemberPage from "../../tests/fixtures/openstates/multi-member.json";
+import multipagePage1 from "../../tests/fixtures/openstates/multipage-page-1.json";
+import multipagePage2 from "../../tests/fixtures/openstates/multipage-page-2.json";
 import {
   fetchStateLegislators,
   type FetchStateLegislators,
 } from "./openstates";
 import type { StateJurisdiction } from "./state-officials";
+
+vi.mock("server-only", () => ({}));
 
 const CHECKED_AT = "2026-07-31T12:00:00.000Z";
 const API_KEY = "test-openstates-key";
@@ -72,8 +76,8 @@ describe("fetchStateLegislators", () => {
       },
     });
     expect(requests.map(({ url }) => url)).toEqual([
-      "https://v3.openstates.org/people?jurisdiction=ocd-jurisdiction%2Fcountry%3Aus%2Fstate%3Aex%2Fgovernment&org_classification=upper&district=2&page=1&per_page=20",
-      "https://v3.openstates.org/people?jurisdiction=ocd-jurisdiction%2Fcountry%3Aus%2Fstate%3Aex%2Fgovernment&org_classification=lower&district=10&page=1&per_page=20",
+      "https://v3.openstates.org/people?jurisdiction=ocd-jurisdiction%2Fcountry%3Aus%2Fstate%3Aex%2Fgovernment&org_classification=upper&district=2&include=sources&page=1&per_page=20",
+      "https://v3.openstates.org/people?jurisdiction=ocd-jurisdiction%2Fcountry%3Aus%2Fstate%3Aex%2Fgovernment&org_classification=lower&district=10&include=sources&page=1&per_page=20",
     ]);
     expect(requests.every(({ url, init }) =>
       !/people\.geo|apikey|address|lat|lng|residence|user/i.test(url) &&
@@ -101,10 +105,13 @@ describe("fetchStateLegislators", () => {
     });
     expect(multiMemberResult).toMatchObject({
       status: "available",
-      roster: { seats: [
-        { chamber: "lower", district: "10", seat: "Delegate", people: [{ id: "ocd-person/avery-morgan", name: "Avery Morgan" }] },
-        { chamber: "lower", district: "10", seat: "Delegate Seat 2", people: [{ id: "ocd-person/casey-lee", name: "Casey Lee" }] },
-      ] },
+      roster: { seats: [{
+        chamber: "lower", district: "10", seat: "Delegate",
+        people: [
+          { id: "ocd-person/avery-morgan", name: "Avery Morgan" },
+          { id: "ocd-person/casey-lee", name: "Casey Lee" },
+        ],
+      }] },
     });
     expect(emptyResult).toEqual({
       status: "available",
@@ -113,28 +120,77 @@ describe("fetchStateLegislators", () => {
   });
 
   it("requires complete bounded pagination and rejects contradictory, missing, or oversized coverage", async () => {
-    const firstPage = clone(multiMemberPage);
-    firstPage.pagination = { per_page: 20, page: 1, max_page: 2, total_items: 3 };
-    const secondPage = clone(multiMemberPage);
-    secondPage.results = [clone(multiMemberPage.results[0])];
-    secondPage.results[0].id = "ocd-person/jordan-park";
-    secondPage.results[0].name = "Jordan Park";
-    secondPage.results[0].current_role.title = "Assistant Delegate";
-    secondPage.pagination = { per_page: 20, page: 2, max_page: 2, total_items: 3 };
-    const complete = await run(bicameral, [emptyPage, firstPage, secondPage]);
-    const wrongPage = clone(secondPage);
+    const complete = await run(bicameral, [emptyPage, multipagePage1, multipagePage2]);
+    const wrongPage = clonePage(multipagePage2);
     wrongPage.pagination.page = 1;
-    const overLimit = clone(firstPage);
+    const overLimit = clonePage(multipagePage1);
     overLimit.pagination.max_page = 6;
     overLimit.pagination.total_items = 101;
+    const contradictoryPage1 = clonePage(multiMemberPage);
+    contradictoryPage1.pagination = { per_page: 20, page: 1, max_page: 2, total_items: 3 };
+    const contradictoryPage2 = clonePage(multipagePage2);
+    contradictoryPage2.pagination = { per_page: 20, page: 2, max_page: 2, total_items: 3 };
+    const shortPage1 = clonePage(multipagePage1);
+    const movedPerson = shortPage1.results.pop()!;
+    const shortPage2 = clonePage(multipagePage2);
+    shortPage2.results.push(movedPerson);
 
-    expect(complete).toMatchObject({ status: "available", roster: { seats: [
-      { seat: "Assistant Delegate" }, { seat: "Delegate" }, { seat: "Delegate Seat 2" },
-    ] } });
-    await expect(run(bicameral, [emptyPage, firstPage, wrongPage]))
+    expect(complete).toMatchObject({
+      status: "available",
+      roster: { seats: [{ seat: "Delegate", people: expect.any(Array) }] },
+    });
+    if (complete.status !== "available") throw new Error("Expected complete roster.");
+    expect(complete.roster.seats[0]?.people).toHaveLength(21);
+    await expect(run(bicameral, [emptyPage, multipagePage1, wrongPage]))
       .resolves.toEqual({ status: "unavailable", reason: "partial" });
     await expect(run(bicameral, [emptyPage, overLimit]))
       .resolves.toEqual({ status: "unavailable", reason: "oversize" });
+    await expect(run(bicameral, [emptyPage, contradictoryPage1, contradictoryPage2]))
+      .resolves.toEqual({ status: "unavailable", reason: "partial" });
+    await expect(run(bicameral, [emptyPage, shortPage1, shortPage2]))
+      .resolves.toEqual({ status: "unavailable", reason: "partial" });
+  });
+
+  it("normalizes valid RFC 3339 provider times while keeping checkedAt canonical", async () => {
+    const offsetPage = mutate(bicameralPage1, (page) => {
+      page.results[0].updated_at = "2026-07-01T05:30:00-04:00";
+    });
+    const microsecondPage = mutate(bicameralPage2, (page) => {
+      page.results[0].updated_at = "2026-07-02T00:00:00.123456Z";
+    });
+
+    await expect(run(bicameral, [offsetPage, microsecondPage])).resolves.toMatchObject({
+      status: "available",
+      roster: { seats: [
+        { people: [{ sources: [{ effectiveAt: "2026-07-01T09:30:00.000Z" }] }] },
+        { people: [{ sources: [{ effectiveAt: "2026-07-02T00:00:00.123Z" }] }] },
+      ] },
+    });
+    await expect(run(unicameral, [emptyPage], "2026-07-31T08:00:00-04:00"))
+      .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("accepts only canonical official source URLs for the matched state", async () => {
+    const legacyStateHost = mutate(bicameralPage1, (page) => {
+      page.results[0].sources[0].url = "https://legislature.state.ex.us/members/alex-rivera";
+    });
+    await expect(run(bicameral, [legacyStateHost, bicameralPage2]))
+      .resolves.toMatchObject({ status: "available" });
+
+    for (const sourceUrl of [
+      "https://legislature.example.us/member",
+      "https://legislature.state.ca.us/member",
+      "https://legislature.example.gov/member?address=1-main",
+      "https://legislature.example.gov/member#private",
+      "https://user:secret@legislature.example.gov/member",
+      "https://LEGISLATURE.EXAMPLE.GOV/member",
+    ]) {
+      const page = mutate(bicameralPage1, (value) => {
+        value.results[0].sources[0].url = sourceUrl;
+      });
+      await expect(run(bicameral, [page, bicameralPage2]))
+        .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+    }
   });
 
   it("fails closed for malformed or privacy-bearing people data", async () => {
@@ -142,7 +198,6 @@ describe("fetchStateLegislators", () => {
       ["invalid JSON", "not-json"],
       ["missing identity", mutate(bicameralPage1, (page) => { Reflect.deleteProperty(page.results[0]!, "id"); })],
       ["duplicate identity", duplicatePersonPage()],
-      ["duplicate role", duplicateRolePage()],
       ["wrong role", mutate(bicameralPage1, (page) => { page.results[0].current_role.org_classification = "lower"; })],
       ["wrong district", mutate(bicameralPage1, (page) => { page.results[0].current_role.district = "9"; })],
       ["missing current role", mutate(bicameralPage1, (page) => { Reflect.deleteProperty(page.results[0]!, "current_role"); })],
@@ -185,11 +240,15 @@ describe("fetchStateLegislators", () => {
   });
 });
 
-function run(jurisdiction: StateJurisdiction, responses: readonly unknown[]) {
+function run(
+  jurisdiction: StateJurisdiction,
+  responses: readonly unknown[],
+  checkedAt = CHECKED_AT,
+) {
   let index = 0;
   return fetchStateLegislators(jurisdiction, {
     apiKey: API_KEY,
-    checkedAt: CHECKED_AT,
+    checkedAt,
     fetch: async () => jsonResponse(responses[index++] ?? emptyPage),
     signal: new AbortController().signal,
   });
@@ -201,7 +260,6 @@ function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
-function clone<T>(value: T): T { return structuredClone(value); }
 function mutate(value: unknown, change: (copy: MutableFixturePage) => void): MutableFixturePage {
   const copy = clonePage(value);
   change(copy);
@@ -212,17 +270,6 @@ function duplicatePersonPage() {
   page.results[1].id = page.results[0].id;
   return page;
 }
-function duplicateRolePage() {
-  const page = clonePage(bicameralPage1);
-  const duplicate = clone(page.results[0]);
-  duplicate.id = "ocd-person/duplicate-role";
-  duplicate.name = "Duplicate Role";
-  duplicate.sources[0].url = "https://legislature.example.gov/members/duplicate-role";
-  page.results.push(duplicate);
-  page.pagination.total_items = 2;
-  return page;
-}
-
 type MutableFixturePage = {
   results: MutableFixturePerson[];
   pagination: { per_page: number; page: number; max_page: number; total_items: number };
