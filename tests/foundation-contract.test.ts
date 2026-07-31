@@ -876,6 +876,7 @@ describe("concurrent roadmap delivery contract", () => {
       featureLeadOwnershipStart,
       frozenProductionStart,
     )
+    expect(coordinatorOwnership).toContain("The coordinator exclusively owns")
     for (const coordinatorFile of [
       "AGENTS.md",
       "ROADMAP.md",
