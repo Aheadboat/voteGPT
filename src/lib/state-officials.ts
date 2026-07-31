@@ -417,6 +417,7 @@ function isJurisdiction(value: StateJurisdiction): boolean {
     !hasExactKeys(value, ["stateCode", "stateDivisionId", "jurisdictionId", "legislature", "districts"]) ||
     typeof value.stateCode !== "string" ||
     !Array.isArray(value.districts) ||
+    !value.districts.every(isJurisdictionDistrict) ||
     value.stateCode !== value.stateCode.toUpperCase()
   ) {
     return false;
@@ -440,6 +441,18 @@ function isJurisdiction(value: StateJurisdiction): boolean {
   return (
     parsed.status === "available" &&
     hasSameJurisdiction(parsed.jurisdiction, value)
+  );
+}
+
+function isJurisdictionDistrict(
+  value: unknown,
+): value is StateJurisdiction["districts"][number] {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ["chamber", "district", "divisionId"]) &&
+    isChamber(value.chamber) &&
+    isPublicText(value.district) &&
+    isPublicText(value.divisionId)
   );
 }
 

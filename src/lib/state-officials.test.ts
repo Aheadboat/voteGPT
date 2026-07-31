@@ -292,6 +292,51 @@ describe("reconcileStateOfficials", () => {
     );
   });
 
+  it("rejects a reordered jurisdiction with an extra district field", () => {
+    const result = stateJurisdictionFromDivisions([
+      {
+        type: "state",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
+        idScheme: "ocd",
+      },
+      {
+        type: "state_upper",
+        name: "Nebraska Legislative District 8",
+        id: "ocd-division/country:us/state:ne/sldu:8",
+        idScheme: "ocd",
+      },
+    ]);
+    if (result.status !== "available") {
+      throw new Error("fixture requires a jurisdiction");
+    }
+    const malformed = {
+      districts: result.jurisdiction.districts.map((district) => ({
+        userId: "private-user-id",
+        ...district,
+      })),
+      legislature: result.jurisdiction.legislature,
+      jurisdictionId: result.jurisdiction.jurisdictionId,
+      stateDivisionId: result.jurisdiction.stateDivisionId,
+      stateCode: result.jurisdiction.stateCode,
+    } as StateJurisdiction;
+
+    expect(
+      reconcileStateOfficials(malformed, {
+        freshness,
+        seats: [
+          {
+            chamber: "upper",
+            district: "8",
+            seat: "1",
+            people: [],
+            vacancySources: [],
+          },
+        ],
+      }),
+    ).toBeNull();
+  });
+
   it("keeps multi-member seats and people in deterministic chamber, district, seat, and person order", () => {
     const result = stateJurisdictionFromDivisions([
       {
