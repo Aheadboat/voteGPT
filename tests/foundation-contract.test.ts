@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
@@ -88,6 +89,32 @@ function expectTokensInOrder(contents: string, tokens: string[]): void {
     )
     previousIndex = index
   }
+}
+
+function readTrackedRepositoryFiles(): Set<string> {
+  const output = execFileSync("git", ["ls-files", "-z"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+
+  return new Set(
+    output
+      .split("\0")
+      .filter(Boolean)
+      .map((path) => path.replaceAll("\\", "/")),
+  )
+}
+
+function readLocalMarkdownLinks(contents: string): string[] {
+  return [...contents.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)]
+    .map(([, destination]) => destination.trim().replace(/^<|>$/g, ""))
+    .filter(
+      (destination) =>
+        !destination.startsWith("#") &&
+        !/^[a-z][a-z0-9+.-]*:/i.test(destination),
+    )
+    .map((destination) => decodeURIComponent(destination.split("#")[0] ?? ""))
+    .filter(Boolean)
 }
 
 function readRoadmapStatuses(contents: string): Map<string, string> {
@@ -256,6 +283,116 @@ describe("development foundation", () => {
 
     expect(config).toContain("DATABASE_URL is required for database migrations")
     expect(config).not.toContain("postgres://localhost")
+  })
+})
+
+describe("repository context and hygiene contract", () => {
+  it("routes current capabilities through one compact root project map", () => {
+    const projectMapPath = resolve(repositoryRoot, "PROJECT-MAP.md")
+    expect(existsSync(projectMapPath), "expected root PROJECT-MAP.md").toBe(
+      true,
+    )
+
+    const projectMap = readFileSync(projectMapPath, "utf8")
+    const startHere = readMarkdownSection(projectMap, "## Start here")
+    const capabilities = readMarkdownSection(
+      projectMap,
+      "## Capability routes",
+    )
+    const localLinks = readLocalMarkdownLinks(projectMap)
+    const trackedFiles = readTrackedRepositoryFiles()
+
+    for (const entrypoint of [
+      "AGENTS.md",
+      "ROADMAP.md",
+      "README.md",
+      "TEMPORARY.md",
+    ]) {
+      expect(
+        readLocalMarkdownLinks(startHere),
+        "missing start-here link: " + entrypoint,
+      ).toContain(entrypoint)
+    }
+    expectTokensInOrder(capabilities, [
+      "Public shell, identity, and account",
+      "Residence preview",
+      "Saved residence",
+      "Federal officials",
+      "Persistence",
+      "Verification and delivery",
+    ])
+    for (const path of localLinks) {
+      expect(existsSync(resolve(repositoryRoot, path)), path + " must resolve").toBe(
+        true,
+      )
+      expect(trackedFiles.has(path), path + " must be tracked current code").toBe(
+        true,
+      )
+    }
+    expect(
+      [...trackedFiles].filter(
+        (path) =>
+          path !== "PROJECT-MAP.md" && path.endsWith("/PROJECT-MAP.md"),
+      ),
+      "no child map is earned yet",
+    ).toEqual([])
+  })
+
+  it("registers intentional temporary work and ignores derived local state", () => {
+    const temporaryPath = resolve(repositoryRoot, "TEMPORARY.md")
+    expect(existsSync(temporaryPath), "expected TEMPORARY.md").toBe(true)
+
+    const temporary = readFileSync(temporaryPath, "utf8")
+    const entryFormat = readMarkdownSection(temporary, "## Entry format")
+    const openEntries = readMarkdownSection(temporary, "## Open entries")
+      .replace(/\r\n/g, "\n")
+      .trim()
+    const gitignoreLines = readRepositoryFile(".gitignore")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+
+    for (const field of [
+      "Owner/task",
+      "Path/surface",
+      "Reason",
+      "Remove/revert/promote action",
+      "Deadline",
+    ]) {
+      expect(entryFormat).toContain(field)
+    }
+    expect(openEntries).toBe("## Open entries\n\nNone.")
+    expect(gitignoreLines).toContain("/.scratch/")
+    expect(gitignoreLines).toContain("/.codegraph/")
+  })
+
+  it("makes map maintenance and temporary cleanup delivery gates", () => {
+    const agents = readRepositoryFile("AGENTS.md")
+    const readme = readRepositoryFile("README.md")
+    const context = readMarkdownSection(
+      agents,
+      "## Repository context and hygiene",
+    )
+    const readmeLinks = readLocalMarkdownLinks(readme)
+
+    expect(readmeLinks).toContain("PROJECT-MAP.md")
+    expect(readmeLinks).toContain("TEMPORARY.md")
+    expectTokensInOrder(context, [
+      "PROJECT-MAP.md",
+      "CodeGraph",
+      "scoped `rg`",
+    ])
+    expect(context).toMatch(
+      /(?:adding|moving|removing)[^.\n]*routing surface[^.\n]*PROJECT-MAP\.md[^.\n]*before `VERIFIED`/i,
+    )
+    expect(context).toMatch(
+      /TEMPORARY\.md[^.\n]*(?:no|zero) open entries[^.\n]*`VERIFIED`[^.\n]*Human Gate B/i,
+    )
+    expect(context).toContain("`codegraph init .`")
+    expect(context).toContain("`codegraph sync .`")
+    expect(context).toContain("`codegraph status --json .`")
+    expect(context).toMatch(
+      /PROJECT-MAP\.md[^.\n]*fallback[^.\n]*(?:missing|unavailable|stale)/i,
+    )
   })
 })
 
@@ -756,7 +893,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r1Status).toBe("DONE")
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
-    expect(r2Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(r2Status).toBe("IN PROGRESS (RED)")
     expect(activeIds).toEqual(["R2"])
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
@@ -846,9 +983,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2).toContain("root plus one child level")
     expect(r2).toContain("codegraph init .")
     expect(r2).toContain("codegraph sync .")
-    expect(readCoordinationField(r2, "Phase")).toBe(
-      "`DISCOVER/DESIGN/PLAN`",
-    )
+    expect(readCoordinationField(r2, "Phase")).toBe("`RED`")
     expect(readCoordinationField(r2, "Branch")).toContain(
       "codex/r2-context-hygiene",
     )
@@ -913,7 +1048,7 @@ describe("concurrent roadmap delivery contract", () => {
       "Pending",
     )
     expect(readCoordinationField(r2, "Next Human Gate")).toContain(
-      "Human Gate A",
+      "Human Gate B",
     )
     expect(f6).toContain("**Dependencies:** F5 and R2.")
     for (const item of [f4, f5]) {

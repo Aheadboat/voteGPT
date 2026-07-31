@@ -487,7 +487,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## R2 — Repository Context and Hygiene Contract [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## R2 — Repository Context and Hygiene Contract [IN PROGRESS (RED)]
 
 - **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
 - **Dependencies:** F4 and F5 must both be `DONE` on `main` so the initial map describes merged code rather than unmerged worktree state.
@@ -510,6 +510,8 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Implementation lanes:** None. Although feature-owned map and registry files are disjoint, the diff is small and both consume one RED contract and one branch/index; sequential ownership avoids commit races and review overhead. Coordinator-owned contract wiring remains serialized after feature-owned artifacts.
 - **Risks:** The map can rot or become an inventory, so tests resolve links and the contract limits updates to routing surfaces. The registry can become a graveyard, so open entries block `VERIFIED` and stay absent through Gate B. Text checks can become brittle, so assertions target paths, ordering, state, and executable commands rather than prose. CodeGraph can be stale or resource-heavy, so initialization is serialized and the map remains the fallback.
 - **Unresolved decisions:** None. The interfaces, ownership, no-child-map starting point, empty registry state, and fallback behavior are settled for Gate A.
+- **Human Gate A evidence:** User explicitly approved the overall R2 design, tests-first R2-T1–T4 task graph, sequential ownership, dependencies, risks, and non-goals on 2026-07-30. RED is authorized; Human Gate B still controls the feature merge.
+- **R2-T1 RED evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` ran 17 checks with the 14 existing checks passing and exactly three approved failures: missing root `PROJECT-MAP.md`, missing `TEMPORARY.md` plus derived-state ignores, and missing `AGENTS.md` repository-context lifecycle wiring. The failures are attributable to absent R2 behavior; feature-owned files remained absent.
 
 | Task | Outcome | Expected RED or falsifiable check | Files and interfaces | Depends on | Done |
 | --- | --- | --- | --- | --- | --- |
@@ -523,12 +525,12 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `RED`
 - **Branch:** `codex/r2-context-hygiene`
 - **Base commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
 - **Integrated-main commit:** `5496a4f71cf018ba4eeb368f1aa142e19976db61`
 - **Admission result:** `N/A` — R2 is the sole active item; its F4/F5 dependencies are `DONE`, and no concurrent pair is admitted.
-- **Assigned feature lead:** `r2_context_hygiene_lead` — read-only DISCOVER/DESIGN/PLAN is complete with no feature-file change; implementation remains blocked at Human Gate A.
+- **Assigned feature lead:** `r2_context_hygiene_lead` — DISCOVER/DESIGN/PLAN is complete and Human Gate A approved; implementation is authorized only for the feature-owned R2-T2 files.
 - **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and CodeGraph post-merge maintenance. The R2 feature lead exclusively owns `PROJECT-MAP.md`, `TEMPORARY.md`, `.gitignore`, and local derived CodeGraph initialization in the R2 worktree after Gate A. Application production code remains frozen; existing feature plans, generated policy/data, schemas, migrations, provider configuration, and external resources remain unmodified.
 - **Merge order:** R2 feature PR → post-merge verification on `main` → R2 closeout PR/CI/merge. No later item activates automatically.
 - **Feature PR/CI:** Pending; activation and Human Gate A precede feature implementation or PR.
@@ -536,7 +538,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Feature merge:** Pending.
 - **Post-merge evidence:** Pending.
 - **Closeout PR/CI/merge:** Pending.
-- **Next Human Gate:** Human Gate A — approve the overall R2 design, tests-first task graph, dependencies, ownership, risks, and non-goals before RED or deliverable work.
+- **Next Human Gate:** Human Gate B — after `VERIFIED`, successful feature PR CI, mergeability, and independent review, present the final contract and evidence before feature merge.
 
 ## F6 — State Officials and Government-Level Navigation [TODO]
 
