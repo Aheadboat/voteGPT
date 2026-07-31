@@ -1112,7 +1112,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Assigned feature lead",
-        "`f6_state_navigation_lead` — the activation merge is integrated; DISCOVER/DESIGN/PLAN dispatch may begin and must stop at Human Gate A.",
+        "`f6_state_navigation_lead` — the activation merge and approved plan are integrated; the lead may execute the approved task graph and must stop after `VERIFIED` for coordinator review, feature PR/CI, and Human Gate B.",
       ],
       [
         "Ownership",
@@ -1124,7 +1124,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Feature PR/CI",
-        "Pending; activation and Human Gate A precede feature implementation or PR.",
+        "Pending; implementation, `VERIFIED`, and independent review precede the feature PR.",
       ],
       ["Blockers", "None."],
       ["Feature merge", "Pending."],
@@ -1132,7 +1132,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["Closeout PR/CI/merge", "Pending."],
       [
         "Next Human Gate",
-        "Human Gate A — approve the overall F6 design, applicable UX DNA, tests-first task graph, dependencies, interfaces, ownership, risks, and non-goals before RED or production work.",
+        "Human Gate B — after `VERIFIED`, successful feature PR CI, mergeability, and independent review, approve or reject the delivered behavior before merge.",
       ],
     ])
     const expectF6CoordinationFields = (item: string) => {
@@ -1298,7 +1298,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("records a complete F6 Gate A candidate without approving it", () => {
+  it("records the approved F6 Gate A plan without starting implementation", () => {
     const roadmap = readRepositoryFile("ROADMAP.md")
     const f6 = readRoadmapItem(roadmap, "F6")
 
@@ -1365,10 +1365,12 @@ describe("concurrent roadmap delivery contract", () => {
     }
     expect(f6).toContain("375px")
     expect(f6).toContain("1280px")
-    expect(f6).toContain("Human Gate A candidate")
-    expect(f6).not.toContain("Human Gate A approved")
+    expect(f6).toContain(
+      "**Human Gate A approval:** Approved by the user on 2026-07-31",
+    )
+    expect(f6).not.toContain("Human Gate A candidate")
     expect(readCoordinationField(f6, "Next Human Gate")).toContain(
-      "Human Gate A",
+      "Human Gate B",
     )
   })
 })
