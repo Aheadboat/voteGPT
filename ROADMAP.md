@@ -554,7 +554,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, and this closeout activates no later item.
 
-## F6 — State Officials and Government-Level Navigation [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F6 — State Officials and Government-Level Navigation [IN PROGRESS (GREEN)]
 
 - **Outcome:** Accessible `Local | State | Federal` tabs and sourced state legislative officials.
 - **Dependencies:** F5 and R2.
@@ -591,13 +591,14 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Discover/design/plan guard RED/GREEN evidence:** The strengthened foundation contract passed 17/18 and failed only because F6 lacked its applicable UX DNA and Gate A design/task graph. After only the coordinator-owned F6 design, alternatives, interfaces, risks, evidence plan, and six-task graph were recorded, it passed 18/18. No feature RED test or production file changed before Human Gate A.
 - **Human Gate A approval:** Approved by the user on 2026-07-31, including the isolated server-rendered design, Federal default, unavailable Local/Elections behavior, provider/privacy/cache contracts, task graph, T2/T4 parallel lanes, UX evidence plan, risks, and non-goals. Approval authorizes T1 RED and the approved F6 task graph through `VERIFIED`; it does not authorize G1, a live credential purchase, production publication, Gate B, or merge.
 - **Human Gate A record RED/GREEN evidence:** After approval, the coordinator strengthened the foundation contract first; it passed 17/18 and failed only because the durable F6 record still lacked the approval and still named Human Gate A as the next gate. After only the approval, assigned-lead handoff, feature-PR prerequisite, and next-gate fields changed, the focused contract passed 18/18. No feature RED test or production file changed during this coordination cycle.
+- **F6-T1 RED/GREEN/review evidence:** The fresh bounded implementer first ran `npm.cmd test -- src/lib/state-officials.test.ts`; Vitest failed only because the approved `./state-officials` module did not exist. Initial commit `43c9b0b00ae810c27ec587d93fd786e24511a941` added the pure public-division jurisdiction and source-backed roster domain. Independent review found two Important fail-closed gaps: incomplete bicameral evidence could be mislabeled unicameral, and valid jurisdiction objects depended on property insertion order. RED-first fix `5581edc645729fd74cde8ae720ed9e0175406e76` restricted the single-chamber path to explicit Nebraska evidence and replaced serialization equality; scoped re-review then caught one new Important nested-field leak. RED-first fix `f9f10a3f59d5f796ebdc1937fe18f95f1e2fa049` requires exact district keys before a jurisdiction can enter the view. Final scoped re-review found every issue addressed with no new Critical or Important finding. The coordinator replay passed 16/16 focused tests; the implementer's exact-head `npm.cmd run check` passed 31 files/754 tests, type generation, strict TypeScript, zero-warning lint, and production build with only the two recorded baseline environment warnings. T1 changed only its two approved files; T2 owns the next provider-contract RED while T4 remains pending in its disjoint approved lane.
 - **Tests first:** Keyboard/focus/deep-link/screen-reader tab behavior, multi-member body, vacancy, current-official presentation, and unavailable-local-coverage state.
 - **Done:** OpenStates adapter, `In office | Elections` mode, office-category chips, and verified-only local panel pass; federal/state coverage promise is test-backed; local gaps are explicit.
 - **Non-goals:** Claim of complete nationwide local coverage or candidate research.
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `GREEN`
 - **Branch:** `codex/f6-state-officials-navigation`
 - **Base commit:** `ea8bff3417896ba8ca669ccb517e7617d070b00d`
 - **Integrated-main commit:** `9f77d15d2ef15ab411fadebd2c688a2f217886e5`

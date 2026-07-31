@@ -898,7 +898,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
     expect(r2Status).toBe("DONE")
-    expect(f6Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(f6Status).toBe("IN PROGRESS (GREEN)")
     const r2IsDone = r2Status === "DONE"
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
@@ -978,8 +978,8 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("F6 is active in DISCOVER/DESIGN/PLAN")
-      expect(readme).toContain("Human Gate A")
+      expect(readme).toContain("F6 is active in GREEN")
+      expect(readme).toContain("Human Gate B")
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
       expect(readme).toContain("Human Gate B is approved")
@@ -1099,7 +1099,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
     expect(f6).toContain("single-item pre-activation audit passed")
     const expectedF6CoordinationFields = new Map<string, string>([
-      ["Phase", "`DISCOVER/DESIGN/PLAN`"],
+      ["Phase", "`GREEN`"],
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
@@ -1152,6 +1152,12 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("CLEAN")
     expect(f6).toContain("MERGEABLE")
     expect(f6).toContain("codegraph status --json .")
+    expect(f6).toContain("**F6-T1 RED/GREEN/review evidence:**")
+    expect(f6).toContain("43c9b0b00ae810c27ec587d93fd786e24511a941")
+    expect(f6).toContain("5581edc645729fd74cde8ae720ed9e0175406e76")
+    expect(f6).toContain("f9f10a3f59d5f796ebdc1937fe18f95f1e2fa049")
+    expect(f6).toContain("16/16")
+    expect(f6).toContain("31 files/754 tests")
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
