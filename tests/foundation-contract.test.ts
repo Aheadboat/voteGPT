@@ -1043,7 +1043,8 @@ describe("concurrent roadmap delivery contract", () => {
       "No later item activates automatically",
     ])
     const r2FeaturePr = readCoordinationField(r2, "Feature PR/CI")
-    expect(r2FeaturePr).toContain("Feature PR pending")
+    expect(r2FeaturePr).toContain("[PR #21]")
+    expect(r2FeaturePr).toContain("draft")
     expect(r2FeaturePr).toContain("hosted CI")
     expect(r2FeaturePr).toContain("mergeability")
     expect(r2FeaturePr).not.toContain("Human Gate A")
