@@ -1104,7 +1104,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
         "Integrated-main commit",
-        "`ea8bff3417896ba8ca669ccb517e7617d070b00d`",
+        "`9f77d15d2ef15ab411fadebd2c688a2f217886e5`",
       ],
       [
         "Admission result",
@@ -1112,7 +1112,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Assigned feature lead",
-        "`f6_state_navigation_lead` — dispatch begins only after the activation PR merges and that merge is integrated into the inert F6 branch.",
+        "`f6_state_navigation_lead` — the activation merge is integrated; DISCOVER/DESIGN/PLAN dispatch may begin and must stop at Human Gate A.",
       ],
       [
         "Ownership",
@@ -1142,6 +1142,16 @@ describe("concurrent roadmap delivery contract", () => {
     }
 
     expectF6CoordinationFields(f6)
+    expect(f6).toContain(
+      "[PR #23](https://github.com/Aheadboat/voteGPT/pull/23)",
+    )
+    expect(f6).toContain("30611790622")
+    expect(f6).toContain("30611800273")
+    expect(f6).toContain("4d50a417c3a613453d5832218c5abd467f2b93b0")
+    expect(f6).toContain("9f77d15d2ef15ab411fadebd2c688a2f217886e5")
+    expect(f6).toContain("CLEAN")
+    expect(f6).toContain("MERGEABLE")
+    expect(f6).toContain("codegraph status --json .")
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
