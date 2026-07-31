@@ -487,7 +487,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## R2 — Repository Context and Hygiene Contract [VERIFIED]
+## R2 — Repository Context and Hygiene Contract [DONE]
 
 - **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
 - **Dependencies:** F4 and F5 must both be `DONE` on `main` so the initial map describes merged code rather than unmerged worktree state.
@@ -539,20 +539,20 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `VERIFIED`
+- **Phase:** `DONE`
 - **Branch:** `codex/r2-context-hygiene`
 - **Base commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
 - **Integrated-main commit:** `5496a4f71cf018ba4eeb368f1aa142e19976db61`
-- **Admission result:** `N/A` — R2 is the sole active item; its F4/F5 dependencies are `DONE`, and no concurrent pair is admitted.
-- **Assigned feature lead:** `r2_context_hygiene_lead` — feature-owned artifacts and the ignored local CodeGraph initialization are complete; no feature-owned or application write remains before Gate B.
+- **Admission result:** `N/A` — R2 ran as the sole active item with its F4/F5 dependencies `DONE`; no concurrent pair was admitted, and no roadmap item remains active after this closeout.
+- **Assigned feature lead:** `r2_context_hygiene_lead` — feature-owned artifacts and ignored local CodeGraph initialization are complete; the lead was released after the verified feature merge.
 - **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and CodeGraph post-merge maintenance. The R2 feature lead exclusively owns `PROJECT-MAP.md`, `TEMPORARY.md`, `.gitignore`, and local derived CodeGraph initialization in the R2 worktree after Gate A. Application production code remains frozen; existing feature plans, generated policy/data, schemas, migrations, provider configuration, and external resources remain unmodified.
 - **Merge order:** R2 feature PR → post-merge verification on `main` → R2 closeout PR/CI/merge. No later item activates automatically.
-- **Feature PR/CI:** [PR #21](https://github.com/Aheadboat/voteGPT/pull/21) remains open as a draft while this approval-record successor is revalidated; exact pre-approval head `d618bc118210c21584be941f19785ae738a37c72` passed hosted CI push run `30601133039` and pull-request run `30601134531`, GitHub mergeability was `CLEAN` and `MERGEABLE`, Human Gate B was explicitly approved on 2026-07-30, and the successor must pass replacement exact-head hosted CI before ready/merge.
+- **Feature PR/CI:** [PR #21](https://github.com/Aheadboat/voteGPT/pull/21) opened as a draft and merged after exact approval head `4b341542b13d3109b9cef40c4dfeb4952df96dd6` passed hosted CI push run `30602018518` and pull-request run `30602019644`; GitHub mergeability was `CLEAN` and `MERGEABLE`, independent review had no unresolved finding, and Human Gate B was explicitly approved on 2026-07-30.
 - **Blockers:** None.
-- **Feature merge:** Pending.
-- **Post-merge evidence:** Pending.
-- **Closeout PR/CI/merge:** Pending.
-- **Next Human Gate:** None — Human Gate B was explicitly approved on 2026-07-30; replacement exact-head verification, feature merge, post-merge verification, and the status-only closeout remain coordinator-owned transitions.
+- **Feature merge:** [PR #21](https://github.com/Aheadboat/voteGPT/pull/21) merged to `main` as `5d2de03ba8c8185dc1f5d8656c7a0a7429a13bec` on 2026-07-31 UTC; feature head `4b341542b13d3109b9cef40c4dfeb4952df96dd6` is reachable from `main`, and both commits have tree `e38fdc61543989faa4e075bb4d27be354eede545`.
+- **Post-merge evidence:** Exact `main@5d2de03ba8c8185dc1f5d8656c7a0a7429a13bec` passed 17/17 focused checks and the full 30-file/737-test suite plus type generation, strict TypeScript, zero-warning lint, production build, and diff check in the isolated R2 checkout. The root checkout initialized its ignored index, ran `codegraph sync .`, and recorded `codegraph status --json .` with CodeGraph 1.0.1, 88 files, 1,750 nodes, 6,464 edges, zero pending changes, no worktree mismatch, and no reindex recommendation. Exact-main hosted run `30602234213` passed migrations, PostgreSQL contracts, non-E2E verification, and guarded Chromium journeys.
+- **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
+- **Next Human Gate:** None; Human Gate B was approved before the feature merge, and this closeout activates no later item.
 
 ## F6 — State Officials and Government-Level Navigation [TODO]
 

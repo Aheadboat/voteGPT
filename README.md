@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 is `VERIFIED` with its root map, temporary-work registry, routing contract, and ignored derived index, and Human Gate B is approved; replacement exact-head CI, feature merge, post-merge verification, and the status-only closeout remain. F6 and every later product item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete through its required feature merge, post-merge verification, and status-only closeout record. No roadmap item is active. F6 and every later product item remain TODO pending separate authorization.
 
 ## Local identity setup
 
