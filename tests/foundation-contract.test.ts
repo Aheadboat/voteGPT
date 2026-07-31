@@ -1297,4 +1297,78 @@ describe("concurrent roadmap delivery contract", () => {
       "cannot reach Gate B until it integrates completed F4",
     )
   })
+
+  it("records a complete F6 Gate A candidate without approving it", () => {
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const f6 = readRoadmapItem(roadmap, "F6")
+
+    expect(f6).toContain("**Applicable UX DNA IDs:**")
+    for (const id of [
+      "UX-01",
+      "UX-02",
+      "UX-04",
+      "UX-05",
+      "UX-06",
+      "UX-07",
+      "UX-08",
+      "UX-09",
+    ]) {
+      expect(f6, "F6 must map " + id).toContain(id)
+    }
+    expect(f6).toContain(
+      "UX-03 is not applicable because F6 presents officials, not candidates",
+    )
+    for (const field of [
+      "**Recommended design:**",
+      "**Provider and privacy interface:**",
+      "**Data and freshness interface:**",
+      "**Navigation and recovery interface:**",
+      "**Alternatives rejected:**",
+      "**Parallel lanes:**",
+      "**Risks and decisions:**",
+      "**UX evidence plan:**",
+    ]) {
+      expect(f6).toContain(field)
+    }
+    expect(f6).toContain("https://docs.openstates.org/api-v3/")
+    expect(f6).toContain("https://v3.openstates.org/openapi.json")
+    expect(f6).toContain("API v3 `/people`")
+    expect(f6).toContain("`X-API-KEY`")
+    expect(f6).toContain("`/people.geo` is forbidden")
+    expect(f6).toContain("zero people means `unknown`, never `vacant`")
+    expect(f6).toContain("default selection remains `Federal`")
+    expect(f6).toContain("Elections")
+    expect(f6).toContain("F7")
+    expect(f6).toContain("verified local provider")
+    expect(f6).toContain("### Tests-first task graph")
+    expect(f6).toContain(
+      "| Task | Outcome | Expected RED | Files/interfaces | Depends on | Focused check | Done |",
+    )
+    expectTokensInOrder(f6, [
+      "| T1 |",
+      "| T2 |",
+      "| T3 |",
+      "| T4 |",
+      "| T5 |",
+      "| T6 |",
+    ])
+    for (const command of [
+      "npm.cmd test -- src/lib/state-officials.test.ts",
+      "npm.cmd test -- src/lib/openstates.test.ts",
+      "npm.cmd run test:postgres -- integration/state-official-cache.test.ts",
+      "npm.cmd test -- src/components/government-navigation.test.tsx",
+      "npm.cmd test -- src/components/state-officials.test.tsx src/app/dashboard/page.test.tsx",
+      "npm.cmd run check",
+      "npm.cmd run test:e2e",
+    ]) {
+      expect(f6).toContain(command)
+    }
+    expect(f6).toContain("375px")
+    expect(f6).toContain("1280px")
+    expect(f6).toContain("Human Gate A candidate")
+    expect(f6).not.toContain("Human Gate A approved")
+    expect(readCoordinationField(f6, "Next Human Gate")).toContain(
+      "Human Gate A",
+    )
+  })
 })
