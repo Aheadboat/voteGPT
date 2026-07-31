@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GovernmentNavigation } from "./government-navigation";
+import { normalizeGovernmentNavigation } from "@/lib/government-navigation";
 
 const panels = {
   local: <p>Local panel</p>,
@@ -11,6 +12,32 @@ const panels = {
 };
 
 describe("GovernmentNavigation", () => {
+  it("lets server code normalize before invoking only the selected level loader", () => {
+    const local = vi.fn();
+    const state = vi.fn();
+    const federal = vi.fn();
+    const navigation = normalizeGovernmentNavigation(
+      new URLSearchParams("level=state&mode=in-office&category=legislature"),
+    );
+
+    if (navigation.level === "local") {
+      local();
+    } else if (navigation.level === "state") {
+      state();
+    } else {
+      federal();
+    }
+
+    expect(navigation).toEqual({
+      level: "state",
+      mode: "in-office",
+      category: "legislature",
+    });
+    expect(state).toHaveBeenCalledOnce();
+    expect(local).not.toHaveBeenCalled();
+    expect(federal).not.toHaveBeenCalled();
+  });
+
   it("normalizes arbitrary, repeated, and unsupported query values to the safe Federal Congress view", () => {
     const { container } = render(
       <GovernmentNavigation
@@ -100,7 +127,7 @@ describe("GovernmentNavigation", () => {
     expect(screen.queryByText("Congress")).toBeNull();
   });
 
-  it("provides one selected tab and panel with roving Arrow, Home, and End focus", () => {
+  it("uses hydrated manual roving focus independently from URL selection", () => {
     render(<GovernmentNavigation panels={panels} />);
 
     const local = screen.getByRole("tab", { name: "Local" });
@@ -109,20 +136,53 @@ describe("GovernmentNavigation", () => {
 
     expect(screen.getByRole("tablist", { name: "Government level" })).toBeInTheDocument();
     expect(federal).toHaveAttribute("aria-selected", "true");
-    expect(federal).toHaveAttribute("tabindex", "0");
-    expect(local).toHaveAttribute("tabindex", "-1");
-    expect(state).toHaveAttribute("tabindex", "-1");
+    expectTabStop(federal, local, state);
     expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "In office" }).tabIndex).toBe(0);
 
     federal.focus();
     fireEvent.keyDown(federal, { key: "ArrowRight" });
     expect(local).toHaveFocus();
+    expectTabStop(local, state, federal);
     fireEvent.keyDown(local, { key: "End" });
     expect(federal).toHaveFocus();
+    expectTabStop(federal, local, state);
     fireEvent.keyDown(federal, { key: "Home" });
     expect(local).toHaveFocus();
+    expectTabStop(local, state, federal);
     fireEvent.keyDown(local, { key: "ArrowLeft" });
     expect(federal).toHaveFocus();
+    expectTabStop(federal, local, state);
+
+    fireEvent.focus(state);
+    state.focus();
+    expect(state).toHaveFocus();
+    expectTabStop(state, local, federal);
+    expect(federal).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("resets roving ownership to a new URL-selected level", () => {
+    const { rerender } = render(<GovernmentNavigation panels={panels} />);
+    const local = screen.getByRole("tab", { name: "Local" });
+    const state = screen.getByRole("tab", { name: "State" });
+    const federal = screen.getByRole("tab", { name: "Federal" });
+
+    fireEvent.focus(local);
+    local.focus();
+    expectTabStop(local, state, federal);
+
+    rerender(
+      <GovernmentNavigation
+        panels={panels}
+        searchParams={new URLSearchParams("level=state&mode=in-office")}
+      />,
+    );
+
+    const nextLocal = screen.getByRole("tab", { name: "Local" });
+    const nextState = screen.getByRole("tab", { name: "State" });
+    const nextFederal = screen.getByRole("tab", { name: "Federal" });
+    expect(nextState).toHaveAttribute("aria-selected", "true");
+    expectTabStop(nextState, nextLocal, nextFederal);
   });
 
   it("keeps deep links usable in server markup without simulating JavaScript navigation", () => {
@@ -131,7 +191,21 @@ describe("GovernmentNavigation", () => {
     );
 
     expect(markup).toContain('href="?level=federal&amp;mode=in-office&amp;category=congress"');
+    expect(markup).toContain('href="?level=local&amp;mode=in-office"');
+    expect(markup).toContain('href="?level=state&amp;mode=in-office&amp;category=legislature"');
     expect(markup).toContain("Federal Congress panel");
+    expect(markup).not.toContain('tabindex="-1"');
+    expect(markup).not.toContain('tabindex="0"');
     expect(markup).not.toMatch(/<script|onClick=/i);
   });
 });
+
+function expectTabStop(
+  selected: HTMLElement,
+  ...otherTabs: HTMLElement[]
+) {
+  expect(selected).toHaveAttribute("tabindex", "0");
+  for (const tab of otherTabs) {
+    expect(tab).toHaveAttribute("tabindex", "-1");
+  }
+}
