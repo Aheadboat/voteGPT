@@ -90,6 +90,7 @@ const districtIdPattern =
 const publicTextPattern = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identityPattern = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const chambers: readonly StateChamber[] = ["upper", "lower"];
+const unicameralStateCodes = new Set(["ne"]);
 
 export function stateJurisdictionFromDivisions(
   divisions: readonly SavedResidenceDivision[],
@@ -129,7 +130,10 @@ export function stateJurisdictionFromDivisions(
   if (
     selectedDistricts.some(
       (district) => district.stateCode !== state.stateCode,
-    )
+    ) ||
+    (selectedDistricts.length === 1 &&
+      (!unicameralStateCodes.has(state.stateCode) ||
+        selectedDistricts[0]?.chamber !== "upper"))
   ) {
     return { status: "invalid" };
   }
@@ -435,7 +439,26 @@ function isJurisdiction(value: StateJurisdiction): boolean {
   );
   return (
     parsed.status === "available" &&
-    JSON.stringify(parsed.jurisdiction) === JSON.stringify(value)
+    hasSameJurisdiction(parsed.jurisdiction, value)
+  );
+}
+
+function hasSameJurisdiction(
+  left: StateJurisdiction,
+  right: StateJurisdiction,
+): boolean {
+  return (
+    left.stateCode === right.stateCode &&
+    left.stateDivisionId === right.stateDivisionId &&
+    left.jurisdictionId === right.jurisdictionId &&
+    left.legislature === right.legislature &&
+    left.districts.length === right.districts.length &&
+    left.districts.every(
+      (district, index) =>
+        district.chamber === right.districts[index]?.chamber &&
+        district.district === right.districts[index]?.district &&
+        district.divisionId === right.districts[index]?.divisionId,
+    )
   );
 }
 

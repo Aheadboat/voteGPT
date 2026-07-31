@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   reconcileStateOfficials,
   stateJurisdictionFromDivisions,
+  type StateJurisdiction,
   type StateOfficialsView,
 } from "./state-officials";
 
@@ -112,6 +113,35 @@ describe("stateJurisdictionFromDivisions", () => {
     });
   });
 
+  it("rejects a lone upper or lower district for a bicameral state", () => {
+    for (const division of [
+      {
+        type: "state_upper" as const,
+        name: "Example Senate District 2",
+        id: "ocd-division/country:us/state:ex/sldu:2",
+        idScheme: "ocd",
+      },
+      {
+        type: "state_lower" as const,
+        name: "Example House District 2",
+        id: "ocd-division/country:us/state:ex/sldl:2",
+        idScheme: "ocd",
+      },
+    ]) {
+      expect(
+        stateJurisdictionFromDivisions([
+          {
+            type: "state",
+            name: "Example",
+            id: "ocd-division/country:us/state:ex",
+            idScheme: "ocd",
+          },
+          division,
+        ]),
+      ).toEqual({ status: "invalid" });
+    }
+  });
+
   it.each([
     [
       "duplicate state division",
@@ -219,6 +249,49 @@ describe("stateJurisdictionFromDivisions", () => {
 });
 
 describe("reconcileStateOfficials", () => {
+  it("accepts a valid jurisdiction with reordered object keys", () => {
+    const result = stateJurisdictionFromDivisions([
+      {
+        type: "state",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
+        idScheme: "ocd",
+      },
+      {
+        type: "state_upper",
+        name: "Nebraska Legislative District 8",
+        id: "ocd-division/country:us/state:ne/sldu:8",
+        idScheme: "ocd",
+      },
+    ]);
+    if (result.status !== "available") {
+      throw new Error("fixture requires a jurisdiction");
+    }
+    const reordered: StateJurisdiction = {
+      districts: result.jurisdiction.districts,
+      legislature: result.jurisdiction.legislature,
+      jurisdictionId: result.jurisdiction.jurisdictionId,
+      stateDivisionId: result.jurisdiction.stateDivisionId,
+      stateCode: result.jurisdiction.stateCode,
+    };
+    const roster = {
+      freshness,
+      seats: [
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "1",
+          people: [],
+          vacancySources: [],
+        },
+      ],
+    };
+
+    expect(reconcileStateOfficials(reordered, roster)).toEqual(
+      reconcileStateOfficials(result.jurisdiction, roster),
+    );
+  });
+
   it("keeps multi-member seats and people in deterministic chamber, district, seat, and person order", () => {
     const result = stateJurisdictionFromDivisions([
       {
@@ -316,14 +389,14 @@ describe("reconcileStateOfficials", () => {
     const result = stateJurisdictionFromDivisions([
       {
         type: "state",
-        name: "Example",
-        id: "ocd-division/country:us/state:ex",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
         idScheme: "ocd",
       },
       {
         type: "state_upper",
-        name: "District 2",
-        id: "ocd-division/country:us/state:ex/sldu:2",
+        name: "Nebraska Legislative District 2",
+        id: "ocd-division/country:us/state:ne/sldu:2",
         idScheme: "ocd",
       },
     ]);
@@ -392,14 +465,14 @@ describe("reconcileStateOfficials", () => {
     const result = stateJurisdictionFromDivisions([
       {
         type: "state",
-        name: "Example",
-        id: "ocd-division/country:us/state:ex",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
         idScheme: "ocd",
       },
       {
         type: "state_upper",
-        name: "District 2",
-        id: "ocd-division/country:us/state:ex/sldu:2",
+        name: "Nebraska Legislative District 2",
+        id: "ocd-division/country:us/state:ne/sldu:2",
         idScheme: "ocd",
       },
     ]);
@@ -434,14 +507,14 @@ describe("reconcileStateOfficials", () => {
     const result = stateJurisdictionFromDivisions([
       {
         type: "state",
-        name: "Example",
-        id: "ocd-division/country:us/state:ex",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
         idScheme: "ocd",
       },
       {
         type: "state_upper",
-        name: "District 2",
-        id: "ocd-division/country:us/state:ex/sldu:2",
+        name: "Nebraska Legislative District 2",
+        id: "ocd-division/country:us/state:ne/sldu:2",
         idScheme: "ocd",
       },
     ]);
