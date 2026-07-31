@@ -1042,7 +1042,11 @@ describe("concurrent roadmap delivery contract", () => {
       "R2 closeout PR/CI/merge",
       "No later item activates automatically",
     ])
-    expect(readCoordinationField(r2, "Feature PR/CI")).toContain("Pending")
+    const r2FeaturePr = readCoordinationField(r2, "Feature PR/CI")
+    expect(r2FeaturePr).toContain("Feature PR pending")
+    expect(r2FeaturePr).toContain("hosted CI")
+    expect(r2FeaturePr).toContain("mergeability")
+    expect(r2FeaturePr).not.toContain("Human Gate A")
     expect(readCoordinationField(r2, "Blockers")).toBe("None.")
     expect(readCoordinationField(r2, "Feature merge")).toContain("Pending")
     expect(readCoordinationField(r2, "Post-merge evidence")).toContain(
