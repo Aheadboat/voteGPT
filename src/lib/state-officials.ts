@@ -312,7 +312,7 @@ function reconcileSeat(
         seat,
         people: servingPeople
           .map(({ person }) => person)
-          .sort((left, right) => comparePublicFields(left.name, right.name)),
+          .sort(comparePeople),
         sources: deduplicateSources(servingPeople.flatMap(({ sources }) => sources)),
       },
     };
@@ -535,6 +535,20 @@ function chamberOrder(chamber: StateChamber): number {
 
 function comparePublicFields(left: string, right: string): number {
   return left.localeCompare(right, "en", { numeric: true, sensitivity: "variant" });
+}
+
+function comparePeople(
+  left: StateOfficialPerson,
+  right: StateOfficialPerson,
+): number {
+  const nameOrder = comparePublicFields(left.name, right.name);
+  if (nameOrder !== 0) {
+    return nameOrder;
+  }
+  if (left.id < right.id) {
+    return -1;
+  }
+  return left.id > right.id ? 1 : 0;
 }
 
 function deduplicateSources(sources: readonly StateSource[]): readonly StateSource[] {

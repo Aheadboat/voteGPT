@@ -515,6 +515,93 @@ describe("reconcileStateOfficials", () => {
     });
   });
 
+  it("orders equal-name people by strict ID independent of provider order", () => {
+    const result = stateJurisdictionFromDivisions([
+      {
+        type: "state",
+        name: "Nebraska",
+        id: "ocd-division/country:us/state:ne",
+        idScheme: "ocd",
+      },
+      {
+        type: "state_upper",
+        name: "Nebraska Legislative District 8",
+        id: "ocd-division/country:us/state:ne/sldu:8",
+        idScheme: "ocd",
+      },
+    ]);
+    if (result.status !== "available") {
+      throw new Error("fixture requires a jurisdiction");
+    }
+    const personTwo = {
+      id: "openstates:2",
+      name: "Alex Rivera",
+      role: {
+        chamber: "upper" as const,
+        district: "8",
+        seat: "Senator",
+        current: true,
+      },
+      sources: [
+        {
+          ...officialSource,
+          publicUrl: "https://legislature.example.gov/members/alex-rivera-2",
+        },
+      ],
+    };
+    const personTen = {
+      ...personTwo,
+      id: "openstates:10",
+      sources: [
+        {
+          ...officialSource,
+          publicUrl: "https://legislature.example.gov/members/alex-rivera-10",
+        },
+      ],
+    };
+    const roster = (people: readonly [typeof personTwo, typeof personTwo]) => ({
+      freshness,
+      seats: [
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "Senator",
+          people,
+          vacancySources: [],
+        },
+      ],
+    });
+
+    const forward = reconcileStateOfficials(
+      result.jurisdiction,
+      roster([personTwo, personTen]),
+    );
+    const reversed = reconcileStateOfficials(
+      result.jurisdiction,
+      roster([personTen, personTwo]),
+    );
+
+    expect(forward).toEqual(reversed);
+    expect(forward).toMatchObject({
+      chambers: [
+        {
+          districts: [
+            {
+              seats: [
+                {
+                  people: [
+                    { id: "openstates:10", name: "Alex Rivera" },
+                    { id: "openstates:2", name: "Alex Rivera" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it("marks serving, explicit vacancy, and absent evidence without inferring a vacancy", () => {
     const result = stateJurisdictionFromDivisions([
       {
