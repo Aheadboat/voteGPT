@@ -368,6 +368,7 @@ describe("repository context and hygiene contract", () => {
   it("makes map maintenance and temporary cleanup delivery gates", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const readme = readRepositoryFile("README.md")
+    const codeGraph = readMarkdownSection(agents, "## CodeGraph")
     const context = readMarkdownSection(
       agents,
       "## Repository context and hygiene",
@@ -376,6 +377,9 @@ describe("repository context and hygiene contract", () => {
 
     expect(readmeLinks).toContain("PROJECT-MAP.md")
     expect(readmeLinks).toContain("TEMPORARY.md")
+    expect(codeGraph).toMatch(
+      /PROJECT-MAP\.md[^.\n]*(?:first|before)[^.\n]*(?:grep|find|reading (?:other )?files)/i,
+    )
     expectTokensInOrder(context, [
       "PROJECT-MAP.md",
       "CodeGraph",
