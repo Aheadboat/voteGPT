@@ -981,7 +981,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
       expect(readme).toContain("F6 is active in GREEN")
       expect(readme).toContain(
-        "state-jurisdiction domain and bounded OpenStates provider adapter are independently reviewed",
+        "state-jurisdiction domain, bounded OpenStates provider adapter, and accessible navigation shell are independently reviewed",
       )
       expect(readme).toContain("Human Gate B")
     } else {
@@ -1173,6 +1173,14 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("public legislative query-key allowlist")
     expect(f6).toContain("29/29")
     expect(f6).toContain("32 files/767 tests")
+    expect(f6).toContain("**F6-T4 RED/GREEN/review evidence:**")
+    expect(f6).toContain("a5bdc58e9cff54394bf530a4f376cdfdfd55ded0")
+    expect(f6).toContain("46a6a9408a471912a3d24c2961e7f392fd4ef41b")
+    expect(f6).toContain("directive-free shared query contract")
+    expect(f6).toContain("hydration-safe manual roving focus")
+    expect(f6).toContain("no-JavaScript")
+    expect(f6).toContain("7/7")
+    expect(f6).toContain("33 files/774 tests")
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
