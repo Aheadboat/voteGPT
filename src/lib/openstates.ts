@@ -47,6 +47,26 @@ const MAX_OFFICIAL_SOURCES = 8;
 const MAX_SOURCE_URL_LENGTH = 2_048;
 const MAX_SOURCE_QUERY_LENGTH = 1_024;
 const MAX_SOURCE_QUERY_PARAMETERS = 20;
+const PUBLIC_LEGISLATIVE_QUERY_KEYS: ReadonlySet<string> = new Set([
+  "body",
+  "chamber",
+  "code",
+  "ddbienniumsession",
+  "district",
+  "ga",
+  "id",
+  "legislativetermid",
+  "member",
+  "memberid",
+  "memid",
+  "personid",
+  "pid",
+  "session",
+  "sessionid",
+  "sessionselect",
+  "sid",
+  "year",
+]);
 const publicText = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identifier = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const stateCode = /^[A-Z]{2}$/;
@@ -393,6 +413,7 @@ function parseSources(values: readonly unknown[], state: string, checkedAt: stri
     const url = parseCanonicalSourceUrl(value.url);
     if (url === null) return null;
     if (!isOfficialSourceHost(url.hostname, state)) continue;
+    if (!hasOnlyPublicLegislativeQueryKeys(url)) return null;
     if (urls.has(value.url)) continue;
     if (sources.length >= MAX_OFFICIAL_SOURCES) return null;
     urls.add(value.url);
@@ -440,6 +461,16 @@ function isOfficialSourceHost(hostname: string, state: string): boolean {
   return OFFICIAL_LEGISLATIVE_HOSTS[state].some(
     (allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`),
   );
+}
+
+function hasOnlyPublicLegislativeQueryKeys(url: URL): boolean {
+  return [...url.searchParams.keys()].every((key) =>
+    PUBLIC_LEGISLATIVE_QUERY_KEYS.has(normalizeSourceQueryKey(key)),
+  );
+}
+
+function normalizeSourceQueryKey(key: string): string {
+  return key.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function isSupportedState(value: string): value is keyof typeof OFFICIAL_LEGISLATIVE_HOSTS {

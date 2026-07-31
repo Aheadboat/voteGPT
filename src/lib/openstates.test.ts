@@ -39,56 +39,56 @@ const unicameral: StateJurisdiction = {
 };
 
 const VETTED_LEGISLATIVE_HOSTS = {
-  AK: ["akleg.gov"],
-  AL: ["legislature.state.al.us"],
-  AR: ["arkleg.state.ar.us"],
-  AZ: ["azleg.gov"],
-  CA: ["assembly.ca.gov", "senate.ca.gov"],
-  CO: ["leg.colorado.gov"],
-  CT: ["cga.ct.gov"],
-  DE: ["legis.delaware.gov"],
-  FL: ["flsenate.gov", "myfloridahouse.gov", "flhouse.gov"],
-  GA: ["legis.ga.gov", "house.ga.gov", "senate.ga.gov"],
-  HI: ["capitol.hawaii.gov"],
-  IA: ["legis.iowa.gov", "senate.iowa.gov"],
-  ID: ["legislature.idaho.gov"],
-  IL: ["ilga.gov"],
-  IN: ["iga.in.gov"],
-  KS: ["kslegislature.gov", "kslegislature.org"],
-  KY: ["legislature.ky.gov", "lrc.ky.gov"],
-  LA: ["house.louisiana.gov", "senate.la.gov"],
-  MA: ["malegislature.gov"],
-  MD: ["mgaleg.maryland.gov"],
-  ME: ["legislature.maine.gov"],
-  MI: ["house.mi.gov", "senate.michigan.gov"],
-  MN: ["house.mn.gov", "house.leg.state.mn.us", "senate.mn"],
-  MO: ["house.mo.gov", "senate.mo.gov"],
-  MS: ["billstatus.ls.state.ms.us", "legislature.ms.gov"],
-  MT: ["leg.mt.gov", "legmt.gov"],
-  NC: ["ncleg.gov", "ncga.state.nc.us"],
-  ND: ["legis.nd.gov", "ndlegis.gov"],
-  NE: ["nebraskalegislature.gov"],
-  NH: ["gencourt.state.nh.us", "gc.nh.gov"],
-  NJ: ["njleg.state.nj.us"],
-  NM: ["nmlegis.gov"],
-  NV: ["leg.state.nv.us"],
-  NY: ["assembly.state.ny.us", "nyassembly.gov", "nysenate.gov"],
-  OH: ["legislature.ohio.gov", "ohiohouse.gov", "ohiosenate.gov"],
-  OK: ["okhouse.gov", "oksenate.gov", "oklegislature.gov"],
-  OR: ["oregonlegislature.gov"],
-  PA: ["legis.state.pa.us", "palegis.us"],
-  RI: ["rilegislature.gov", "rilin.state.ri.us"],
-  SC: ["scstatehouse.gov"],
-  SD: ["sdlegislature.gov", "legis.sd.gov"],
-  TN: ["capitol.tn.gov", "legislature.state.tn.us"],
-  TX: ["house.texas.gov", "senate.texas.gov", "capitol.texas.gov"],
-  UT: ["le.utah.gov", "house.utah.gov", "house.utleg.gov", "senate.utah.gov"],
-  VA: ["virginiageneralassembly.gov", "lis.virginia.gov", "senate.virginia.gov", "house.vga.virginia.gov"],
-  VT: ["legislature.vermont.gov"],
-  WA: ["leg.wa.gov"],
-  WI: ["legis.wisconsin.gov"],
-  WV: ["wvlegislature.gov", "legis.state.wv.us"],
-  WY: ["wyoleg.gov", "legisweb.state.wy.us"],
+  AK: { name: "Alaska", hosts: ["akleg.gov"] },
+  AL: { name: "Alabama", hosts: ["legislature.state.al.us"] },
+  AR: { name: "Arkansas", hosts: ["arkleg.state.ar.us"] },
+  AZ: { name: "Arizona", hosts: ["azleg.gov"] },
+  CA: { name: "California", hosts: ["assembly.ca.gov", "senate.ca.gov"] },
+  CO: { name: "Colorado", hosts: ["leg.colorado.gov"] },
+  CT: { name: "Connecticut", hosts: ["cga.ct.gov"] },
+  DE: { name: "Delaware", hosts: ["legis.delaware.gov"] },
+  FL: { name: "Florida", hosts: ["flsenate.gov", "myfloridahouse.gov", "flhouse.gov"] },
+  GA: { name: "Georgia", hosts: ["legis.ga.gov", "house.ga.gov", "senate.ga.gov"] },
+  HI: { name: "Hawaii", hosts: ["capitol.hawaii.gov"] },
+  IA: { name: "Iowa", hosts: ["legis.iowa.gov", "senate.iowa.gov"] },
+  ID: { name: "Idaho", hosts: ["legislature.idaho.gov"] },
+  IL: { name: "Illinois", hosts: ["ilga.gov"] },
+  IN: { name: "Indiana", hosts: ["iga.in.gov"] },
+  KS: { name: "Kansas", hosts: ["kslegislature.gov", "kslegislature.org"] },
+  KY: { name: "Kentucky", hosts: ["legislature.ky.gov", "lrc.ky.gov"] },
+  LA: { name: "Louisiana", hosts: ["house.louisiana.gov", "senate.la.gov"] },
+  MA: { name: "Massachusetts", hosts: ["malegislature.gov"] },
+  MD: { name: "Maryland", hosts: ["mgaleg.maryland.gov"] },
+  ME: { name: "Maine", hosts: ["legislature.maine.gov"] },
+  MI: { name: "Michigan", hosts: ["house.mi.gov", "senate.michigan.gov"] },
+  MN: { name: "Minnesota", hosts: ["house.mn.gov", "house.leg.state.mn.us", "senate.mn"] },
+  MO: { name: "Missouri", hosts: ["house.mo.gov", "senate.mo.gov"] },
+  MS: { name: "Mississippi", hosts: ["billstatus.ls.state.ms.us", "legislature.ms.gov"] },
+  MT: { name: "Montana", hosts: ["leg.mt.gov", "legmt.gov"] },
+  NC: { name: "North Carolina", hosts: ["ncleg.gov", "ncga.state.nc.us"] },
+  ND: { name: "North Dakota", hosts: ["legis.nd.gov", "ndlegis.gov"] },
+  NE: { name: "Nebraska", hosts: ["nebraskalegislature.gov"] },
+  NH: { name: "New Hampshire", hosts: ["gencourt.state.nh.us", "gc.nh.gov"] },
+  NJ: { name: "New Jersey", hosts: ["njleg.state.nj.us"] },
+  NM: { name: "New Mexico", hosts: ["nmlegis.gov"] },
+  NV: { name: "Nevada", hosts: ["leg.state.nv.us"] },
+  NY: { name: "New York", hosts: ["assembly.state.ny.us", "nyassembly.gov", "nysenate.gov"] },
+  OH: { name: "Ohio", hosts: ["legislature.ohio.gov", "ohiohouse.gov", "ohiosenate.gov"] },
+  OK: { name: "Oklahoma", hosts: ["okhouse.gov", "oksenate.gov", "oklegislature.gov"] },
+  OR: { name: "Oregon", hosts: ["oregonlegislature.gov"] },
+  PA: { name: "Pennsylvania", hosts: ["legis.state.pa.us", "palegis.us"] },
+  RI: { name: "Rhode Island", hosts: ["rilegislature.gov", "rilin.state.ri.us"] },
+  SC: { name: "South Carolina", hosts: ["scstatehouse.gov"] },
+  SD: { name: "South Dakota", hosts: ["sdlegislature.gov", "legis.sd.gov"] },
+  TN: { name: "Tennessee", hosts: ["capitol.tn.gov", "legislature.state.tn.us"] },
+  TX: { name: "Texas", hosts: ["house.texas.gov", "senate.texas.gov", "capitol.texas.gov"] },
+  UT: { name: "Utah", hosts: ["le.utah.gov", "house.utah.gov", "house.utleg.gov", "senate.utah.gov"] },
+  VA: { name: "Virginia", hosts: ["virginiageneralassembly.gov", "lis.virginia.gov", "senate.virginia.gov", "house.vga.virginia.gov"] },
+  VT: { name: "Vermont", hosts: ["legislature.vermont.gov"] },
+  WA: { name: "Washington", hosts: ["leg.wa.gov"] },
+  WI: { name: "Wisconsin", hosts: ["legis.wisconsin.gov"] },
+  WV: { name: "West Virginia", hosts: ["wvlegislature.gov", "legis.state.wv.us"] },
+  WY: { name: "Wyoming", hosts: ["wyoleg.gov", "legisweb.state.wy.us"] },
 } as const;
 
 describe("fetchStateLegislators", () => {
@@ -142,6 +142,7 @@ describe("fetchStateLegislators", () => {
   it("normalizes unicameral, multi-member, and verified-empty coverage without inventing a vacancy", async () => {
     const unicameralPage = mutate(bicameralPage1, (page) => {
       page.results[0].jurisdiction.id = unicameral.jurisdictionId;
+      page.results[0].jurisdiction.name = "Nebraska";
       page.results[0].current_role.district = "8";
       page.results[0].current_role.division_id = "ocd-division/country:us/state:ne/sldu:8";
       page.results[0].sources[0].url = "https://nebraskalegislature.gov/senators/landing-pages/index.php?District=8";
@@ -225,7 +226,7 @@ describe("fetchStateLegislators", () => {
   });
 
   it("retains only bounded, deduplicated institutional sources without rejecting well-formed extras", async () => {
-    const officialUrl = "https://www.senate.ca.gov/members/alex-rivera?session=2025-2026&id=42";
+    const officialUrl = "https://members.senate.ca.gov/members/alex-rivera?session=2025-2026&id=42";
     const mixedSources = mutate(bicameralPage1, (page) => {
       page.results[0].sources = [
         { url: "https://x.com/example-legislator" },
@@ -245,9 +246,69 @@ describe("fetchStateLegislators", () => {
     ]);
   });
 
+  it("accepts only normalized query keys evidenced by public legislative sources", async () => {
+    const publicQueries = [
+      "body=S",
+      "CHAMBER=H",
+      "code=abc",
+      "dd-Biennium_Session=94",
+      "District=8",
+      "GA=104",
+      "id=42",
+      "LegislativeTermId=90",
+      "member=294",
+      "Member_ID%5B%5D=4879",
+      "mem_id=1270",
+      "personId=9",
+      "pid=10621",
+      "session=34",
+      "Session_ID=2026",
+      "session-select=2026",
+      "sid=42",
+      "year=2026",
+    ];
+
+    for (const query of publicQueries) {
+      const page = mutate(bicameralPage1, (value) => {
+        value.results[0].sources = [{ url: `https://senate.ca.gov/member?${query}` }];
+      });
+      await expect(run(bicameral, [page, bicameralPage2]), query)
+        .resolves.toMatchObject({ status: "available" });
+    }
+  });
+
+  it("rejects location, identity, credential, and unknown query keys after stable normalization", async () => {
+    const forbiddenQueries = [
+      "Address=1-main",
+      "street_address=1-main",
+      "LOCATION%5B%5D=private",
+      "lat=38.5",
+      "l-n-g=-121.5",
+      "coordinates=38.5%2C-121.5",
+      "USER=person-1",
+      "user_id=person-1",
+      "email=person%40example.com",
+      "account=person-1",
+      "api-key=secret",
+      "TOKEN=secret",
+      "secret%5B%5D=value",
+      "auth=value",
+      "pass_word=value",
+      "sort=alpha",
+    ];
+
+    for (const query of forbiddenQueries) {
+      const page = mutate(bicameralPage1, (value) => {
+        value.results[0].sources = [{ url: `https://senate.ca.gov/member?${query}` }];
+      });
+      await expect(run(bicameral, [page, bicameralPage2]), query)
+        .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+    }
+  });
+
   it("uses the complete state-scoped legislative host policy, including vetted non-.gov roots", async () => {
     expect(Object.keys(VETTED_LEGISLATIVE_HOSTS)).toHaveLength(50);
-    for (const [state, hosts] of Object.entries(VETTED_LEGISLATIVE_HOSTS)) {
+    for (const [state, { hosts }] of Object.entries(VETTED_LEGISLATIVE_HOSTS)) {
       const jurisdiction = jurisdictionFor(state);
       for (const host of hosts) {
         const page = officialPageFor(jurisdiction, `https://${host}/member?session=2026`);
@@ -268,6 +329,8 @@ describe("fetchStateLegislators", () => {
       "https://www.nysenate.gov/legislators/bio/example",
       "https://www.whitehouse.gov/briefing-room/",
       "https://housedems.ct.gov/example",
+      "https://senate.ca.gov.attacker.example/member",
+      "https://evil-senate.ca.gov/member",
     ]) {
       const page = mutate(bicameralPage1, (value) => {
         value.results[0].sources = [{ url: sourceUrl }];
@@ -391,9 +454,14 @@ function jurisdictionFor(state: string): StateJurisdiction {
 }
 
 function officialPageFor(jurisdiction: StateJurisdiction, sourceUrl: string): MutableFixturePage {
+  const policy = VETTED_LEGISLATIVE_HOSTS[
+    jurisdiction.stateCode as keyof typeof VETTED_LEGISLATIVE_HOSTS
+  ];
+  if (policy === undefined) throw new Error(`Missing vetted state fixture for ${jurisdiction.stateCode}.`);
   return mutate(bicameralPage1, (page) => {
     const district = jurisdiction.districts[0]!;
     page.results[0].jurisdiction.id = jurisdiction.jurisdictionId;
+    page.results[0].jurisdiction.name = policy.name;
     page.results[0].current_role.org_classification = district.chamber;
     page.results[0].current_role.district = district.district;
     page.results[0].current_role.division_id = district.divisionId;
