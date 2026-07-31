@@ -487,14 +487,36 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## R2 — Repository Context and Hygiene Contract [TODO]
+## R2 — Repository Context and Hygiene Contract [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
 - **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
 - **Dependencies:** F4 and F5 must both be `DONE` on `main` so the initial map describes merged code rather than unmerged worktree state.
-- **Ordering authorization:** User explicitly approved R2 as the very next roadmap step after F4 and F5 on 2026-07-18. This records order only; R2 remains `TODO` and inactive until both closeout merges are on `main`, a fresh pre-activation audit passes, and the user explicitly activates it.
+- **Authorization:** User explicitly approved R2 as the next roadmap step on 2026-07-30. User explicitly activated R2 on 2026-07-30 by directing the coordinator to get started on the next roadmap item.
+- **Pre-activation audit:** The single-item pre-activation audit passed on 2026-07-30. F4 and F5 are `DONE` on `main@d262403200ff98bcf4a2d9a5cd05a7016a69d98d` through closeout PRs #17 and #19; no roadmap slot or pull request is active; R2's current-code-only map, temporary-artifact registry, ignored derived state, and post-merge CodeGraph maintenance interfaces and non-goals are settled; application production code remains outside R2. Admission is `N/A` because this is one separately authorized item with confirmed dependencies, not a concurrent pair.
+- **Activation setup evidence:** The coordinator created inert `codex/r2-context-hygiene` and coordinator-owned `codex/r2-activation` worktrees from exact dependency-complete `main@d262403200ff98bcf4a2d9a5cd05a7016a69d98d`. The inert R2 checkout passed the unchanged 30-file/734-test baseline; the activation checkout passed the unchanged 14-test foundation contract. No feature agent or `DISCOVER/DESIGN/PLAN` dispatch occurred before this activation record.
+- **Activation guard RED evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` passed 13/14 and failed only because R2 remained `TODO` instead of the authorized `IN PROGRESS (DISCOVER/DESIGN/PLAN)` state. No R2 deliverable or application production file changed before this recorded failure.
+- **Activation guard GREEN evidence:** After only the R2 activation/coordination record, matching README status, and state-specific foundation guard changed, `npm.cmd test -- tests/foundation-contract.test.ts` passed 14/14.
+- **Activation verification evidence:** `npm.cmd run check` passed 30 files/734 tests, type generation and strict TypeScript, zero-warning lint, and the production build. Local Playwright stopped at the required destructive-database guard because this host has no separately provisioned marked PostgreSQL target, Docker, or PostgreSQL tooling; the unchanged hosted activation CI must provision the isolated marked database and pass every guarded Chromium journey before merge.
 - **Tests first:** Foundation contract checks fail until the current-code-only `PROJECT-MAP.md`, progressive child-map routing, map-impact completion rule, intentional-temporary-artifact registry, zero-open-entry completion gate, ignored scratch/index state, and post-merge CodeGraph synchronization contract are present and internally linked.
 - **Done:** `PROJECT-MAP.md` stays capability-oriented and concise, links only earned subtree indexes, and is updated before `VERIFIED` when routing surfaces change; `TEMPORARY.md` registers intentional temporary files or modifications while ordinary generated output remains ignored, and every feature-owned entry is removed, reverted, or promoted before `VERIFIED` and remains absent through Gate B; local scratch and derived CodeGraph state are ignored; when the CLI is available, R2 establishes the derived index once with `codegraph init .`; after new code merges to updated `main`, the coordinator attempts `codegraph sync .`, records `codegraph status --json`, and falls back to the map rather than trusting a stale graph.
 - **Non-goals:** Exhaustive per-file inventory, generated documentation, placeholder child indexes, nesting deeper than root plus one child level, CodeGraph in CI, a new dependency, or retroactive scope changes to F4/F5.
+
+### Coordination record
+
+- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Branch:** `codex/r2-context-hygiene`
+- **Base commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
+- **Integrated-main commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
+- **Admission result:** `N/A` — R2 is the sole active item; its F4/F5 dependencies are `DONE`, and no concurrent pair is admitted.
+- **Assigned feature lead:** `r2_context_hygiene_lead` — dispatch begins only after the activation PR merges and that merge is integrated into the inert R2 branch.
+- **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and CodeGraph post-merge maintenance. The R2 feature lead exclusively owns `PROJECT-MAP.md`, `TEMPORARY.md`, `.gitignore`, and local derived CodeGraph initialization in the R2 worktree after Gate A. Application production code remains frozen; existing feature plans, generated policy/data, schemas, migrations, provider configuration, and external resources remain unmodified.
+- **Merge order:** R2 feature PR → post-merge verification on `main` → R2 closeout PR/CI/merge. No later item activates automatically.
+- **Feature PR/CI:** Pending; activation and Human Gate A precede feature implementation or PR.
+- **Blockers:** None.
+- **Feature merge:** Pending.
+- **Post-merge evidence:** Pending.
+- **Closeout PR/CI/merge:** Pending.
+- **Next Human Gate:** Human Gate A — approve the overall R2 design, tests-first task graph, dependencies, ownership, risks, and non-goals before RED or deliverable work.
 
 ## F6 — State Officials and Government-Level Navigation [TODO]
 

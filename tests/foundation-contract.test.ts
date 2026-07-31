@@ -633,7 +633,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps R1 closed, validates F4/F5 activation, and queues R2 next", () => {
+  it("keeps R1, F4, and F5 closed while R2 is the sole active item", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -699,7 +699,6 @@ describe("concurrent roadmap delivery contract", () => {
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
     const inactiveLaterRoadmapIds = [
-      "R2",
       "F6",
       "F7",
       "F8",
@@ -721,6 +720,7 @@ describe("concurrent roadmap delivery contract", () => {
     const f6 = readRoadmapItem(roadmap, "F6")
     const f4Status = statuses.get("F4") ?? ""
     const f5Status = statuses.get("F5") ?? ""
+    const r2Status = statuses.get("R2") ?? ""
     const f4Ownership = readCoordinationField(f4, "Ownership")
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
@@ -754,7 +754,11 @@ describe("concurrent roadmap delivery contract", () => {
     ]
 
     expect(r1Status).toBe("DONE")
-    expect(activeIds).toEqual(expectedAuthorizedPairActiveIds(statuses))
+    expect(f4Status).toBe("DONE")
+    expect(f5Status).toBe("DONE")
+    expect(r2Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(activeIds).toEqual(["R2"])
+    expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
       expectedAuthorizedPairActiveIds(
         new Map([
@@ -827,15 +831,14 @@ describe("concurrent roadmap delivery contract", () => {
         "F4 and F5 remain active under approved lean recovery plans.",
       )
     }
-    expect(readme).toContain(
-      "R2 is queued as the next roadmap step after F4 and F5 are `DONE`",
-    )
+    expect(readme).toContain("R2 is active in DISCOVER/DESIGN/PLAN")
+    expect(readme).toContain("Human Gate A")
     expectTokensInOrder(roadmap, ["## F5 ", "## R2 ", "## F6 "])
     expect(r2).toContain("PROJECT-MAP.md")
     expect(r2).toContain("TEMPORARY.md")
     expect(r2).toContain("F4 and F5 must both be `DONE` on `main`")
-    expect(r2).toContain("This records order only")
-    expect(r2).toContain("explicitly activates it")
+    expect(r2).toContain("User explicitly activated R2 on 2026-07-30")
+    expect(r2).toContain("single-item pre-activation audit passed")
     expect(r2).toContain(
       "every feature-owned entry is removed, reverted, or promoted before `VERIFIED` and remains absent through Gate B",
     )
@@ -843,8 +846,55 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2).toContain("root plus one child level")
     expect(r2).toContain("codegraph init .")
     expect(r2).toContain("codegraph sync .")
-    expect(r2).toContain("fresh pre-activation audit")
-    expect(r2).toContain("remains `TODO` and inactive")
+    expect(readCoordinationField(r2, "Phase")).toBe(
+      "`DISCOVER/DESIGN/PLAN`",
+    )
+    expect(readCoordinationField(r2, "Branch")).toContain(
+      "codex/r2-context-hygiene",
+    )
+    for (const commitField of ["Base commit", "Integrated-main commit"]) {
+      expect(
+        readCoordinationField(r2, commitField).replace(/`/g, ""),
+      ).toBe("d262403200ff98bcf4a2d9a5cd05a7016a69d98d")
+    }
+    expect(readCoordinationField(r2, "Admission result")).toContain("N/A")
+    expect(readCoordinationField(r2, "Assigned feature lead")).toContain(
+      "r2_context_hygiene_lead",
+    )
+    const r2Ownership = readCoordinationField(r2, "Ownership")
+    for (const coordinatorFile of [
+      "AGENTS.md",
+      "ROADMAP.md",
+      "README.md",
+      "tests/foundation-contract.test.ts",
+    ]) {
+      expect(r2Ownership).toContain(coordinatorFile)
+    }
+    for (const featureFile of [
+      "PROJECT-MAP.md",
+      "TEMPORARY.md",
+      ".gitignore",
+    ]) {
+      expect(r2Ownership).toContain(featureFile)
+    }
+    expect(r2Ownership.toLowerCase()).toContain(
+      "application production code remains frozen",
+    )
+    expect(readCoordinationField(r2, "Merge order")).toContain(
+      "R2 feature PR",
+    )
+    expect(readCoordinationField(r2, "Feature PR/CI")).toContain("Pending")
+    expect(readCoordinationField(r2, "Blockers")).toBe("None.")
+    expect(readCoordinationField(r2, "Feature merge")).toContain("Pending")
+    expect(readCoordinationField(r2, "Post-merge evidence")).toContain(
+      "Pending",
+    )
+    expect(readCoordinationField(r2, "Closeout PR/CI/merge")).toContain(
+      "Pending",
+    )
+    expect(readCoordinationField(r2, "Next Human Gate")).toContain(
+      "Human Gate A",
+    )
     expect(f6).toContain("**Dependencies:** F5 and R2.")
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
