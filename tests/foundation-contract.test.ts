@@ -852,11 +852,12 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(r2, "Branch")).toContain(
       "codex/r2-context-hygiene",
     )
-    for (const commitField of ["Base commit", "Integrated-main commit"]) {
-      expect(
-        readCoordinationField(r2, commitField).replace(/`/g, ""),
-      ).toBe("d262403200ff98bcf4a2d9a5cd05a7016a69d98d")
-    }
+    expect(
+      readCoordinationField(r2, "Base commit").replace(/`/g, ""),
+    ).toBe("d262403200ff98bcf4a2d9a5cd05a7016a69d98d")
+    expect(
+      readCoordinationField(r2, "Integrated-main commit").replace(/`/g, ""),
+    ).toBe("5496a4f71cf018ba4eeb368f1aa142e19976db61")
     expect(readCoordinationField(r2, "Admission result")).toContain("N/A")
     expect(readCoordinationField(r2, "Assigned feature lead")).toContain(
       "r2_context_hygiene_lead",
