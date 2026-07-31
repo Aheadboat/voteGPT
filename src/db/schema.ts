@@ -217,10 +217,36 @@ export const federalOfficialCache = pgTable(
   ],
 );
 
+export const stateOfficialCache = pgTable(
+  "state_official_cache",
+  {
+    cacheKey: text("cache_key").primaryKey(),
+    payload: jsonb("payload").$type<unknown>().notNull(),
+    retrievedAt: timestamp("retrieved_at", { withTimezone: true }).notNull(),
+    refreshAfter: timestamp("refresh_after", { withTimezone: true }).notNull(),
+    staleAfter: timestamp("stale_after", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "state_official_cache_key_check",
+      sql`${table.cacheKey} ~ '^state-roster:v1:[A-Z]{2}:U-[a-z0-9][a-z0-9-]{0,199}(:L-[a-z0-9][a-z0-9-]{0,199})?$'`,
+    ),
+    check(
+      "state_official_cache_refresh_after_check",
+      sql`${table.refreshAfter} = ${table.retrievedAt} + interval '24 hours'`,
+    ),
+    check(
+      "state_official_cache_stale_after_check",
+      sql`${table.staleAfter} = ${table.retrievedAt} + interval '72 hours'`,
+    ),
+  ],
+);
+
 export const authSchema = { account, session, user, verification };
 export const databaseSchema = {
   ...authSchema,
   federalOfficialCache,
+  stateOfficialCache,
   savedResidence,
   savedResidenceDivision,
 };
