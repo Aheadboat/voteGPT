@@ -487,7 +487,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## R2 — Repository Context and Hygiene Contract [IN PROGRESS (GREEN)]
+## R2 — Repository Context and Hygiene Contract [VERIFIED]
 
 - **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
 - **Dependencies:** F4 and F5 must both be `DONE` on `main` so the initial map describes merged code rather than unmerged worktree state.
@@ -516,6 +516,9 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **R2-T3 GREEN evidence:** The coordinator added one concise repository-context section to `AGENTS.md`, linked both R2 artifacts from `README.md`, and aligned the active-state guard with GREEN and Human Gate B. The first run proved the new lifecycle check green and exposed only a stale pre-Gate-A README assertion; after that state-specific guard was corrected, `npm.cmd test -- tests/foundation-contract.test.ts` passed 17/17 and `git diff --check` passed.
 - **R2-T3 REFACTOR evidence:** Review found no earned child map, abstraction, generator, or duplicated policy to extract. The root map, registry, and one routing section remain the smallest readable contract, and the focused 17/17 result stayed green.
 - **R2-T3 review correction RED/GREEN evidence:** Independent task review found one Important ambiguity: the legacy CodeGraph preamble still said to use the graph before reading files, which could conflict with opening `PROJECT-MAP.md` first. A new ordering guard failed 16/17 against that exact wording; after the preamble explicitly required the map first, the focused suite returned to 17/17 and `git diff --check` passed.
+- **R2-T4 derived-index evidence:** After `/.codegraph/` was ignored, the feature lead confirmed the index absent and ran `codegraph init .` exactly once. `codegraph status --json .` reported version 1.0.1, 88 files, 1,750 nodes, 6,464 edges, no worktree mismatch, no reindex recommendation, and zero pending changes; `.codegraph/` remained ignored and `git status --short` remained empty. `codegraph sync .` remains reserved for updated `main` after the feature merge.
+- **R2-T4 local verification evidence:** On the `VERIFIED` candidate, `npm.cmd test -- tests/foundation-contract.test.ts` passed 17/17; `npm.cmd run check` passed 30 files/737 tests, Next.js type generation, strict TypeScript, zero-warning ESLint, and the production build; `git diff --check` passed. The successful build emitted the existing dependency notice about future PostgreSQL SSL-mode semantics and a worktree-only Next.js root-inference notice; R2 changes no dependency, database, runtime, or application path.
+- **R2-T4 ownership and currency evidence:** After `git fetch --prune`, `origin/main` remained `5496a4f71cf018ba4eeb368f1aa142e19976db61` and `git merge-base --is-ancestor origin/main HEAD` passed. The complete feature range changes only `.gitignore`, `AGENTS.md`, `PROJECT-MAP.md`, `README.md`, `ROADMAP.md`, `TEMPORARY.md`, and `tests/foundation-contract.test.ts`; `TEMPORARY.md` has zero open entries, and application production code remains unchanged.
 
 | Task | Outcome | Expected RED or falsifiable check | Files and interfaces | Depends on | Done |
 | --- | --- | --- | --- | --- | --- |
@@ -529,12 +532,12 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `GREEN`
+- **Phase:** `VERIFIED`
 - **Branch:** `codex/r2-context-hygiene`
 - **Base commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
 - **Integrated-main commit:** `5496a4f71cf018ba4eeb368f1aa142e19976db61`
 - **Admission result:** `N/A` — R2 is the sole active item; its F4/F5 dependencies are `DONE`, and no concurrent pair is admitted.
-- **Assigned feature lead:** `r2_context_hygiene_lead` — feature-owned R2-T2 artifacts are committed and independently reviewed; only the ignored local CodeGraph initialization remains feature-lead owned during R2-T4.
+- **Assigned feature lead:** `r2_context_hygiene_lead` — feature-owned artifacts and the ignored local CodeGraph initialization are complete; no feature-owned or application write remains before Gate B.
 - **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and CodeGraph post-merge maintenance. The R2 feature lead exclusively owns `PROJECT-MAP.md`, `TEMPORARY.md`, `.gitignore`, and local derived CodeGraph initialization in the R2 worktree after Gate A. Application production code remains frozen; existing feature plans, generated policy/data, schemas, migrations, provider configuration, and external resources remain unmodified.
 - **Merge order:** R2 feature PR → post-merge verification on `main` → R2 closeout PR/CI/merge. No later item activates automatically.
 - **Feature PR/CI:** Pending; activation and Human Gate A precede feature implementation or PR.
