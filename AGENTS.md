@@ -3,13 +3,21 @@
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
-In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), reach for it BEFORE grep/find or reading files when you need to understand or locate code:
+In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the repo root), open `PROJECT-MAP.md` first; then reach for CodeGraph BEFORE grep/find or reading other files when you need to understand or locate code:
 
 - **MCP tools** (when available): `codegraph_explore` answers most code questions in one call — the relevant symbols' verbatim source plus the call paths between them. `codegraph_node` returns one symbol's source + callers, or reads a whole file with line numbers. If the tools are listed but deferred, load them by name via tool search.
 - **Shell** (always works): `codegraph explore "<symbol names or question>"` and `codegraph node <symbol-or-file>` print the same output.
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->
+
+## Repository context and hygiene
+
+- Start repository routing from the current-code [project map](PROJECT-MAP.md); keep it capability-oriented and add a child map only when a root route can no longer stay concise.
+- When `.codegraph/` exists, use CodeGraph for symbol and call-path exploration. Initialize the derived local index once with `codegraph init .`; after merged code reaches updated `main`, run `codegraph sync .` and record `codegraph status --json .`.
+- Use scoped `rg` when the map does not settle the location. `PROJECT-MAP.md` remains the fallback whenever CodeGraph is missing, unavailable, or stale.
+- Adding, moving, or removing a routing surface requires updating `PROJECT-MAP.md` before `VERIFIED`; internal helper-only changes do not create map impact.
+- Register intentional temporary tracked files or modifications in [TEMPORARY.md](TEMPORARY.md). `TEMPORARY.md` must have no open entries before `VERIFIED` and must remain empty through Human Gate B; ordinary generated output stays ignored.
 
 ## Source of truth
 
