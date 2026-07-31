@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "id": "ocd-person/alex-rivera",
+      "name": "Alex Rivera",
+      "party": "Independent",
+      "jurisdiction": { "id": "ocd-jurisdiction/country:us/state:ex/government", "name": "Example", "classification": "state" },
+      "given_name": "Alex",
+      "family_name": "Rivera",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-01T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/alex-rivera/",
+      "current_role": {
+        "title": "State Senator",
+        "org_classification": "upper",
+        "district": 2,
+        "division_id": "ocd-division/country:us/state:ex/sldu:2"
+      },
+      "sources": [{ "url": "https://legislature.example.gov/members/alex-rivera" }]
+    }
+  ],
+  "pagination": { "per_page": 20, "page": 1, "max_page": 1, "total_items": 1 }
+}
