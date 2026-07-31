@@ -487,7 +487,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge.
 
-## R2 — Repository Context and Hygiene Contract [IN PROGRESS (RED)]
+## R2 — Repository Context and Hygiene Contract [IN PROGRESS (GREEN)]
 
 - **Outcome:** Agents route from a compact current-code map into only the relevant capability or subtree, and no intentional temporary artifact can survive a deliverable unnoticed.
 - **Dependencies:** F4 and F5 must both be `DONE` on `main` so the initial map describes merged code rather than unmerged worktree state.
@@ -512,6 +512,9 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Unresolved decisions:** None. The interfaces, ownership, no-child-map starting point, empty registry state, and fallback behavior are settled for Gate A.
 - **Human Gate A evidence:** User explicitly approved the overall R2 design, tests-first R2-T1–T4 task graph, sequential ownership, dependencies, risks, and non-goals on 2026-07-30. RED is authorized; Human Gate B still controls the feature merge.
 - **R2-T1 RED evidence:** `npm.cmd test -- tests/foundation-contract.test.ts` ran 17 checks with the 14 existing checks passing and exactly three approved failures: missing root `PROJECT-MAP.md`, missing `TEMPORARY.md` plus derived-state ignores, and missing `AGENTS.md` repository-context lifecycle wiring. The failures are attributable to absent R2 behavior; feature-owned files remained absent.
+- **R2-T2 feature evidence:** Feature-lead commit `e58811b8d46d31f9db982eae7c1844bafbf65a96` changes only `PROJECT-MAP.md`, `TEMPORARY.md`, and `.gitignore`. Coordinator replay passed 16/17 focused checks; only the intentionally deferred coordinator lifecycle-wiring check remained RED. All 28 local map links resolved to tracked current files, no child map exists, the registry is empty, and independent task review found no Critical, Important, or Minor issue.
+- **R2-T3 GREEN evidence:** The coordinator added one concise repository-context section to `AGENTS.md`, linked both R2 artifacts from `README.md`, and aligned the active-state guard with GREEN and Human Gate B. The first run proved the new lifecycle check green and exposed only a stale pre-Gate-A README assertion; after that state-specific guard was corrected, `npm.cmd test -- tests/foundation-contract.test.ts` passed 17/17 and `git diff --check` passed.
+- **R2-T3 REFACTOR evidence:** Review found no earned child map, abstraction, generator, or duplicated policy to extract. The root map, registry, and one routing section remain the smallest readable contract, and the focused 17/17 result stayed green.
 
 | Task | Outcome | Expected RED or falsifiable check | Files and interfaces | Depends on | Done |
 | --- | --- | --- | --- | --- | --- |
@@ -525,12 +528,12 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `RED`
+- **Phase:** `GREEN`
 - **Branch:** `codex/r2-context-hygiene`
 - **Base commit:** `d262403200ff98bcf4a2d9a5cd05a7016a69d98d`
 - **Integrated-main commit:** `5496a4f71cf018ba4eeb368f1aa142e19976db61`
 - **Admission result:** `N/A` — R2 is the sole active item; its F4/F5 dependencies are `DONE`, and no concurrent pair is admitted.
-- **Assigned feature lead:** `r2_context_hygiene_lead` — DISCOVER/DESIGN/PLAN is complete and Human Gate A approved; implementation is authorized only for the feature-owned R2-T2 files.
+- **Assigned feature lead:** `r2_context_hygiene_lead` — feature-owned R2-T2 artifacts are committed and independently reviewed; only the ignored local CodeGraph initialization remains feature-lead owned during R2-T4.
 - **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and CodeGraph post-merge maintenance. The R2 feature lead exclusively owns `PROJECT-MAP.md`, `TEMPORARY.md`, `.gitignore`, and local derived CodeGraph initialization in the R2 worktree after Gate A. Application production code remains frozen; existing feature plans, generated policy/data, schemas, migrations, provider configuration, and external resources remain unmodified.
 - **Merge order:** R2 feature PR → post-merge verification on `main` → R2 closeout PR/CI/merge. No later item activates automatically.
 - **Feature PR/CI:** Pending; activation and Human Gate A precede feature implementation or PR.

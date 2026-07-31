@@ -893,7 +893,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r1Status).toBe("DONE")
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
-    expect(r2Status).toBe("IN PROGRESS (RED)")
+    expect(r2Status).toBe("IN PROGRESS (GREEN)")
     expect(activeIds).toEqual(["R2"])
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
@@ -968,8 +968,8 @@ describe("concurrent roadmap delivery contract", () => {
         "F4 and F5 remain active under approved lean recovery plans.",
       )
     }
-    expect(readme).toContain("R2 is active in DISCOVER/DESIGN/PLAN")
-    expect(readme).toContain("Human Gate A")
+    expect(readme).toContain("R2 is active in GREEN")
+    expect(readme).toContain("Human Gate B")
     expectTokensInOrder(roadmap, ["## F5 ", "## R2 ", "## F6 "])
     expect(r2).toContain("PROJECT-MAP.md")
     expect(r2).toContain("TEMPORARY.md")
@@ -983,7 +983,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2).toContain("root plus one child level")
     expect(r2).toContain("codegraph init .")
     expect(r2).toContain("codegraph sync .")
-    expect(readCoordinationField(r2, "Phase")).toBe("`RED`")
+    expect(readCoordinationField(r2, "Phase")).toBe("`GREEN`")
     expect(readCoordinationField(r2, "Branch")).toContain(
       "codex/r2-context-hygiene",
     )
