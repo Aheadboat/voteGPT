@@ -774,7 +774,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps R1, F4, and F5 closed through R2 verification and closeout", () => {
+  it("keeps completed items closed and activates only F6", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -840,7 +840,6 @@ describe("concurrent roadmap delivery contract", () => {
     const statuses = readRoadmapStatuses(roadmap)
     const r1Status = statuses.get("R1")
     const inactiveLaterRoadmapIds = [
-      "F6",
       "F7",
       "F8",
       "F9",
@@ -862,6 +861,7 @@ describe("concurrent roadmap delivery contract", () => {
     const f4Status = statuses.get("F4") ?? ""
     const f5Status = statuses.get("F5") ?? ""
     const r2Status = statuses.get("R2") ?? ""
+    const f6Status = statuses.get("F6") ?? ""
     const f4Ownership = readCoordinationField(f4, "Ownership")
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
@@ -897,10 +897,12 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r1Status).toBe("DONE")
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
+    expect(r2Status).toBe("DONE")
+    expect(f6Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
     const r2IsDone = r2Status === "DONE"
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
-    expect(activeIds).toEqual(r2IsDone ? [] : ["R2"])
+    expect(activeIds).toEqual(["F6"])
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
       expectedAuthorizedPairActiveIds(
@@ -976,7 +978,8 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("No roadmap item is active")
+      expect(readme).toContain("F6 is active in DISCOVER/DESIGN/PLAN")
+      expect(readme).toContain("Human Gate A")
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
       expect(readme).toContain("Human Gate B is approved")
@@ -1093,6 +1096,136 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2NextGate).toContain("None")
     expect(r2NextGate).toContain("Human Gate B")
     expect(f6).toContain("**Dependencies:** F5 and R2.")
+    expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
+    expect(f6).toContain("single-item pre-activation audit passed")
+    const expectedF6CoordinationFields = new Map<string, string>([
+      ["Phase", "`DISCOVER/DESIGN/PLAN`"],
+      ["Branch", "`codex/f6-state-officials-navigation`"],
+      ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
+      [
+        "Integrated-main commit",
+        "`ea8bff3417896ba8ca669ccb517e7617d070b00d`",
+      ],
+      [
+        "Admission result",
+        "`N/A` — F6 is the sole active item; its F5/R2 dependencies are `DONE`, and no concurrent pair is admitted.",
+      ],
+      [
+        "Assigned feature lead",
+        "`f6_state_navigation_lead` — dispatch begins only after the activation PR merges and that merge is integrated into the inert F6 branch.",
+      ],
+      [
+        "Ownership",
+        "The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and post-merge CodeGraph maintenance. The F6 feature lead exclusively owns F6-scoped state-official domain, source fixture, OpenStates adapter, policy, cache, service, provider, persistence, government-level navigation, style, unit/integration/E2E, `PROJECT-MAP.md`, and `TEMPORARY.md` surfaces in the isolated F6 worktree after Gate A. Existing saved-residence and federal-official contracts are consumption boundaries; any modification must be named in the Gate A-approved task graph. Every later roadmap item remains frozen, and shared CI or unrelated generated artifacts remain unmodified unless a coordinator record explicitly assigns them.",
+      ],
+      [
+        "Merge order",
+        "F6 feature PR → post-merge verification on `main` → F6 closeout PR/CI/merge. No later item activates automatically.",
+      ],
+      [
+        "Feature PR/CI",
+        "Pending; activation and Human Gate A precede feature implementation or PR.",
+      ],
+      ["Blockers", "None."],
+      ["Feature merge", "Pending."],
+      ["Post-merge evidence", "Pending."],
+      ["Closeout PR/CI/merge", "Pending."],
+      [
+        "Next Human Gate",
+        "Human Gate A — approve the overall F6 design, applicable UX DNA, tests-first task graph, dependencies, interfaces, ownership, risks, and non-goals before RED or production work.",
+      ],
+    ])
+    const expectF6CoordinationFields = (item: string) => {
+      for (const [field, expected] of expectedF6CoordinationFields) {
+        expect(readCoordinationField(item, field), "F6 " + field).toBe(expected)
+      }
+    }
+
+    expectF6CoordinationFields(f6)
+    for (const [field, invalid] of [
+      ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
+      [
+        "Admission result",
+        "`N/A` — F6 is the sole active item, but `PASS` is also approved.",
+      ],
+      [
+        "Assigned feature lead",
+        "`f6_state_navigation_lead_other` — dispatch may begin before activation merges.",
+      ],
+      [
+        "Ownership",
+        expectedF6CoordinationFields.get("Ownership") +
+          " The coordinator may implement F6 production code.",
+      ],
+      [
+        "Merge order",
+        expectedF6CoordinationFields.get("Merge order") + " → G1 activation.",
+      ],
+      [
+        "Feature PR/CI",
+        "Not Pending; feature implementation may begin before Human Gate A.",
+      ],
+      ["Feature merge", "Not Pending."],
+      [
+        "Next Human Gate",
+        "Human Gate A is approved — production work may begin.",
+      ],
+    ] as const) {
+      const valid = expectedF6CoordinationFields.get(field)
+      expect(valid, "missing mutation field " + field).toBeDefined()
+      const marker = `- **${field}:** ${valid}`
+      expect(f6, "missing mutation marker " + field).toContain(marker)
+      const mutated = f6.replace(marker, `- **${field}:** ${invalid}`)
+      expect(
+        () => expectF6CoordinationFields(mutated),
+        field + " mutation must fail",
+      ).toThrow()
+    }
+    const f6Ownership = readCoordinationField(f6, "Ownership")
+    const f6FeatureLeadOwnershipStart = f6Ownership.indexOf(
+      "The F6 feature lead exclusively owns",
+    )
+    const frozenLaterItemsStart = f6Ownership.indexOf(
+      "Every later roadmap item remains frozen",
+    )
+
+    expect(f6FeatureLeadOwnershipStart).toBeGreaterThan(0)
+    expect(frozenLaterItemsStart).toBeGreaterThan(f6FeatureLeadOwnershipStart)
+    const f6CoordinatorOwnership = f6Ownership.slice(
+      0,
+      f6FeatureLeadOwnershipStart,
+    )
+    const f6FeatureLeadOwnership = f6Ownership.slice(
+      f6FeatureLeadOwnershipStart,
+      frozenLaterItemsStart,
+    )
+    expect(f6CoordinatorOwnership).toContain(
+      "The coordinator exclusively owns",
+    )
+    for (const coordinatorFile of [
+      "AGENTS.md",
+      "ROADMAP.md",
+      "README.md",
+      "tests/foundation-contract.test.ts",
+    ]) {
+      expect(f6CoordinatorOwnership).toContain(coordinatorFile)
+    }
+    for (const featureSurface of [
+      "state-official",
+      "government-level navigation",
+      "OpenStates",
+      "PROJECT-MAP.md",
+      "TEMPORARY.md",
+    ]) {
+      expect(f6FeatureLeadOwnership).toContain(featureSurface)
+    }
+    const f6MergeOrder = readCoordinationField(f6, "Merge order")
+    expectTokensInOrder(f6MergeOrder, [
+      "F6 feature PR",
+      "post-merge verification on `main`",
+      "F6 closeout PR/CI/merge",
+      "No later item activates automatically",
+    ])
     for (const item of [f4, f5]) {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",

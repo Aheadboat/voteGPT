@@ -554,13 +554,37 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** This closeout branch changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, and this closeout activates no later item.
 
-## F6 — State Officials and Government-Level Navigation [TODO]
+## F6 — State Officials and Government-Level Navigation [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
 - **Outcome:** Accessible `Local | State | Federal` tabs and sourced state legislative officials.
 - **Dependencies:** F5 and R2.
+- **Authorization:** User explicitly activated F6 on 2026-07-30 by directing the coordinator to get started on the next roadmap item.
+- **Pre-activation audit:** The single-item pre-activation audit passed on 2026-07-30. F5 and R2 are `DONE` on exact dependency-complete `main@ea8bff3417896ba8ca669ccb517e7617d070b00d`; local and remote `main` match; no roadmap slot or pull request is active; `TEMPORARY.md` has no open entry; CodeGraph reports zero pending changes and no worktree mismatch. The saved-residence jurisdiction, federal-official roster/service/cache, dashboard shell, persistence, and provider boundaries are settled inputs for F6 discovery; G1 depends on F6 and remains inactive. Admission is `N/A` because F6 is one separately authorized item with confirmed dependencies, not a concurrent pair.
+- **Activation setup evidence:** The coordinator created inert `codex/f6-state-officials-navigation` and coordinator-owned `codex/f6-activation` worktrees from exact `main@ea8bff3417896ba8ca669ccb517e7617d070b00d`. The inert F6 checkout passed the unchanged 30-file/737-test baseline with one pre-existing PostgreSQL SSL deprecation warning. No feature agent or `DISCOVER/DESIGN/PLAN` dispatch occurred before this activation record.
+- **Activation guard RED evidence:** `npm.cmd test -- tests/foundation-contract.test.ts --maxWorkers=1` passed 16/17 and failed only because F6 remained `TODO` instead of the authorized `IN PROGRESS (DISCOVER/DESIGN/PLAN)` state. No application production file or F6 deliverable changed before this recorded failure.
+- **Activation guard GREEN evidence:** After only the F6 activation/coordination record, matching README status, and state-specific foundation guard changed, `npm.cmd test -- tests/foundation-contract.test.ts --maxWorkers=1` passed 17/17.
+- **Activation verification evidence:** `npm.cmd run check` passed 30 files/737 tests, generated route types and strict TypeScript, zero-warning lint, and the production build. The unchanged unit/build path emitted one existing PostgreSQL SSL deprecation notice and one worktree-root inference warning. Local `npm.cmd run test:e2e` stopped at the required destructive-database guard with `E2E database requires explicit destructive opt-in.`; hosted activation CI must provision its isolated marked database and pass the guarded Chromium journeys before merge.
+- **Activation review correction evidence:** Independent read-only review found one Important guard gap: permissive substring checks could accept a suffixed branch, contradictory admission or lead, non-pending merge state, approved Gate A, or an extra merge-order transition. The guard now requires exact values for every F6 coordination field and runs targeted invalid branch, admission, lead, ownership, merge-order, feature-PR, feature-merge, and Human-Gate mutations through the same assertion path. All eight mutations produced the expected assertion failure, while the valid record passed 17/17.
 - **Tests first:** Keyboard/focus/deep-link/screen-reader tab behavior, multi-member body, vacancy, current-official presentation, and unavailable-local-coverage state.
 - **Done:** OpenStates adapter, `In office | Elections` mode, office-category chips, and verified-only local panel pass; federal/state coverage promise is test-backed; local gaps are explicit.
 - **Non-goals:** Claim of complete nationwide local coverage or candidate research.
+
+### Coordination record
+
+- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Branch:** `codex/f6-state-officials-navigation`
+- **Base commit:** `ea8bff3417896ba8ca669ccb517e7617d070b00d`
+- **Integrated-main commit:** `ea8bff3417896ba8ca669ccb517e7617d070b00d`
+- **Admission result:** `N/A` — F6 is the sole active item; its F5/R2 dependencies are `DONE`, and no concurrent pair is admitted.
+- **Assigned feature lead:** `f6_state_navigation_lead` — dispatch begins only after the activation PR merges and that merge is integrated into the inert F6 branch.
+- **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, review, CI, PRs, merges, and post-merge CodeGraph maintenance. The F6 feature lead exclusively owns F6-scoped state-official domain, source fixture, OpenStates adapter, policy, cache, service, provider, persistence, government-level navigation, style, unit/integration/E2E, `PROJECT-MAP.md`, and `TEMPORARY.md` surfaces in the isolated F6 worktree after Gate A. Existing saved-residence and federal-official contracts are consumption boundaries; any modification must be named in the Gate A-approved task graph. Every later roadmap item remains frozen, and shared CI or unrelated generated artifacts remain unmodified unless a coordinator record explicitly assigns them.
+- **Merge order:** F6 feature PR → post-merge verification on `main` → F6 closeout PR/CI/merge. No later item activates automatically.
+- **Feature PR/CI:** Pending; activation and Human Gate A precede feature implementation or PR.
+- **Blockers:** None.
+- **Feature merge:** Pending.
+- **Post-merge evidence:** Pending.
+- **Closeout PR/CI/merge:** Pending.
+- **Next Human Gate:** Human Gate A — approve the overall F6 design, applicable UX DNA, tests-first task graph, dependencies, interfaces, ownership, risks, and non-goals before RED or production work.
 
 ## G1 — Candidate-Data Vendor Proof of Concept [TODO]
 
