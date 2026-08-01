@@ -899,7 +899,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
     expect(r2Status).toBe("DONE")
-    expect(f6Status).toBe("IN PROGRESS (GREEN)")
+    expect(f6Status).toBe("VERIFIED")
     const r2IsDone = r2Status === "DONE"
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
@@ -979,7 +979,7 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("F6 is active in GREEN")
+      expect(readme).toContain("F6 is VERIFIED")
       expect(readme).toContain(
         "state-jurisdiction domain, bounded OpenStates provider adapter, accessible navigation shell, atomic cache-first state service, and dashboard selected-panel integration are independently reviewed",
       )
@@ -1103,7 +1103,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
     expect(f6).toContain("single-item pre-activation audit passed")
     const expectedF6CoordinationFields = new Map<string, string>([
-      ["Phase", "`GREEN`"],
+      ["Phase", "`VERIFIED`"],
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
@@ -1128,7 +1128,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Feature PR/CI",
-        "Pending; implementation, `VERIFIED`, and independent review precede the feature PR.",
+        "Pending; F6 is `VERIFIED`; the draft feature PR, current-head hosted CI, mergeability, and whole-branch independent review precede Human Gate B.",
       ],
       ["Blockers", "None."],
       ["Feature merge", "Pending."],
@@ -1197,6 +1197,28 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("per-person source evidence")
     expect(f6).toContain("client-bound prop tree")
     expect(f6).toContain("35 files/810 tests")
+    expect(f6).toContain("**F6-T6 RED/GREEN/review evidence:**")
+    for (const commit of [
+      "f8674ad",
+      "775883d",
+      "fbc1ea6",
+      "98677e0",
+      "0ab6f0b",
+      "cd0a6df",
+    ]) {
+      expect(f6).toContain(commit)
+    }
+    expect(f6).toContain("4 files/56 tests")
+    expect(f6).toContain("4 files/104 tests")
+    expect(f6).toContain("**F6-T6 hosted VERIFIED evidence:**")
+    expect(f6).toContain("30680018371")
+    expect(f6).toContain("cd0a6df9e013492ac8316c9c732efa5f51f00d87")
+    expect(f6).toContain("3 files/33 tests")
+    expect(f6).toContain("26/26 Chromium journeys")
+    expect(f6).toContain("**F6 UX-DNA VERIFIED evidence:**")
+    expect(f6).toContain("16.57:1")
+    expect(f6).toContain("6.26:1")
+    expect(f6).toContain("`TEMPORARY.md` remains `None.`")
     const expectF6CorrectionScope = (item: string) => {
       const lines = item.split(/\r?\n/)
       const task = lines.find((line) => line.startsWith("| T6 |"))
@@ -1235,7 +1257,7 @@ describe("concurrent roadmap delivery contract", () => {
       "dashboard selected-panel integration are independently reviewed",
     )
     expect(readme).toContain(
-      "one approved test-only residence focus correction is in progress",
+      "The draft feature PR, current-head hosted CI, mergeability, and whole-branch independent review are next",
     )
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
