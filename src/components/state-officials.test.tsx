@@ -13,6 +13,12 @@ const source = {
   retrievedAt: checkedAt,
   effectiveAt: "2026-01-01T00:00:00.000Z",
 };
+const blairSource = {
+  sourceType: "official" as const,
+  publicUrl: "https://legislature.example.test/members/blair-baker",
+  retrievedAt: checkedAt,
+  effectiveAt: "2026-01-02T00:00:00.000Z",
+};
 const jurisdiction = {
   stateCode: "GA",
   stateDivisionId: "ocd-division/country:us/state:ga",
@@ -51,9 +57,9 @@ const view = {
               seat: "District 2",
               people: [
                 { id: "a", name: "Alex Avery", sources: [source] },
-                { id: "b", name: "Blair Baker", sources: [source] },
+                { id: "b", name: "Blair Baker", sources: [blairSource] },
               ],
-              sources: [source],
+              sources: [source, blairSource],
             },
             {
               status: "vacant" as const,
@@ -115,14 +121,25 @@ describe("StateOfficials", () => {
     expect(cards[2]).toHaveTextContent("Current officeholder is unknown.");
     expect(cards[2]).toHaveTextContent("No qualifying source is available for this seat.");
 
-    const sources = within(cards[0]).getByRole("region", {
-      name: "Sources for District 2",
+    const alexSources = within(cards[0]).getByRole("region", {
+      name: "Sources for Alex Avery",
     });
-    const link = within(sources).getByRole("link", { name: "Official source" });
-    expect(link).toHaveAttribute("href", source.publicUrl);
-    expect(link.tabIndex).toBe(0);
-    expect(sources.querySelector(`time[datetime="${checkedAt}"]`)).not.toBeNull();
-    expect(sources.querySelector(`time[datetime="${source.effectiveAt}"]`)).not.toBeNull();
+    const alexLink = within(alexSources).getByRole("link", {
+      name: "Official source for Alex Avery",
+    });
+    expect(alexLink).toHaveAttribute("href", source.publicUrl);
+    expect(alexLink.tabIndex).toBe(0);
+    expect(alexSources.querySelector(`time[datetime="${source.retrievedAt}"]`)).not.toBeNull();
+    expect(alexSources.querySelector(`time[datetime="${source.effectiveAt}"]`)).not.toBeNull();
+    const blairSources = within(cards[0]).getByRole("region", {
+      name: "Sources for Blair Baker",
+    });
+    const blairLink = within(blairSources).getByRole("link", {
+      name: "Official source for Blair Baker",
+    });
+    expect(blairLink).toHaveAttribute("href", blairSource.publicUrl);
+    expect(blairSources.querySelector(`time[datetime="${blairSource.retrievedAt}"]`)).not.toBeNull();
+    expect(blairSources.querySelector(`time[datetime="${blairSource.effectiveAt}"]`)).not.toBeNull();
     expect(cards[0].querySelector(`time[datetime="${checkedAt}"]`)).not.toBeNull();
     expect(container).not.toHaveTextContent(/\bAI\b|address|latitude|longitude|party|recommended/i);
     expect(renderToStaticMarkup(<StateOfficials result={{ status: "available", view }} />)).not.toMatch(/<script|onClick=/i);
@@ -198,6 +215,7 @@ describe("StateOfficials", () => {
 
     rerender(<StateOfficials result={{ status: "unavailable" }} />);
     expect(screen.getByRole("status")).toHaveTextContent("unavailable");
+    expect(screen.getByRole("status")).toHaveTextContent("Try again later.");
     expect(screen.queryByRole("article")).toBeNull();
   });
 
@@ -208,7 +226,20 @@ describe("StateOfficials", () => {
       />,
     );
 
-    expect(screen.getByText("No verified state legislature offices are available for this saved coverage.")).toBeVisible();
+    const emptyStatus = screen.getAllByRole("status").find((notice) =>
+      notice.textContent?.includes("No verified state legislature offices"),
+    );
+    expect(emptyStatus?.querySelector(`time[datetime="${checkedAt}"]`)).not.toBeNull();
+    expect(emptyStatus).toHaveTextContent("Try again later.");
+    expect(screen.getByText(/No verified state legislature offices are available for this saved coverage/)).toBeVisible();
+    const emptyDistrictNotices = screen.getAllByRole("status").filter((notice) =>
+      notice.textContent?.includes("No qualifying source is available for this district."),
+    );
+    expect(emptyDistrictNotices).toHaveLength(2);
+    for (const notice of emptyDistrictNotices) {
+      expect(notice.querySelector(`time[datetime="${checkedAt}"]`)).not.toBeNull();
+      expect(notice).toHaveTextContent("Try again later.");
+    }
     expect(screen.getByText(/Upper chamber — District 2/)).toHaveTextContent(
       "No qualifying source is available for this district.",
     );
@@ -225,7 +256,10 @@ describe("StateOfficials", () => {
       />,
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("coverage is incomplete");
+    const missingStatus = screen.getByRole("status");
+    expect(missingStatus).toHaveTextContent("coverage is incomplete");
+    expect(missingStatus.querySelector(`time[datetime="${checkedAt}"]`)).not.toBeNull();
+    expect(missingStatus).toHaveTextContent("Try again later.");
     expect(screen.getByText(/Lower chamber — District 10/)).toHaveTextContent(
       "No qualifying source is available for this district.",
     );

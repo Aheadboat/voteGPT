@@ -22,7 +22,7 @@ export function StateOfficials({
     return (
       <RecoveryState
         heading={heading}
-        message="State legislature information is unavailable."
+        message="State legislature information is unavailable. Try again later."
       />
     );
   }
@@ -52,13 +52,15 @@ export function StateOfficials({
       ) : null}
       {view.chambers.length === 0 ? (
         <p className={styles.status} role="status">
-          No verified state legislature offices are available for this saved coverage.
+          No verified state legislature offices are available for this saved coverage. Checked{" "}
+          <time dateTime={view.freshness.checkedAt}>{view.freshness.checkedAt}</time>. Try again later.
         </p>
       ) : null}
       {missing.map((district) => (
         <p className={styles.status} key={`${district.chamber}:${district.district}`} role="status">
           State legislature coverage is incomplete for {chamberLabel(district.chamber)} — District {district.district}.
-          Current officeholder is unknown. No qualifying source is available for this district.
+          Current officeholder is unknown. No qualifying source is available for this district. Checked{" "}
+          <time dateTime={view.freshness.checkedAt}>{view.freshness.checkedAt}</time>. Try again later.
         </p>
       ))}
       {view.chambers.map((chamber) =>
@@ -89,6 +91,12 @@ function SeatCard({ freshness, seat }: { freshness: StateFreshness; seat: StateS
             <li key={person.id}>
               <strong>{person.name}</strong>
               <span>Verified current officeholder</span>
+              <SourceEvidence
+                heading={person.name}
+                sourceSubject={person.name}
+                qualifying
+                sources={person.sources}
+              />
             </li>
           ))}
         </ul>
@@ -106,11 +114,13 @@ function SeatCard({ freshness, seat }: { freshness: StateFreshness; seat: StateS
           ? "Fresh at last check."
           : "Stale but not expired; verify before use."}
       </p>
-      <SourceEvidence
-        heading={seat.seat}
-        qualifying={seat.status !== "unknown"}
-        sources={seat.sources}
-      />
+      {seat.status !== "serving" ? (
+        <SourceEvidence
+          heading={seat.seat}
+          qualifying={seat.status !== "unknown"}
+          sources={seat.sources}
+        />
+      ) : null}
     </article>
   );
 }
@@ -118,10 +128,12 @@ function SeatCard({ freshness, seat }: { freshness: StateFreshness; seat: StateS
 function SourceEvidence({
   heading,
   qualifying,
+  sourceSubject,
   sources,
 }: {
   heading: string;
   qualifying: boolean;
+  sourceSubject?: string;
   sources: readonly StateSource[];
 }) {
   return (
@@ -132,7 +144,7 @@ function SourceEvidence({
           {sources.map((source) => (
             <li key={`${source.sourceType}:${source.publicUrl}:${source.retrievedAt}`}>
               <a className={styles.sourceLink} href={source.publicUrl}>
-                {sourceLabel(source, qualifying)}
+                {sourceLabel(source, qualifying, sourceSubject)}
               </a>
               <span>Retrieved <time dateTime={source.retrievedAt}>{source.retrievedAt}</time></span>
               {source.effectiveAt ? (
@@ -175,9 +187,16 @@ function cardLabel(seat: StateSeat) {
   return `${seat.seat}: ${seat.status === "vacant" ? "vacant" : "officeholder unknown"}`;
 }
 
-function sourceLabel(source: StateSource, qualifying: boolean) {
+function sourceLabel(
+  source: StateSource,
+  qualifying: boolean,
+  sourceSubject?: string,
+) {
   const label = source.sourceType === "official" ? "Official source" : "Vacancy source";
-  return qualifying ? label : `${label} not qualifying current officeholder evidence`;
+  const namedLabel = sourceSubject ? `${label} for ${sourceSubject}` : label;
+  return qualifying
+    ? namedLabel
+    : `${namedLabel} not qualifying current officeholder evidence`;
 }
 
 function missingDistricts(view: StateOfficialsView) {

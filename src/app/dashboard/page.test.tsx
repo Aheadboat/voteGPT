@@ -421,7 +421,7 @@ describe("signed-in dashboard", () => {
     render(await dashboardFor({ level: "state", mode: "in-office" }));
 
     expect(
-      screen.getByText("State legislature information is unavailable."),
+      screen.getByText(/State legislature information is unavailable/),
     ).toBeVisible();
     expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
     expect(createFederalOfficialsService).not.toHaveBeenCalled();
@@ -469,16 +469,18 @@ describe("signed-in dashboard", () => {
     );
     expect(screen.queryByText(ownerVisibleAddress)).toBeNull();
     expect(screen.queryByText("surprise")).toBeNull();
-    expect(governmentNavigationProps).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        searchParams: { level: "federal", mode: "in-office" },
-      }),
-    );
-    expect(
-      JSON.stringify(
-        governmentNavigationProps.mock.calls.at(-1)?.[0].searchParams,
-      ),
-    ).not.toContain(ownerVisibleAddress);
+    const clientProperties = governmentNavigationProps.mock.calls.at(-1)?.[0];
+    expect(Object.keys(clientProperties)).toEqual(["panels", "searchParams"]);
+    expect(clientProperties.searchParams).toEqual({
+      level: "federal",
+      mode: "in-office",
+    });
+    expect(Object.keys(clientProperties.panels)).toEqual(["federal"]);
+    expect(clientProperties.panels.federal).toBeTruthy();
+    const serializedProperties = JSON.stringify(clientProperties);
+    expect(serializedProperties).not.toContain(sessionUserId);
+    expect(serializedProperties).not.toContain(ownerVisibleAddress);
+    expect(serializedProperties).not.toContain("surprise");
     expect(stateJurisdictionFromDivisions).not.toHaveBeenCalled();
     expectNoStateLookup();
     expect(getSavedResidence).not.toHaveBeenCalled();
