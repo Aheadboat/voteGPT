@@ -1197,8 +1197,18 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("per-person source evidence")
     expect(f6).toContain("client-bound prop tree")
     expect(f6).toContain("35 files/810 tests")
+    expect(f6).toContain(
+      "**F6-T6 hosted integration correction approval:** Approved by the user on 2026-07-31",
+    )
+    expect(f6).toContain("e2e/residence.spec.ts")
+    expect(f6).toContain("30679042700")
+    expect(f6).toContain("25 passed")
+    expect(f6).toContain("hard-coded pre-F6 tab order")
     expect(readme).toContain(
       "dashboard selected-panel integration are independently reviewed",
+    )
+    expect(readme).toContain(
+      "one approved test-only residence focus correction is in progress",
     )
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
