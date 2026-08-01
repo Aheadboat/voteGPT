@@ -1,13 +1,71 @@
 import { createHmac } from "node:crypto";
-import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from "@playwright/test";
+import { Pool } from "pg";
 
 const baseURL = "http://127.0.0.1:3000";
 const authSecret = "e2e-secret-at-least-thirty-two-characters";
+const e2eDatabaseUrl = process.env.E2E_DATABASE_URL?.trim();
+const stateCacheKeys = [
+  "state-roster:v1:GA:U-2:L-10",
+  "state-roster:v1:CA:U-1:L-1",
+  "state-roster:v1:TX:U-1:L-1",
+  "state-roster:v1:FL:U-1:L-1",
+] as const;
+const privateSentinels = [
+  authSecret,
+  "e2e-current",
+  "fixture-ciphertext",
+  "fixture-iv",
+  "fixture-tag",
+  ...stateCacheKeys,
+  ...["fresh", "stale", "expired", "unavailable"].flatMap((slug) => [
+    `e2e-state-${slug}-user`,
+    `e2e-state-${slug}-session`,
+    `e2e-state-${slug}-session-token`,
+    `e2e-state-${slug}-account`,
+    `e2e-state-${slug}-google-account`,
+  ]),
+] as const;
+
+type StateCacheRow = {
+  cache_key: string;
+  payload: StateCachePayload;
+  retrieved_at: Date;
+  refresh_after: Date;
+  stale_after: Date;
+};
+
+type StateCachePayload = {
+  roster: {
+    freshness: {
+      checkedAt: string;
+      refreshAfter: string;
+      staleAfter: string;
+      state: string;
+    };
+    seats: Array<{
+      people: Array<{ sources: StateSource[] }>;
+      vacancySources: StateSource[];
+    }>;
+  };
+};
+
+type StateSource = {
+  effectiveAt: string | null;
+  retrievedAt: string;
+};
 
 test("renders a fresh State legislature roster with ordered sourced seats", async ({
   context,
   page,
-}) => {
+}, testInfo) => {
   await installSessionCookie(context, "fresh");
   const requests = auditRequests(page);
   const response = await page.goto("/dashboard?level=state&mode=in-office");
@@ -31,6 +89,9 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
   await expect(roster).toBeVisible();
   const cards = roster.getByRole("article");
   await expect(cards).toHaveCount(3);
+  await expect(roster.getByText("Fresh at last check.")).toHaveCount(3);
+  await expect(roster.getByText(/stale/i)).toHaveCount(0);
+  await expect(roster.getByRole("status")).toHaveCount(0);
   await expect(cards.nth(0)).toHaveAttribute(
     "aria-label",
     "District 2: Avery State, Blair State",
@@ -84,26 +145,20 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
   });
   expect(focus.style).not.toBe("none");
   expect(Number.parseFloat(focus.width)).toBeGreaterThanOrEqual(2);
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
-  await assertResponsiveRoster(page, roster.getByRole("list", { name: "Upper chamber District 2 seats" }));
 
   const tabs = page.getByRole("tablist", { name: "Government level" });
+  const local = tabs.getByRole("tab", { name: "Local" });
   const state = tabs.getByRole("tab", { name: "State" });
-  const motion = await state.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { animationName: style.animationName, transitionDuration: style.transitionDuration };
-  });
-  expect(motion).toEqual({ animationName: "none", transitionDuration: "0s" });
-  await expect(tabs.getByRole("tab", { name: "Local" })).toHaveAttribute(
+  const federal = tabs.getByRole("tab", { name: "Federal" });
+  await expect(local).toHaveAttribute(
     "href",
     "?level=local&mode=in-office",
   );
-  await expect(tabs.getByRole("tab", { name: "State" })).toHaveAttribute(
+  await expect(state).toHaveAttribute(
     "href",
     "?level=state&mode=in-office&category=legislature",
   );
-  await expect(tabs.getByRole("tab", { name: "Federal" })).toHaveAttribute(
+  await expect(federal).toHaveAttribute(
     "href",
     "?level=federal&mode=in-office&category=congress",
   );
@@ -112,20 +167,36 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
     "?level=state&mode=elections",
   );
 
-  await state.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(tabs.getByRole("tab", { name: "Federal" })).toBeFocused();
-  await page.keyboard.press("ArrowRight");
-  await expect(tabs.getByRole("tab", { name: "Local" })).toBeFocused();
-  await page.keyboard.press("ArrowLeft");
-  await expect(tabs.getByRole("tab", { name: "Federal" })).toBeFocused();
-  await page.keyboard.press("Home");
-  await expect(tabs.getByRole("tab", { name: "Local" })).toBeFocused();
-  await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { name: "Federal" })).toBeFocused();
-  await expect(state).toHaveAttribute("aria-selected", "true");
+  await assertReducedMotion(page, tabs);
+  await assertResponsiveGovernmentSurface(
+    page,
+    testInfo,
+    roster,
+    roster.getByRole("list", { name: "Upper chamber District 2 seats" }),
+  );
+  await assertSafeSurface(page, requests);
 
-  await tabs.getByRole("tab", { name: "Federal" }).click();
+  await state.focus();
+  await assertTabStops(local, state, federal, "state");
+  await page.keyboard.press("ArrowRight");
+  await expect(federal).toBeFocused();
+  await assertTabStops(local, state, federal, "federal");
+  await page.keyboard.press("ArrowRight");
+  await expect(local).toBeFocused();
+  await assertTabStops(local, state, federal, "local");
+  await page.keyboard.press("ArrowLeft");
+  await expect(federal).toBeFocused();
+  await assertTabStops(local, state, federal, "federal");
+  await page.keyboard.press("Home");
+  await expect(local).toBeFocused();
+  await assertTabStops(local, state, federal, "local");
+  await page.keyboard.press("End");
+  await expect(federal).toBeFocused();
+  await assertTabStops(local, state, federal, "federal");
+  await expect(state).toHaveAttribute("aria-selected", "true");
+  await assertVisibleFocus(federal);
+
+  await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/level=federal&mode=in-office&category=congress/);
   await expect(page.getByRole("tabpanel").getByRole("region", {
     name: "Federal officials for GA District 13",
@@ -146,6 +217,7 @@ test("serves State and unavailable recovery panels without JavaScript", async ({
     await expect(page.getByRole("tabpanel").getByRole("region", {
       name: "State legislature for GA",
     })).toBeVisible();
+    await assertSafeSurface(page, requests);
 
     await page.getByRole("tab", { name: "Local" }).click();
     await expect(page).toHaveURL(/level=local&mode=in-office/);
@@ -184,6 +256,14 @@ test("labels stale cache and recovers from expired and absent State cache", asyn
   page,
 }) => {
   const requests = auditRequests(page);
+  const postgres = await openStateCacheInspection();
+  try {
+    if (postgres) {
+      await assertSeededStateCache(postgres);
+    }
+  } finally {
+    await postgres?.end();
+  }
 
   await installSessionCookie(context, "stale");
   await page.goto("/dashboard?level=state&mode=in-office");
@@ -196,6 +276,7 @@ test("labels stale cache and recovers from expired and absent State cache", asyn
   for (const card of await staleCards.all()) {
     await expect(card).toContainText("Stale but not expired; verify before use.");
   }
+  await assertSafeSurface(page, requests);
 
   await installSessionCookie(context, "expired");
   await page.goto("/dashboard?level=state&mode=in-office");
@@ -203,6 +284,7 @@ test("labels stale cache and recovers from expired and absent State cache", asyn
     "State legislature information is unavailable. Try again later.",
   );
   await expect(page.getByRole("tabpanel").getByRole("article")).toHaveCount(0);
+  await assertSafeSurface(page, requests);
 
   await installSessionCookie(context, "unavailable");
   await page.goto("/dashboard?level=state&mode=in-office");
@@ -236,12 +318,11 @@ function auditRequests(page: Page) {
 
 async function assertSafeSurface(page: Page, requests: readonly string[]) {
   const surface = `${await page.locator("body").innerText()}\n${await page.content()}\n${page.url()}\n${requests.join("\n")}`;
+  for (const sentinel of privateSentinels) {
+    expect(surface).not.toContain(sentinel);
+  }
   for (const forbidden of [
     /OPENSTATES_API_KEY/i,
-    /e2e-state-[a-z-]+-session-token/i,
-    /state-roster:v1:/i,
-    /fixture-(?:ciphertext|iv|tag)/i,
-    /e2e-state-(?:fresh|stale|expired|unavailable)-(?:user|session|account)/i,
     /v3\.openstates\.org|api\.congress\.gov|X-API-KEY/i,
   ]) {
     expect(surface).not.toMatch(forbidden);
@@ -262,25 +343,187 @@ async function tabTo(page: Page, target: Locator) {
   throw new Error("Keyboard focus did not reach State source link.");
 }
 
-async function assertResponsiveRoster(page: Page, list: Locator) {
+async function assertTabStops(
+  local: Locator,
+  state: Locator,
+  federal: Locator,
+  current: "local" | "state" | "federal",
+) {
+  await expect(local).toHaveAttribute("tabindex", current === "local" ? "0" : "-1");
+  await expect(state).toHaveAttribute("tabindex", current === "state" ? "0" : "-1");
+  await expect(federal).toHaveAttribute("tabindex", current === "federal" ? "0" : "-1");
+}
+
+async function assertVisibleFocus(target: Locator) {
+  const focus = await target.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      color: style.outlineColor,
+      style: style.outlineStyle,
+      width: style.outlineWidth,
+    };
+  });
+  expect(focus.style).not.toBe("none");
+  expect(focus.color).not.toBe("rgba(0, 0, 0, 0)");
+  expect(Number.parseFloat(focus.width)).toBeGreaterThanOrEqual(2);
+}
+
+async function assertReducedMotion(page: Page, tabs: Locator) {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(
+    await page.evaluate(
+      () => matchMedia("(prefers-reduced-motion: reduce)").matches,
+    ),
+  ).toBe(true);
+  const controls = tabs.getByRole("tab").or(
+    page.getByRole("navigation", { name: "Official status" }).getByRole("link"),
+  );
+  await expect(controls).toHaveCount(5);
+  const motion = await controls.evaluateAll((elements) =>
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        animationDuration: style.animationDuration,
+        animationName: style.animationName,
+        scrollBehavior: style.scrollBehavior,
+        transitionDuration: style.transitionDuration,
+      };
+    }),
+  );
+  for (const value of motion) {
+    expect(value.animationName.split(", ")).toEqual(["none"]);
+    expect(value.animationDuration.split(", ").every((duration) => duration === "0s")).toBe(true);
+    expect(value.transitionDuration.split(", ").every((duration) => duration === "0s")).toBe(true);
+    expect(value.scrollBehavior).toBe("auto");
+  }
+}
+
+async function assertResponsiveGovernmentSurface(
+  page: Page,
+  testInfo: TestInfo,
+  roster: Locator,
+  list: Locator,
+) {
   const layouts: number[] = [];
   for (const viewport of [
-    { height: 812, width: 375 },
-    { height: 720, width: 1280 },
+    { height: 812, name: "government-mobile-375x812", width: 375 },
+    { height: 720, name: "government-desktop-1280x720", width: 1280 },
   ]) {
     await page.setViewportSize(viewport);
-    const layout = await list.evaluate((element) => {
+    const targets = [
+      page.getByRole("tablist", { name: "Government level" }),
+      page.getByRole("navigation", { name: "Official status" }),
+      page.getByRole("tabpanel"),
+      ...(await page.getByRole("tab").all()),
+      ...(await page.getByRole("navigation", { name: "Official status" }).getByRole("link").all()),
+      ...(await roster.getByRole("article").all()),
+      ...(await roster.getByRole("link").all()),
+    ];
+    for (const target of targets) {
+      await expect(target).toBeVisible();
+      await target.scrollIntoViewIfNeeded();
+      const box = await target.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(-0.5);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width + 0.5);
+      expect(box!.y).toBeLessThan(viewport.height);
+      expect(box!.y + box!.height).toBeGreaterThan(0);
+    }
+    const layout = await page.locator("main#main-content").evaluate((element) => {
       const boxes = [element, ...element.querySelectorAll("*")]
         .map((node) => node.getBoundingClientRect())
         .filter((box) => box.width > 0 && box.height > 0);
       return {
-        clipped: boxes.filter((box) => box.left < 0 || box.right > innerWidth).length,
+        clipped: boxes.filter(
+          (box) => box.left < -0.5 || box.right > innerWidth + 0.5,
+        ).length,
         overflow: document.documentElement.scrollWidth > innerWidth,
-        rows: new Set(Array.from(element.children, (child) => Math.round(child.getBoundingClientRect().top))).size,
       };
     });
     expect(layout).toMatchObject({ clipped: 0, overflow: false });
-    layouts.push(layout.rows);
+    layouts.push(
+      await list.evaluate(
+        (element) =>
+          new Set(
+            Array.from(element.children, (child) =>
+              Math.round(child.getBoundingClientRect().top),
+            ),
+          ).size,
+      ),
+    );
+    const path = testInfo.outputPath(`${viewport.name}.png`);
+    await page.screenshot({ fullPage: true, path });
+    await testInfo.attach(viewport.name, { contentType: "image/png", path });
   }
   expect(layouts[0]).toBeGreaterThan(layouts[1]!);
+}
+
+async function openStateCacheInspection(): Promise<Pool | null> {
+  const hosted = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
+  if (!e2eDatabaseUrl) {
+    if (hosted) {
+      throw new Error(
+        "Hosted government-navigation E2E requires the authoritative PostgreSQL database.",
+      );
+    }
+    return null;
+  }
+  if (!/^postgres(?:ql)?:\/\//i.test(e2eDatabaseUrl)) {
+    throw new Error("Government-navigation E2E database is not PostgreSQL.");
+  }
+  return new Pool({ connectionString: e2eDatabaseUrl });
+}
+
+async function assertSeededStateCache(pool: Pool) {
+  const result = await pool.query<StateCacheRow>(
+    `select "cache_key", "payload", "retrieved_at", "refresh_after", "stale_after"
+     from "state_official_cache"
+     where "cache_key" = any($1::text[])
+     order by "cache_key" asc`,
+    [[...stateCacheKeys]],
+  );
+  expect(result.rows.map(({ cache_key: cacheKey }) => cacheKey)).toEqual([
+    "state-roster:v1:CA:U-1:L-1",
+    "state-roster:v1:GA:U-2:L-10",
+    "state-roster:v1:TX:U-1:L-1",
+  ]);
+  const byKey = new Map(result.rows.map((row) => [row.cache_key, row]));
+  expect(byKey.has("state-roster:v1:FL:U-1:L-1")).toBe(false);
+
+  for (const row of result.rows) {
+    expect(row.refresh_after.getTime() - row.retrieved_at.getTime()).toBe(
+      24 * 60 * 60 * 1_000,
+    );
+    expect(row.stale_after.getTime() - row.retrieved_at.getTime()).toBe(
+      72 * 60 * 60 * 1_000,
+    );
+    expect(row.payload.roster.freshness).toEqual({
+      checkedAt: row.retrieved_at.toISOString(),
+      refreshAfter: row.refresh_after.toISOString(),
+      staleAfter: row.stale_after.toISOString(),
+      state: "fresh",
+    });
+    const sources = row.payload.roster.seats.flatMap((seat) => [
+      ...seat.vacancySources,
+      ...seat.people.flatMap((person) => person.sources),
+    ]);
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source.retrievedAt).toBe(row.retrieved_at.toISOString());
+      if (source.effectiveAt !== null) {
+        expect(Date.parse(source.effectiveAt)).toBeLessThanOrEqual(
+          row.retrieved_at.getTime(),
+        );
+      }
+    }
+  }
+
+  const inspectedAt = Date.now();
+  const fresh = byKey.get("state-roster:v1:GA:U-2:L-10")!;
+  const stale = byKey.get("state-roster:v1:CA:U-1:L-1")!;
+  const expired = byKey.get("state-roster:v1:TX:U-1:L-1")!;
+  expect(inspectedAt).toBeLessThan(fresh.refresh_after.getTime());
+  expect(inspectedAt).toBeGreaterThanOrEqual(stale.refresh_after.getTime());
+  expect(inspectedAt).toBeLessThan(stale.stale_after.getTime());
+  expect(inspectedAt).toBeGreaterThanOrEqual(expired.stale_after.getTime());
 }
