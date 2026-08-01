@@ -155,7 +155,7 @@ async function refresh(
     if (write.status === "written") {
       const published = validateCacheRecord(record, jurisdiction, publishedAt);
       if (published === null || publishedAt.getTime() >= published.staleAfter.getTime()) {
-        return unavailable();
+        return null;
       }
       return available(
         published,
