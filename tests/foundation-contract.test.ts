@@ -1197,13 +1197,40 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("per-person source evidence")
     expect(f6).toContain("client-bound prop tree")
     expect(f6).toContain("35 files/810 tests")
-    expect(f6).toContain(
-      "**F6-T6 hosted integration correction approval:** Approved by the user on 2026-07-31",
-    )
-    expect(f6).toContain("e2e/residence.spec.ts")
-    expect(f6).toContain("30679042700")
-    expect(f6).toContain("25 passed")
-    expect(f6).toContain("hard-coded pre-F6 tab order")
+    const expectF6CorrectionScope = (item: string) => {
+      const lines = item.split(/\r?\n/)
+      const task = lines.find((line) => line.startsWith("| T6 |"))
+      const approval = lines.find((line) =>
+        line.startsWith("- **F6-T6 hosted integration correction approval:**"),
+      )
+      expect(task).toBe(
+        "| T6 | Integrated journey, routing, hygiene, and verification evidence. | Seeded authenticated deep links, keyboard navigation, source/freshness, stale/unavailable recovery, no-JS links, responsive layout, map route, and temporary-artifact checks fail or are absent. | Create `e2e/government-navigation.spec.ts`; modify `e2e/seed-session.mjs` and `PROJECT-MAP.md`; after explicit user approval on 2026-07-31, modify `e2e/residence.spec.ts` only to replace its obsolete pre-F6 exact tab-order oracle with bounded address-focus reachability; modify `TEMPORARY.md` only if an intentional temporary entry exists; no live provider call. | T5. | `npm.cmd run check`; `npm.cmd run test:e2e` | Focused suites, PostgreSQL contract, full check, guarded Chromium, 375px/1280px visual checks, keyboard/screen-reader review, JavaScript-disabled navigation, `git diff --check`, map impact, and zero open temporary entries pass; independent review has no unresolved Critical/Important finding. |",
+      )
+      expect(approval).toBe(
+        "- **F6-T6 hosted integration correction approval:** Approved by the user on 2026-07-31 after exact head `fbc1ea674b975d83b596dbefd83cdbb35d5aa593` [pre-PR push CI run `30679042700`](https://github.com/Aheadboat/voteGPT/actions/runs/30679042700) passed migrations, PostgreSQL contracts, all non-E2E checks, and 25 passed Chromium journeys. Its sole failure repeated pre-T6 run `30676985461`: `e2e/residence.spec.ts` hard-coded pre-F6 tab order and expected the residence input immediately after the three header links, while the approved accessible government navigation now contributes focusable controls before that input. The user approved one test-only correction: preserve the three exact header focus assertions, use bounded keyboard reachability for the address, then preserve the exact form-control order. No production, provider, privacy, residence, or navigation behavior may change.",
+      )
+    }
+    expectF6CorrectionScope(f6)
+    for (const [authorized, widened] of [
+      [
+        "modify `e2e/residence.spec.ts` only",
+        "modify `e2e/residence.spec.ts` and `src/app/dashboard/page.tsx`",
+      ],
+      ["pre-T6 run `30676985461`", "an unrecorded pre-T6 run"],
+      ["one test-only correction", "production and test corrections"],
+      [
+        "preserve the three exact header focus assertions, use bounded keyboard reachability for the address, then preserve the exact form-control order",
+        "replace the keyboard assertions as needed",
+      ],
+      [
+        "No production, provider, privacy, residence, or navigation behavior may change.",
+        "Production and navigation behavior may change.",
+      ],
+    ] as const) {
+      const mutated = f6.replace(authorized, widened)
+      expect(mutated, `missing authorized F6 correction text: ${authorized}`).not.toBe(f6)
+      expect(() => expectF6CorrectionScope(mutated)).toThrow()
+    }
     expect(readme).toContain(
       "dashboard selected-panel integration are independently reviewed",
     )
