@@ -6,7 +6,11 @@ import {
   type StateOfficialCacheRepository,
 } from "./state-officials-service";
 import type { FetchStateLegislators } from "./openstates";
-import type { StateJurisdiction, StateRosterInput } from "./state-officials";
+import {
+  stateJurisdictionFromDivisions,
+  type StateJurisdiction,
+  type StateRosterInput,
+} from "./state-officials";
 
 const HOUR = 60 * 60 * 1_000;
 const NOW = new Date("2026-07-31T12:00:00.000Z");
@@ -20,17 +24,77 @@ const jurisdiction: StateJurisdiction = {
     {
       chamber: "upper",
       district: "13",
+      providerTargets: [{
+        label: "13",
+        divisionId: "ocd-division/country:us/state:ga/sldu:13",
+      }],
       divisionId: "ocd-division/country:us/state:ga/sldu:13",
     },
     {
       chamber: "lower",
       district: "25",
+      providerTargets: [{
+        label: "25",
+        divisionId: "ocd-division/country:us/state:ga/sldl:25",
+      }],
       divisionId: "ocd-division/country:us/state:ga/sldl:25",
     },
   ],
 };
 
 describe("createStateOfficialsService", () => {
+  it("uses canonical Idaho district identity for the cache key and provider jurisdiction", async () => {
+    const parsed = stateJurisdictionFromDivisions([
+      { type: "state", name: "Idaho", id: "ocd-division/country:us/state:id", idScheme: "ocd" },
+      { type: "state_upper", name: "1", id: "ocd-division/country:us/state:id/sldu:1", idScheme: "ocd" },
+      { type: "state_lower", name: "1", id: "ocd-division/country:us/state:id/sldl:1", idScheme: "ocd" },
+    ]);
+    expect(parsed.status).toBe("available");
+    if (parsed.status !== "available") throw new Error("Expected Idaho jurisdiction.");
+    const cache = memoryCache(null);
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "unavailable",
+      reason: "provider_error",
+    });
+
+    await expect(
+      createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(parsed.jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+
+    expect(cache.readKeys).toEqual(["state-roster:v1:ID:U-1:L-1"]);
+    expect(fetchStateLegislators).toHaveBeenCalledWith(
+      parsed.jurisdiction,
+      expect.objectContaining({ apiKey: API_KEY }),
+    );
+  });
+
+  it("uses the current Vermont canonical district in the cache key and provider jurisdiction", async () => {
+    const parsed = stateJurisdictionFromDivisions([
+      { type: "state", name: "Vermont", id: "ocd-division/country:us/state:vt", idScheme: "ocd" },
+      { type: "state_upper", name: "Grand Isle-Chittenden", id: "ocd-division/country:us/state:vt/sldu:grand_isle-chittenden", idScheme: "ocd" },
+      { type: "state_lower", name: "Addison-1", id: "ocd-division/country:us/state:vt/sldl:addison-1", idScheme: "ocd" },
+    ]);
+    expect(parsed.status).toBe("available");
+    if (parsed.status !== "available") throw new Error("Expected current Vermont jurisdiction.");
+    const cache = memoryCache(null);
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "unavailable",
+      reason: "provider_error",
+    });
+
+    await expect(
+      createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(parsed.jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+
+    expect(cache.readKeys).toEqual([
+      "state-roster:v1:VT:U-grand_isle-chittenden:L-addison-1",
+    ]);
+    expect(fetchStateLegislators).toHaveBeenCalledWith(
+      parsed.jurisdiction,
+      expect.objectContaining({ apiKey: API_KEY }),
+    );
+  });
+
   it.each([
     { ...jurisdiction, untrusted: true },
     { ...jurisdiction, districts: [{ ...jurisdiction.districts[0], untrusted: true }] },
@@ -164,7 +228,7 @@ describe("createStateOfficialsService", () => {
           stateCode: "CA",
           stateDivisionId: "ocd-division/country:us/state:ca",
           jurisdictionId: "ocd-jurisdiction/country:us/state:ca/government",
-          districts: [{ chamber: "upper", district: "13", divisionId: "ocd-division/country:us/state:ca/sldu:13" }],
+          districts: [{ chamber: "upper", district: "13", providerTargets: [{ label: "13", divisionId: "ocd-division/country:us/state:ca/sldu:13" }], divisionId: "ocd-division/country:us/state:ca/sldu:13" }],
           legislature: "unicameral",
         },
         roster: cachedRoster(hoursBefore(1)),
@@ -182,6 +246,45 @@ describe("createStateOfficialsService", () => {
     }
   });
 
+  it.each([
+    ["wrong-state host", "https://senate.ca.gov/member"],
+    ["unvetted host", "https://georgia.gov/legislator"],
+    ["privacy-bearing query", "https://www.legis.ga.gov/member?address=1-main"],
+    ["unapproved query", "https://www.legis.ga.gov/member?sort=alpha"],
+  ])("fails closed for a cached %s source", async (_label, publicUrl) => {
+    const cache = memoryCache(recordWithSource(hoursBefore(1), publicUrl));
+
+    await expect(
+      createStateOfficialsService(options(cache, vi.fn(), {})).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("serves a cache row whose source satisfies the state host and public-query policy", async () => {
+    const cache = memoryCache(
+      recordWithSource(
+        hoursBefore(1),
+        "https://www.legis.ga.gov/member?district=13&session=2026",
+      ),
+    );
+
+    await expect(
+      createStateOfficialsService(options(cache, vi.fn(), {})).getOfficials(jurisdiction),
+    ).resolves.toMatchObject({ status: "available", view: { freshness: { state: "fresh" } } });
+  });
+
+  it("rejects a provider source outside cache policy before writing it", async () => {
+    const cache = memoryCache(null);
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: withVacancySource(roster(NOW), "https://senate.ca.gov/member", NOW),
+    });
+
+    await expect(
+      createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(cache.writes).toEqual([]);
+  });
+
   it("fails closed when a cached source time differs from its generation", async () => {
     const retrievedAt = hoursBefore(1);
     const cache = memoryCache({
@@ -197,7 +300,7 @@ describe("createStateOfficialsService", () => {
             people: [],
             vacancySources: [{
               sourceType: "vacancy",
-              publicUrl: "https://legislature.example.gov/vacancies",
+              publicUrl: "https://www.legis.ga.gov/vacancies",
               retrievedAt: NOW.toISOString(),
               effectiveAt: NOW.toISOString(),
             }],
@@ -299,6 +402,125 @@ describe("createStateOfficialsService", () => {
     expect(result).toMatchObject({ status: "available", view: { freshness: { checkedAt: winner.retrievedAt.toISOString(), state: "fresh" } } });
   });
 
+  it("serves a valid equal-generation winner after a cold-cache publication race", async () => {
+    const winner = record(NOW, "Persisted cold winner");
+    const cache = memoryCache(null);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = winner;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted cold loser"),
+    });
+
+    const result = await createStateOfficialsService(
+      options(cache, fetchStateLegislators),
+    ).getOfficials(jurisdiction);
+
+    expect(result).toMatchObject({
+      status: "available",
+      view: {
+        freshness: { checkedAt: NOW.toISOString(), state: "fresh" },
+        chambers: [{ districts: [{ seats: [{ seat: "Persisted cold winner" }] }] }],
+      },
+    });
+    expect(cache.reads).toBe(2);
+  });
+
+  it("serves a valid equal-generation winner instead of the prior stale fallback", async () => {
+    const winner = record(NOW, "Persisted stale-race winner");
+    const cache = memoryCache(record(hoursBefore(25), "Prior stale roster"));
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = winner;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted stale-race loser"),
+    });
+
+    const result = await createStateOfficialsService(
+      options(cache, fetchStateLegislators),
+    ).getOfficials(jurisdiction);
+
+    expect(result).toMatchObject({
+      status: "available",
+      view: {
+        freshness: { checkedAt: NOW.toISOString(), state: "fresh" },
+        chambers: [{ districts: [{ seats: [{ seat: "Persisted stale-race winner" }] }] }],
+      },
+    });
+    expect(cache.reads).toBe(2);
+  });
+
+  it("rejects a malformed authoritative reread after an ignored cold-cache write", async () => {
+    const cache = memoryCache(null);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = { ...record(NOW), payload: { malformed: true } };
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted loser"),
+    });
+
+    await expect(
+      createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(cache.reads).toBe(2);
+  });
+
+  it("rejects a future authoritative reread after an ignored cold-cache write", async () => {
+    const cache = memoryCache(null);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = record(new Date(NOW.getTime() + 1), "Future reread");
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted loser"),
+    });
+
+    await expect(
+      createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(cache.reads).toBe(2);
+  });
+
+  it("rejects an older authoritative reread and keeps the prior stale roster", async () => {
+    const prior = record(hoursBefore(25), "Prior stale roster");
+    const cache = memoryCache(prior);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = record(new Date(NOW.getTime() - 1), "Older reread");
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted loser"),
+    });
+
+    const result = await createStateOfficialsService(
+      options(cache, fetchStateLegislators),
+    ).getOfficials(jurisdiction);
+
+    expect(result).toMatchObject({
+      status: "available",
+      view: {
+        freshness: { checkedAt: prior.retrievedAt.toISOString(), state: "stale" },
+        chambers: [{ districts: [{ seats: [{ seat: "Prior stale roster" }] }] }],
+      },
+    });
+    expect(cache.reads).toBe(2);
+  });
+
+  it("rejects an equal winner that expires at the final authoritative-read clock", async () => {
+    const cache = memoryCache(null);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.afterIgnoredWrite = record(NOW, "Expired equal winner");
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: roster(NOW, "Unpersisted loser"),
+    });
+    let clockCalls = 0;
+
+    await expect(createStateOfficialsService({
+      ...options(cache, fetchStateLegislators),
+      now: () => clockCalls++ < 3 ? NOW : new Date(NOW.getTime() + 72 * HOUR),
+    }).getOfficials(jurisdiction)).resolves.toEqual({ status: "unavailable" });
+    expect(cache.reads).toBe(2);
+  });
+
   it("uses validated stale fallback when ignored-write winner rereads reject", async () => {
     const cache = memoryCache(record(hoursBefore(25)));
     cache.writeResult = { status: "ignored", reason: "older_generation" };
@@ -342,6 +564,7 @@ function memoryCache(initial: StateOfficialCacheRecord | null) {
   const cache: StateOfficialCacheRepository & {
     writes: StateOfficialCacheRecord[];
     reads: number;
+    readKeys: string[];
     readError?: Error;
     readErrorAfter?: number;
     readGate?: Promise<void>;
@@ -352,8 +575,10 @@ function memoryCache(initial: StateOfficialCacheRecord | null) {
   } = {
     writes,
     reads: 0,
-    async read() {
+    readKeys: [],
+    async read(cacheKey) {
       cache.reads += 1;
+      cache.readKeys.push(cacheKey);
       await cache.readGate;
       if (cache.readError || (cache.readErrorAfter !== undefined && cache.reads > cache.readErrorAfter)) {
         throw cache.readError ?? new Error("read failed");
@@ -375,18 +600,38 @@ function memoryCache(initial: StateOfficialCacheRecord | null) {
   return cache;
 }
 
-function record(retrievedAt: Date): StateOfficialCacheRecord {
+function record(
+  retrievedAt: Date,
+  seat = "State Senator",
+): StateOfficialCacheRecord {
   return {
     cacheKey: "state-roster:v1:GA:U-13:L-25",
-    payload: { jurisdiction, roster: cachedRoster(retrievedAt) },
+    payload: { jurisdiction, roster: cachedRoster(retrievedAt, seat) },
     retrievedAt,
     refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
     staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
   };
 }
 
-function cachedRoster(retrievedAt: Date): StateRosterInput {
-  const value = roster(retrievedAt);
+function recordWithSource(
+  retrievedAt: Date,
+  publicUrl: string,
+): StateOfficialCacheRecord {
+  const value = record(retrievedAt);
+  return {
+    ...value,
+    payload: {
+      jurisdiction,
+      roster: withVacancySource(cachedRoster(retrievedAt), publicUrl, retrievedAt),
+    },
+  };
+}
+
+function cachedRoster(
+  retrievedAt: Date,
+  seat = "State Senator",
+): StateRosterInput {
+  const value = roster(retrievedAt, seat);
   return {
     ...value,
     freshness: {
@@ -398,16 +643,41 @@ function cachedRoster(retrievedAt: Date): StateRosterInput {
   };
 }
 
-function roster(retrievedAt: Date): StateRosterInput {
+function roster(
+  retrievedAt: Date,
+  seat = "State Senator",
+): StateRosterInput {
   const checkedAt = retrievedAt.toISOString();
   return {
     freshness: { checkedAt, refreshAfter: checkedAt, staleAfter: checkedAt, state: "fresh" },
     seats: [{
       chamber: "upper",
       district: "13",
-      seat: "State Senator",
+      seat,
       people: [],
       vacancySources: [],
+    }],
+  };
+}
+
+function withVacancySource(
+  value: StateRosterInput,
+  publicUrl: string,
+  retrievedAt: Date,
+): StateRosterInput {
+  return {
+    ...value,
+    seats: [{
+      chamber: "upper",
+      district: "13",
+      seat: "State Senator",
+      people: [],
+      vacancySources: [{
+        sourceType: "vacancy",
+        publicUrl,
+        retrievedAt: retrievedAt.toISOString(),
+        effectiveAt: null,
+      }],
     }],
   };
 }

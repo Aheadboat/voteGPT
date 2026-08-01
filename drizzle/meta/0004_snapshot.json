@@ -642,7 +642,7 @@
       "checkConstraints": {
         "state_official_cache_key_check": {
           "name": "state_official_cache_key_check",
-          "value": "\"state_official_cache\".\"cache_key\" ~ '^state-roster:v1:[A-Z]{2}:U-[a-z0-9][a-z0-9-]{0,199}(:L-[a-z0-9][a-z0-9-]{0,199})?$'"
+          "value": "\"state_official_cache\".\"cache_key\" ~ '^state-roster:v1:[A-Z]{2}:U-[a-z0-9][a-z0-9_-]{0,199}(:L-[a-z0-9][a-z0-9_-]{0,199})?$'"
         },
         "state_official_cache_refresh_after_check": {
           "name": "state_official_cache_refresh_after_check",

@@ -1,9 +1,13 @@
 import type { SavedResidenceDivision } from "./saved-residence";
+import { validateStateLegislativeSourceUrl } from "./state-source-policy";
 
 type StateChamber = "upper" | "lower";
+type ProviderTarget = Readonly<{ label: string; divisionId: string }>;
+type ProviderTargets = readonly [ProviderTarget, ...ProviderTarget[]];
 type ParsedDistrict = Readonly<{
   chamber: StateChamber;
   district: string;
+  providerTargets: ProviderTargets;
   divisionId: string;
   stateCode: string;
 }>;
@@ -16,6 +20,7 @@ export type StateJurisdiction = Readonly<{
   districts: readonly Readonly<{
     chamber: StateChamber;
     district: string;
+    providerTargets: ProviderTargets;
     divisionId: string;
   }>[];
 }>;
@@ -86,7 +91,7 @@ export type StateRosterInput = Readonly<{
 
 const stateIdPattern = /^ocd-division\/country:us\/state:([a-z]{2})$/;
 const districtIdPattern =
-  /^ocd-division\/country:us\/state:([a-z]{2})\/sld([ul]):([a-z0-9][a-z0-9-]*)$/;
+  /^ocd-division\/country:us\/state:([a-z]{2})\/sld([ul]):([a-z0-9][a-z0-9_-]{0,199})$/;
 const publicTextPattern = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identityPattern = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const chambers: readonly StateChamber[] = ["upper", "lower"];
@@ -143,6 +148,7 @@ export function stateJurisdictionFromDivisions(
     .map((district) => ({
       chamber: district.chamber,
       district: district.district,
+      providerTargets: district.providerTargets,
       divisionId: district.divisionId,
     }));
 
@@ -237,15 +243,23 @@ function parseDistrictDivision(
     return null;
   }
   const chamber = match[2] === "u" ? "upper" : "lower";
+  const providerTargets = providerTargetsFromOcd(
+    match[1],
+    chamber,
+    match[3],
+    division.id,
+  );
   if (
     (division.type === "state_upper" && chamber !== "upper") ||
-    (division.type === "state_lower" && chamber !== "lower")
+    (division.type === "state_lower" && chamber !== "lower") ||
+    providerTargets === null
   ) {
     return null;
   }
   return {
     chamber,
     district: match[3],
+    providerTargets,
     divisionId: division.id,
     stateCode: match[1],
   };
@@ -270,7 +284,7 @@ function reconcileSeat(
     !jurisdiction.districts.some(
       (jurisdictionDistrict) =>
         jurisdictionDistrict.chamber === chamber &&
-        jurisdictionDistrict.district === district,
+        jurisdictionDistrict.providerTargets.some((target) => target.label === district),
     )
   ) {
     return null;
@@ -282,13 +296,24 @@ function reconcileSeat(
   }
   seatKeys.add(seatKey);
 
-  const vacancySources = parseSources(value.vacancySources, "vacancy");
+  const vacancySources = parseSources(
+    value.vacancySources,
+    jurisdiction.stateCode,
+    "vacancy",
+  );
   if (vacancySources === null) {
     return null;
   }
 
   const people = value.people.map((person) =>
-    parsePerson(person, chamber, district, seat, personIds),
+    parsePerson(
+      person,
+      chamber,
+      district,
+      seat,
+      jurisdiction.stateCode,
+      personIds,
+    ),
   );
   if (people.some((person) => person === null)) {
     return null;
@@ -338,6 +363,7 @@ function parsePerson(
   chamber: StateChamber,
   district: string,
   seat: string,
+  stateCode: string,
   personIds: Set<string>,
 ): { person: StateOfficialPerson; currentOfficial: boolean; sources: readonly StateSource[] } | null {
   if (!isRecord(value) || !hasExactKeys(value, ["id", "name", "role", "sources"])) {
@@ -357,7 +383,7 @@ function parsePerson(
   ) {
     return null;
   }
-  const sources = parseSources(value.sources);
+  const sources = parseSources(value.sources, stateCode);
   if (sources === null || sources.some(({ sourceType }) => sourceType !== "official")) {
     return null;
   }
@@ -371,6 +397,7 @@ function parsePerson(
 
 function parseSources(
   values: readonly unknown[],
+  stateCode: string,
   requiredType?: StateSource["sourceType"],
 ): readonly StateSource[] | null {
   const sources: StateSource[] = [];
@@ -381,7 +408,8 @@ function parseSources(
       !hasExactKeys(value, ["sourceType", "publicUrl", "retrievedAt", "effectiveAt"]) ||
       (value.sourceType !== "official" && value.sourceType !== "vacancy") ||
       (requiredType !== undefined && value.sourceType !== requiredType) ||
-      !isPublicSourceUrl(value.publicUrl) ||
+      typeof value.publicUrl !== "string" ||
+      validateStateLegislativeSourceUrl(value.publicUrl, stateCode).status !== "allowed" ||
       !isTime(value.retrievedAt) ||
       (value.effectiveAt !== null && !isTime(value.effectiveAt))
     ) {
@@ -441,9 +469,10 @@ function isJurisdictionDistrict(
 ): value is StateJurisdiction["districts"][number] {
   return (
     isRecord(value) &&
-    hasExactKeys(value, ["chamber", "district", "divisionId"]) &&
+    hasExactKeys(value, ["chamber", "district", "providerTargets", "divisionId"]) &&
     isChamber(value.chamber) &&
     isPublicText(value.district) &&
+    isProviderTargets(value.providerTargets) &&
     isPublicText(value.divisionId)
   );
 }
@@ -462,6 +491,10 @@ function hasSameJurisdiction(
       (district, index) =>
         district.chamber === right.districts[index]?.chamber &&
         district.district === right.districts[index]?.district &&
+        hasSameProviderTargets(
+          district.providerTargets,
+          right.districts[index]?.providerTargets ?? [],
+        ) &&
         district.divisionId === right.districts[index]?.divisionId,
     )
   );
@@ -503,22 +536,246 @@ function isIdentity(value: unknown): value is string {
   return typeof value === "string" && identityPattern.test(value);
 }
 
-function isPublicSourceUrl(value: unknown): value is string {
-  if (typeof value !== "string" || value.length > 2_000) {
+function isProviderTargets(value: unknown): value is ProviderTargets {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 2) {
     return false;
   }
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      url.username === "" &&
-      url.password === "" &&
-      url.hash === "" &&
-      url.toString() === value
-    );
-  } catch {
-    return false;
+  const labels = new Set<string>();
+  const divisions = new Set<string>();
+  for (const target of value) {
+    if (
+      !isRecord(target) ||
+      !hasExactKeys(target, ["label", "divisionId"]) ||
+      !isPublicText(target.label) ||
+      !isIdentity(target.divisionId) ||
+      labels.has(target.label) ||
+      divisions.has(target.divisionId)
+    ) {
+      return false;
+    }
+    labels.add(target.label);
+    divisions.add(target.divisionId);
   }
+  return true;
+}
+
+function hasSameProviderTargets(
+  left: readonly ProviderTarget[],
+  right: readonly ProviderTarget[],
+): boolean {
+  return left.length === right.length && left.every((target, index) =>
+    target.label === right[index]?.label &&
+    target.divisionId === right[index]?.divisionId,
+  );
+}
+
+function providerTargetsFromOcd(
+  state: string,
+  chamber: StateChamber,
+  district: string,
+  canonicalDivisionId: string,
+): ProviderTargets | null {
+  if (state === "ak" && chamber === "upper") {
+    return /^[a-t]$/.test(district)
+      ? [{ label: district.toUpperCase(), divisionId: canonicalDivisionId }]
+      : null;
+  }
+  if (state === "id" && chamber === "lower") {
+    const number = parseBoundedDistrictNumber(district, 35);
+    return number === null
+      ? null
+      : [
+          {
+            label: `${number}A`,
+            divisionId: `ocd-division/country:us/state:id/sldl:${number}a`,
+          },
+          {
+            label: `${number}B`,
+            divisionId: `ocd-division/country:us/state:id/sldl:${number}b`,
+          },
+        ];
+  }
+  if (state === "ma") {
+    const label = massachusettsProviderLabel(chamber, district);
+    return label === null ? null : [{ label, divisionId: canonicalDivisionId }];
+  }
+  if (state === "me" && chamber === "lower" && !/^\d+$/.test(district)) {
+    return district === "passamaquoddy_tribe"
+      ? [{
+          label: "Passamaquoddy Tribe",
+          divisionId: "ocd-division/country:us/state:me/sldl:passamaquoddy-tribe",
+        }]
+      : null;
+  }
+  if (state === "nh" && chamber === "lower") {
+    return /^[a-z]+_[1-9]\d{0,2}$/.test(district)
+      ? [{ label: titleDistrict(district, "-"), divisionId: canonicalDivisionId }]
+      : null;
+  }
+  if (state === "vt") {
+    if (chamber === "upper") {
+      const exceptionalLabel = Object.hasOwn(vermontUpperDistrictLabels, district)
+        ? vermontUpperDistrictLabels[district]
+        : undefined;
+      const label = exceptionalLabel ?? (/^[a-z]+$/.test(district) ? titleWord(district) : null);
+      return label === null || label === undefined
+        ? null
+        : [{
+            label,
+            divisionId: district === "grand_isle-chittenden"
+              ? "ocd-division/country:us/state:vt/sldu:grand_isle"
+              : canonicalDivisionId,
+          }];
+    }
+    if (!/^[a-z]+(?:_[a-z]+)*(?:-[a-z0-9]+)*$/.test(district)) return null;
+    const divisionId = district === "windham-windsor-bennington"
+      ? "ocd-division/country:us/state:vt/sldl:windham-bennington-windsor"
+      : canonicalDivisionId;
+    return [{
+      label: titleDistrict(district, "-"),
+      divisionId,
+    }];
+  }
+  if (chamber === "lower") {
+    const suffix = /^([1-9]\d{0,2})([a-z])$/.exec(district);
+    if (suffix?.[1] && suffix[2]) {
+      const number = Number(suffix[1]);
+      const letter = suffix[2];
+      const supported =
+        (state === "md" && isMarylandSubdistrict(number, letter)) ||
+        (state === "mn" && number <= 67 && (letter === "a" || letter === "b")) ||
+        (state === "nd" && number === 4 && (letter === "a" || letter === "b")) ||
+        (state === "sd" && (number === 26 || number === 28) && (letter === "a" || letter === "b"));
+      return supported
+        ? [{ label: district.toUpperCase(), divisionId: canonicalDivisionId }]
+        : null;
+    }
+  }
+  return /^[1-9]\d{0,2}$/.test(district)
+    ? [{ label: district, divisionId: canonicalDivisionId }]
+    : null;
+}
+
+const massachusettsUpperOrdinals: Readonly<Record<string, string>> = {
+  "1st": "First",
+  "2nd": "Second",
+  "3rd": "Third",
+  "4th": "Fourth",
+  "5th": "Fifth",
+};
+const massachusettsCommaDistricts: Readonly<Record<string, string>> = {
+  hampden_hampshire_and_worcester: "Hampden, Hampshire and Worcester",
+  hampshire_franklin_and_worcester: "Hampshire, Franklin and Worcester",
+  berkshire_hampden_franklin_and_hampshire: "Berkshire, Hampden, Franklin and Hampshire",
+  norfolk_plymouth_and_bristol: "Norfolk, Plymouth and Bristol",
+  norfolk_worcester_and_middlesex: "Norfolk, Worcester and Middlesex",
+};
+const massachusettsDistrictWords = new Set([
+  "and", "barnstable", "berkshire", "bristol", "cape", "essex", "franklin",
+  "hampden", "hampshire", "islands", "middlesex", "norfolk", "plymouth",
+  "suffolk", "worcester",
+]);
+const vermontUpperDistrictLabels: Readonly<Record<string, string>> = {
+  "chittenden-central": "Chittenden Central",
+  "chittenden-north": "Chittenden North",
+  "chittenden-southeast": "Chittenden Southeast",
+  "grand_isle-chittenden": "Grand Isle",
+};
+
+function massachusettsProviderLabel(
+  chamber: StateChamber,
+  district: string,
+): string | null {
+  if (chamber === "lower") {
+    if (district === "barnstable_dukes_and_nantucket") {
+      return "Barnstable, Dukes and Nantucket";
+    }
+    const match = /^([^_]+)_([a-z]+)$/.exec(district);
+    return match?.[1] && match[2] &&
+      isNumericOrdinal(match[1], 37) && massachusettsDistrictWords.has(match[2])
+      ? `${match[1]} ${titleWord(match[2])}`
+      : null;
+  }
+
+  const commaLabel = massachusettsCommaDistricts[district];
+  if (commaLabel !== undefined) return commaLabel;
+  const parts = district.split("_");
+  const ordinal = massachusettsUpperOrdinals[parts[0] ?? ""];
+  if (ordinal !== undefined) parts[0] = ordinal;
+  if (
+    parts.length === 0 ||
+    parts.some((part, index) =>
+      index === 0 && ordinal !== undefined
+        ? false
+        : !massachusettsDistrictWords.has(part)
+    )
+  ) {
+    return null;
+  }
+  const andIndex = parts.indexOf("and");
+  if (
+    andIndex !== -1 &&
+    (parts.lastIndexOf("and") !== andIndex ||
+      parts.length !== (ordinal === undefined ? 3 : 4) ||
+      andIndex !== (ordinal === undefined ? 1 : 2))
+  ) {
+    return null;
+  }
+  if (andIndex === -1 && parts.length !== (ordinal === undefined ? 1 : 2)) {
+    return null;
+  }
+  return parts.map((part) =>
+    part === "and" || Object.values(massachusettsUpperOrdinals).includes(part)
+      ? part
+      : titleWord(part)
+  ).join(" ");
+}
+
+function isMarylandSubdistrict(number: number, letter: string): boolean {
+  const abDistricts = new Set([1, 2, 7, 9, 11, 12, 27, 29, 30, 33, 34, 35, 37, 38, 42, 43, 44, 47]);
+  const cDistricts = new Set([1, 27, 29, 33, 38, 42]);
+  return (letter === "a" || letter === "b")
+    ? abDistricts.has(number)
+    : letter === "c" && cDistricts.has(number);
+}
+
+function parseBoundedDistrictNumber(value: string, maximum: number): number | null {
+  if (!/^[1-9]\d{0,2}$/.test(value)) return null;
+  const number = Number(value);
+  return number <= maximum ? number : null;
+}
+
+function isNumericOrdinal(value: string, maximum: number): boolean {
+  const match = /^([1-9]\d?)(st|nd|rd|th)$/.exec(value);
+  if (!match?.[1] || !match[2]) return false;
+  const number = Number(match[1]);
+  const remainder = number % 100;
+  const expected = remainder >= 11 && remainder <= 13
+    ? "th"
+    : number % 10 === 1
+      ? "st"
+      : number % 10 === 2
+        ? "nd"
+        : number % 10 === 3
+          ? "rd"
+          : "th";
+  return number <= maximum && match[2] === expected;
+}
+
+function titleDistrict(value: string, hyphenSeparator: "-" | " "): string {
+  return value
+    .split("_")
+    .map((part) =>
+      part
+        .split("-")
+        .map(titleWord)
+        .join(hyphenSeparator),
+    )
+    .join(" ");
+}
+
+function titleWord(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
 }
 
 function isTime(value: unknown): value is string {

@@ -357,7 +357,7 @@ function stateCacheRecords(clock) {
     ]),
     stateCacheRecord("CA", "1", "1", clock.staleRetrievedAt, [
       stateSeat("upper", "1", "District 1", [
-        statePerson("ca-upper-stale", "California State Senator", "upper", "1", "District 1", "https://www.legislature.ca.gov/senate/1", clock.staleRetrievedAt),
+        statePerson("ca-upper-stale", "California State Senator", "upper", "1", "District 1", "https://www.senate.ca.gov/senate/1", clock.staleRetrievedAt),
       ]),
       stateSeat("lower", "1", "District 1", [
         statePerson("ca-lower-stale", "California State Assemblymember", "lower", "1", "District 1", "https://www.assembly.ca.gov/assemblymembers/1", clock.staleRetrievedAt),
@@ -390,8 +390,8 @@ function stateCacheRecord(stateCode, upperDistrict, lowerDistrict, retrievedAt, 
     jurisdictionId: `ocd-jurisdiction/country:us/state:${lower}/government`,
     legislature: "bicameral",
     districts: [
-      { chamber: "upper", district: upperDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}` },
-      { chamber: "lower", district: lowerDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}` },
+      { chamber: "upper", district: upperDistrict, providerTargets: [{ label: upperDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}` }], divisionId: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}` },
+      { chamber: "lower", district: lowerDistrict, providerTargets: [{ label: lowerDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}` }], divisionId: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}` },
     ],
   };
   return {
@@ -432,7 +432,7 @@ function stateSource(sourceType, publicUrl, retrievedAt) {
     sourceType,
     publicUrl,
     retrievedAt: retrievedAt.toISOString(),
-    effectiveAt: new Date(retrievedAt.getTime() - 60 * 60 * 1_000).toISOString(),
+    effectiveAt: null,
   };
 }
 

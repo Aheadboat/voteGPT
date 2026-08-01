@@ -104,11 +104,11 @@ const expectedStateView = {
             {
               id: "ca-upper-stale",
               name: "California State Senator",
-              sources: [{ sourceType: "official", publicUrl: "https://www.legislature.ca.gov/senate/1" }],
+              sources: [{ sourceType: "official", publicUrl: "https://www.senate.ca.gov/senate/1" }],
             },
           ],
           seat: "District 1",
-          sources: [{ sourceType: "official", publicUrl: "https://www.legislature.ca.gov/senate/1" }],
+          sources: [{ sourceType: "official", publicUrl: "https://www.senate.ca.gov/senate/1" }],
           status: "serving",
         },
       ],
@@ -208,7 +208,7 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
     });
     await expect(source).toHaveAttribute("href", href);
     await expect(source.locator("xpath=..").getByText(/^Retrieved /)).toBeVisible();
-    await expect(source.locator("xpath=..").getByText(/^Effective /)).toBeVisible();
+    await expect(source.locator("xpath=..").getByText(/^Effective /)).toHaveCount(0);
   }
   const vacancySource = cards.nth(1).getByRole("link", { name: "Vacancy source" });
   await expect(vacancySource).toHaveAttribute(
@@ -216,7 +216,7 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
     "https://www.legis.ga.gov/vacancies",
   );
   await expect(vacancySource.locator("xpath=..").getByText(/^Retrieved /)).toBeVisible();
-  await expect(vacancySource.locator("xpath=..").getByText(/^Effective /)).toBeVisible();
+  await expect(vacancySource.locator("xpath=..").getByText(/^Effective /)).toHaveCount(0);
   const unknownSource = cards.nth(2).getByRole("link", {
     name: "Official source not qualifying current officeholder evidence",
   });
@@ -225,7 +225,7 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
     "https://www.legis.ga.gov/members/house/10",
   );
   await expect(unknownSource.locator("xpath=..").getByText(/^Retrieved /)).toBeVisible();
-  await expect(unknownSource.locator("xpath=..").getByText(/^Effective /)).toBeVisible();
+  await expect(unknownSource.locator("xpath=..").getByText(/^Effective /)).toHaveCount(0);
 
   const source = cards.nth(0).getByRole("link", {
     name: "Official source for Avery State",
@@ -619,11 +619,7 @@ async function assertSeededStateCache(pool: Pool) {
     expect(sources.length).toBeGreaterThan(0);
     for (const source of sources) {
       expect(source.retrievedAt).toBe(row.retrieved_at.toISOString());
-      if (source.effectiveAt !== null) {
-        expect(Date.parse(source.effectiveAt)).toBeLessThanOrEqual(
-          row.retrieved_at.getTime(),
-        );
-      }
+      expect(source.effectiveAt).toBeNull();
     }
   }
 
@@ -645,7 +641,7 @@ function requireRecord(value: unknown, label: string): Record<string, unknown> {
 }
 
 function jurisdictionFromCacheKey(cacheKey: string): StateJurisdiction {
-  const match = /^state-roster:v1:([A-Z]{2}):U-([a-z0-9][a-z0-9-]{0,199}):L-([a-z0-9][a-z0-9-]{0,199})$/.exec(
+  const match = /^state-roster:v1:([A-Z]{2}):U-([a-z0-9][a-z0-9_-]{0,199}):L-([a-z0-9][a-z0-9_-]{0,199})$/.exec(
     cacheKey,
   );
   if (!match?.[1] || !match[2] || !match[3]) {
@@ -666,11 +662,19 @@ function jurisdictionFromCacheKey(cacheKey: string): StateJurisdiction {
       {
         chamber: "upper",
         district: upperDistrict,
+        providerTargets: [{
+          label: upperDistrict,
+          divisionId: `ocd-division/country:us/state:${state}/sldu:${upperDistrict}`,
+        }],
         divisionId: `ocd-division/country:us/state:${state}/sldu:${upperDistrict}`,
       },
       {
         chamber: "lower",
         district: lowerDistrict,
+        providerTargets: [{
+          label: lowerDistrict,
+          divisionId: `ocd-division/country:us/state:${state}/sldl:${lowerDistrict}`,
+        }],
         divisionId: `ocd-division/country:us/state:${state}/sldl:${lowerDistrict}`,
       },
     ],

@@ -171,7 +171,7 @@ async function refresh(
       ? validateCacheRecord(winnerRead.record, jurisdiction, winnerNow ?? undefined)
       : null;
     return validWinner && winnerNow !== null &&
-      validWinner.retrievedAt.getTime() > record.retrievedAt.getTime() &&
+      validWinner.retrievedAt.getTime() >= record.retrievedAt.getTime() &&
       winnerNow.getTime() < validWinner.staleAfter.getTime()
       ? available(
           validWinner,
@@ -289,7 +289,7 @@ function stateCacheKey(jurisdiction: StateJurisdiction): StateOfficialCacheKey {
 
 function stateJurisdictionFromCacheKey(value: unknown): StateJurisdiction | null {
   if (typeof value !== "string") return null;
-  const match = /^state-roster:v1:([A-Z]{2}):U-([a-z0-9][a-z0-9-]{0,199})(?::L-([a-z0-9][a-z0-9-]{0,199}))?$/.exec(value);
+  const match = /^state-roster:v1:([A-Z]{2}):U-([a-z0-9][a-z0-9_-]{0,199})(?::L-([a-z0-9][a-z0-9_-]{0,199}))?$/.exec(value);
   if (!match?.[1] || !match[2]) return null;
   const state = match[1].toLowerCase();
   const divisions = [
@@ -317,9 +317,11 @@ function canonicalizeJurisdiction(value: unknown): StateJurisdiction | null {
     (value.legislature !== "bicameral" && value.legislature !== "unicameral") ||
     !Array.isArray(value.districts) ||
     !value.districts.every((district) =>
-      exactRecord(district, ["chamber", "district", "divisionId"]) &&
+      exactRecord(district, ["chamber", "district", "providerTargets", "divisionId"]) &&
       (district.chamber === "upper" || district.chamber === "lower") &&
-      typeof district.district === "string" && typeof district.divisionId === "string",
+      typeof district.district === "string" &&
+      validProviderTargets(district.providerTargets) &&
+      typeof district.divisionId === "string",
     )) return null;
   const divisions = [
     { type: "state" as const, name: "state", id: value.stateDivisionId, idScheme: "ocd" as const },
@@ -355,11 +357,34 @@ function sameJurisdiction(left: unknown, right: StateJurisdiction) {
     Array.isArray(candidate.districts) &&
     candidate.districts.length === right.districts.length &&
     candidate.districts.every((district, index) =>
-      exactRecord(district, ["chamber", "district", "divisionId"]) &&
+      exactRecord(district, ["chamber", "district", "providerTargets", "divisionId"]) &&
       district.chamber === right.districts[index]?.chamber &&
       district.district === right.districts[index]?.district &&
+      validProviderTargets(district.providerTargets) &&
+      sameProviderTargets(
+        district.providerTargets,
+        right.districts[index]?.providerTargets ?? [],
+      ) &&
       district.divisionId === right.districts[index]?.divisionId,
     );
+}
+
+function validProviderTargets(value: unknown): value is StateJurisdiction["districts"][number]["providerTargets"] {
+  return Array.isArray(value) && value.length > 0 && value.length <= 2 && value.every((target) =>
+    exactRecord(target, ["label", "divisionId"]) &&
+    typeof target.label === "string" &&
+    typeof target.divisionId === "string",
+  );
+}
+
+function sameProviderTargets(
+  left: readonly Readonly<{ label: string; divisionId: string }>[],
+  right: readonly Readonly<{ label: string; divisionId: string }>[],
+): boolean {
+  return left.length === right.length && left.every((target, index) =>
+    target.label === right[index]?.label &&
+    target.divisionId === right[index]?.divisionId,
+  );
 }
 
 function validDate(value: unknown): value is Date {

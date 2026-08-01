@@ -19,8 +19,112 @@ const jurisdiction: StateJurisdiction = {
   jurisdictionId: "ocd-jurisdiction/country:us/state:ga/government",
   legislature: "bicameral",
   districts: [
-    { chamber: "upper", district: "13", divisionId: "ocd-division/country:us/state:ga/sldu:13" },
-    { chamber: "lower", district: "25", divisionId: "ocd-division/country:us/state:ga/sldl:25" },
+    { chamber: "upper", district: "13", providerTargets: [{ label: "13", divisionId: "ocd-division/country:us/state:ga/sldu:13" }], divisionId: "ocd-division/country:us/state:ga/sldu:13" },
+    { chamber: "lower", district: "25", providerTargets: [{ label: "25", divisionId: "ocd-division/country:us/state:ga/sldl:25" }], divisionId: "ocd-division/country:us/state:ga/sldl:25" },
+  ],
+};
+const namedJurisdiction: StateJurisdiction = {
+  stateCode: "MA",
+  stateDivisionId: "ocd-division/country:us/state:ma",
+  jurisdictionId: "ocd-jurisdiction/country:us/state:ma/government",
+  legislature: "bicameral",
+  districts: [
+    {
+      chamber: "upper",
+      district: "worcester_and_middlesex",
+      providerTargets: [{
+        label: "Worcester and Middlesex",
+        divisionId: "ocd-division/country:us/state:ma/sldu:worcester_and_middlesex",
+      }],
+      divisionId: "ocd-division/country:us/state:ma/sldu:worcester_and_middlesex",
+    },
+    {
+      chamber: "lower",
+      district: "3rd_suffolk",
+      providerTargets: [{
+        label: "3rd Suffolk",
+        divisionId: "ocd-division/country:us/state:ma/sldl:3rd_suffolk",
+      }],
+      divisionId: "ocd-division/country:us/state:ma/sldl:3rd_suffolk",
+    },
+  ],
+};
+const marylandJurisdiction = {
+  stateCode: "MD",
+  stateDivisionId: "ocd-division/country:us/state:md",
+  jurisdictionId: "ocd-jurisdiction/country:us/state:md/government",
+  legislature: "bicameral",
+  districts: [
+    {
+      chamber: "upper",
+      district: "1",
+      providerTargets: [{
+        label: "1",
+        divisionId: "ocd-division/country:us/state:md/sldu:1",
+      }],
+      divisionId: "ocd-division/country:us/state:md/sldu:1",
+    },
+    {
+      chamber: "lower",
+      district: "1c",
+      providerTargets: [{
+        label: "1C",
+        divisionId: "ocd-division/country:us/state:md/sldl:1c",
+      }],
+      divisionId: "ocd-division/country:us/state:md/sldl:1c",
+    },
+  ],
+};
+const idahoJurisdiction = {
+  stateCode: "ID",
+  stateDivisionId: "ocd-division/country:us/state:id",
+  jurisdictionId: "ocd-jurisdiction/country:us/state:id/government",
+  legislature: "bicameral",
+  districts: [
+    {
+      chamber: "upper",
+      district: "1",
+      providerTargets: [{
+        label: "1",
+        divisionId: "ocd-division/country:us/state:id/sldu:1",
+      }],
+      divisionId: "ocd-division/country:us/state:id/sldu:1",
+    },
+    {
+      chamber: "lower",
+      district: "1",
+      providerTargets: [
+        { label: "1A", divisionId: "ocd-division/country:us/state:id/sldl:1a" },
+        { label: "1B", divisionId: "ocd-division/country:us/state:id/sldl:1b" },
+      ],
+      divisionId: "ocd-division/country:us/state:id/sldl:1",
+    },
+  ],
+};
+const vermontJurisdiction: StateJurisdiction = {
+  stateCode: "VT",
+  stateDivisionId: "ocd-division/country:us/state:vt",
+  jurisdictionId: "ocd-jurisdiction/country:us/state:vt/government",
+  legislature: "bicameral",
+  districts: [
+    {
+      chamber: "upper",
+      district: "grand_isle-chittenden",
+      providerTargets: [{
+        label: "Grand Isle",
+        divisionId: "ocd-division/country:us/state:vt/sldu:grand_isle",
+      }],
+      divisionId: "ocd-division/country:us/state:vt/sldu:grand_isle-chittenden",
+    },
+    {
+      chamber: "lower",
+      district: "addison-1",
+      providerTargets: [{
+        label: "Addison-1",
+        divisionId: "ocd-division/country:us/state:vt/sldl:addison-1",
+      }],
+      divisionId: "ocd-division/country:us/state:vt/sldl:addison-1",
+    },
   ],
 };
 const db = await createDatabase("pglite://memory");
@@ -44,6 +148,48 @@ describe("state official cache migration", () => {
     await expect(db.insert(stateOfficialCache).values({ ...valid, refreshAfter: valid.retrievedAt })).rejects.toThrow();
   });
 
+  it("round-trips named OCD district tokens in a collision-safe cache key", async () => {
+    const value = namedRecord(NOW);
+
+    await expect(repository.write(value)).resolves.toEqual({ status: "written" });
+    await expect(repository.read("state-roster:v1:MA:U-worcester_and_middlesex:L-3rd_suffolk")).resolves.toMatchObject({
+      cacheKey: "state-roster:v1:MA:U-worcester_and_middlesex:L-3rd_suffolk",
+      payload: { jurisdiction: namedJurisdiction },
+    });
+  });
+
+  it("round-trips Maryland lower c subdistrict identity and provider label", async () => {
+    const value = marylandRecord(NOW);
+
+    await expect(repository.write(value)).resolves.toEqual({ status: "written" });
+    await expect(repository.read("state-roster:v1:MD:U-1:L-1c")).resolves.toMatchObject({
+      cacheKey: "state-roster:v1:MD:U-1:L-1c",
+      payload: { jurisdiction: marylandJurisdiction },
+    });
+  });
+
+  it("keeps Idaho canonical lower identity while retaining two provider targets", async () => {
+    const value = idahoRecord(NOW);
+
+    await expect(repository.write(value)).resolves.toEqual({ status: "written" });
+    await expect(repository.read("state-roster:v1:ID:U-1:L-1")).resolves.toMatchObject({
+      cacheKey: "state-roster:v1:ID:U-1:L-1",
+      payload: { jurisdiction: idahoJurisdiction },
+    });
+  });
+
+  it("round-trips the current Vermont canonical key with its provider target", async () => {
+    const value = vermontRecord(NOW);
+
+    await expect(repository.write(value)).resolves.toEqual({ status: "written" });
+    await expect(repository.read(
+      "state-roster:v1:VT:U-grand_isle-chittenden:L-addison-1",
+    )).resolves.toMatchObject({
+      cacheKey: "state-roster:v1:VT:U-grand_isle-chittenden:L-addison-1",
+      payload: { jurisdiction: vermontJurisdiction },
+    });
+  });
+
   it("ignores older and equal generations, replacing only with a complete newer roster", async () => {
     const newest = record(NOW);
     await repository.write(newest);
@@ -58,6 +204,90 @@ function record(retrievedAt: Date): StateOfficialCacheRecord {
   return {
     cacheKey: "state-roster:v1:GA:U-13:L-25",
     payload: { jurisdiction, roster: cachedRoster(retrievedAt) },
+    retrievedAt,
+    refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
+    staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
+  };
+}
+
+function namedRecord(retrievedAt: Date): StateOfficialCacheRecord {
+  return {
+    cacheKey: "state-roster:v1:MA:U-worcester_and_middlesex:L-3rd_suffolk",
+    payload: {
+      jurisdiction: namedJurisdiction,
+      roster: {
+        freshness: {
+          checkedAt: retrievedAt.toISOString(),
+          refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR).toISOString(),
+          staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR).toISOString(),
+          state: "fresh",
+        },
+        seats: [],
+      },
+    },
+    retrievedAt,
+    refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
+    staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
+  };
+}
+
+function marylandRecord(retrievedAt: Date): StateOfficialCacheRecord {
+  return {
+    cacheKey: "state-roster:v1:MD:U-1:L-1c",
+    payload: {
+      jurisdiction: marylandJurisdiction,
+      roster: {
+        freshness: {
+          checkedAt: retrievedAt.toISOString(),
+          refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR).toISOString(),
+          staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR).toISOString(),
+          state: "fresh",
+        },
+        seats: [],
+      },
+    },
+    retrievedAt,
+    refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
+    staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
+  };
+}
+
+function idahoRecord(retrievedAt: Date): StateOfficialCacheRecord {
+  return {
+    cacheKey: "state-roster:v1:ID:U-1:L-1",
+    payload: {
+      jurisdiction: idahoJurisdiction,
+      roster: {
+        freshness: {
+          checkedAt: retrievedAt.toISOString(),
+          refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR).toISOString(),
+          staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR).toISOString(),
+          state: "fresh",
+        },
+        seats: [],
+      },
+    },
+    retrievedAt,
+    refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
+    staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),
+  };
+}
+
+function vermontRecord(retrievedAt: Date): StateOfficialCacheRecord {
+  return {
+    cacheKey: "state-roster:v1:VT:U-grand_isle-chittenden:L-addison-1",
+    payload: {
+      jurisdiction: vermontJurisdiction,
+      roster: {
+        freshness: {
+          checkedAt: retrievedAt.toISOString(),
+          refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR).toISOString(),
+          staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR).toISOString(),
+          state: "fresh",
+        },
+        seats: [],
+      },
+    },
     retrievedAt,
     refreshAfter: new Date(retrievedAt.getTime() + 24 * HOUR),
     staleAfter: new Date(retrievedAt.getTime() + 72 * HOUR),

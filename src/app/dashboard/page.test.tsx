@@ -194,8 +194,8 @@ const stateOfficialsView = {
     jurisdictionId: "ocd-jurisdiction/country:us/state:ga/government",
     legislature: "bicameral" as const,
     districts: [
-      { chamber: "upper" as const, district: "2", divisionId: stateDivisions[1].id },
-      { chamber: "lower" as const, district: "10", divisionId: stateDivisions[2].id },
+      { chamber: "upper" as const, district: "2", providerTargets: [{ label: "2", divisionId: stateDivisions[1].id }], divisionId: stateDivisions[1].id },
+      { chamber: "lower" as const, district: "10", providerTargets: [{ label: "10", divisionId: stateDivisions[2].id }], divisionId: stateDivisions[2].id },
     ],
   },
   freshness: {

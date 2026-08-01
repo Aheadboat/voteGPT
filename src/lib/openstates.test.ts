@@ -9,12 +9,22 @@ import {
   fetchStateLegislators,
   type FetchStateLegislators,
 } from "./openstates";
-import type { StateJurisdiction } from "./state-officials";
+import {
+  stateJurisdictionFromDivisions,
+  type StateJurisdiction,
+} from "./state-officials";
 
 vi.mock("server-only", () => ({}));
 
 const CHECKED_AT = "2026-07-31T12:00:00.000Z";
 const API_KEY = "test-openstates-key";
+const pinnedProfileUrls = {
+  AZ: "https://www.azleg.gov/house-member/?legislature=57&session=129&legislator=2355",
+  KY: "https://legislature.ky.gov/Legislators/Pages/Legislator-Profile.aspx?DistrictNumber=80",
+  MT: "https://legislators.legmt.gov/#/legislator/1553",
+  NM: "https://www.nmlegis.gov/Members/Legislator?SponCode=HREGA",
+  TX: "https://senate.texas.gov/member.php?d=14",
+} as const;
 
 const bicameral: StateJurisdiction = {
   stateCode: "CA",
@@ -22,8 +32,8 @@ const bicameral: StateJurisdiction = {
   jurisdictionId: "ocd-jurisdiction/country:us/state:ca/government",
   legislature: "bicameral",
   districts: [
-    { chamber: "upper", district: "2", divisionId: "ocd-division/country:us/state:ca/sldu:2" },
-    { chamber: "lower", district: "10", divisionId: "ocd-division/country:us/state:ca/sldl:10" },
+    { chamber: "upper", district: "2", providerTargets: [{ label: "2", divisionId: "ocd-division/country:us/state:ca/sldu:2" }], divisionId: "ocd-division/country:us/state:ca/sldu:2" },
+    { chamber: "lower", district: "10", providerTargets: [{ label: "10", divisionId: "ocd-division/country:us/state:ca/sldl:10" }], divisionId: "ocd-division/country:us/state:ca/sldl:10" },
   ],
 };
 
@@ -34,7 +44,34 @@ const unicameral: StateJurisdiction = {
   jurisdictionId: "ocd-jurisdiction/country:us/state:ne/government",
   legislature: "unicameral",
   districts: [
-    { chamber: "upper", district: "8", divisionId: "ocd-division/country:us/state:ne/sldu:8" },
+    { chamber: "upper", district: "8", providerTargets: [{ label: "8", divisionId: "ocd-division/country:us/state:ne/sldu:8" }], divisionId: "ocd-division/country:us/state:ne/sldu:8" },
+  ],
+};
+
+const namedMassachusetts: StateJurisdiction = {
+  stateCode: "MA",
+  stateDivisionId: "ocd-division/country:us/state:ma",
+  jurisdictionId: "ocd-jurisdiction/country:us/state:ma/government",
+  legislature: "bicameral",
+  districts: [
+    {
+      chamber: "upper",
+      district: "worcester_and_middlesex",
+      providerTargets: [{
+        label: "Worcester and Middlesex",
+        divisionId: "ocd-division/country:us/state:ma/sldu:worcester_and_middlesex",
+      }],
+      divisionId: "ocd-division/country:us/state:ma/sldu:worcester_and_middlesex",
+    },
+    {
+      chamber: "lower",
+      district: "3rd_suffolk",
+      providerTargets: [{
+        label: "3rd Suffolk",
+        divisionId: "ocd-division/country:us/state:ma/sldl:3rd_suffolk",
+      }],
+      divisionId: "ocd-division/country:us/state:ma/sldl:3rd_suffolk",
+    },
   ],
 };
 
@@ -114,7 +151,7 @@ describe("fetchStateLegislators", () => {
             people: [{
               id: "ocd-person/alex-rivera", name: "Alex Rivera",
               role: { chamber: "upper", district: "2", seat: "State Senator", current: true },
-              sources: [{ sourceType: "official", publicUrl: "https://www.senate.ca.gov/members/alex-rivera", retrievedAt: CHECKED_AT, effectiveAt: "2026-07-01T00:00:00.000Z" }],
+              sources: [{ sourceType: "official", publicUrl: "https://www.senate.ca.gov/members/alex-rivera", retrievedAt: CHECKED_AT, effectiveAt: null }],
             }],
           },
           {
@@ -122,7 +159,7 @@ describe("fetchStateLegislators", () => {
             people: [{
               id: "ocd-person/blair-chen", name: "Blair Chen",
               role: { chamber: "lower", district: "10", seat: "State Representative", current: true },
-              sources: [{ sourceType: "official", publicUrl: "https://www.assembly.ca.gov/members/blair-chen", retrievedAt: CHECKED_AT, effectiveAt: "2026-07-02T00:00:00.000Z" }],
+              sources: [{ sourceType: "official", publicUrl: "https://www.assembly.ca.gov/members/blair-chen", retrievedAt: CHECKED_AT, effectiveAt: null }],
             }],
           },
         ],
@@ -137,6 +174,316 @@ describe("fetchStateLegislators", () => {
       !url.includes(API_KEY) &&
       new Headers(init?.headers).get("X-API-KEY") === API_KEY,
     )).toBe(true);
+  });
+
+  it("queries named Massachusetts districts by provider label while preserving OCD identity", async () => {
+    const pages = [
+      mutate(bicameralPage1, (page) => {
+        page.results[0].jurisdiction.id = namedMassachusetts.jurisdictionId;
+        page.results[0].jurisdiction.name = "Massachusetts";
+        page.results[0].current_role.district = "Worcester and Middlesex";
+        page.results[0].current_role.division_id = namedMassachusetts.districts[0]!.divisionId;
+        page.results[0].sources = [{ url: "https://malegislature.gov/Legislators/Profile/example-upper" }];
+      }),
+      mutate(bicameralPage2, (page) => {
+        page.results[0].jurisdiction.id = namedMassachusetts.jurisdictionId;
+        page.results[0].jurisdiction.name = "Massachusetts";
+        page.results[0].current_role.district = "3rd Suffolk";
+        page.results[0].current_role.division_id = namedMassachusetts.districts[1]!.divisionId;
+        page.results[0].sources = [{ url: "https://malegislature.gov/Legislators/Profile/example-lower" }];
+      }),
+    ];
+    const requests: string[] = [];
+    const result = await fetchStateLegislators(namedMassachusetts, {
+      apiKey: API_KEY,
+      checkedAt: CHECKED_AT,
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse(pages[requests.length - 1]);
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests.map((value) => new URL(value).searchParams.get("district"))).toEqual([
+      "Worcester and Middlesex",
+      "3rd Suffolk",
+    ]);
+    expect(result).toMatchObject({
+      status: "available",
+      roster: {
+        seats: [
+          { chamber: "upper", district: "Worcester and Middlesex" },
+          { chamber: "lower", district: "3rd Suffolk" },
+        ],
+      },
+    });
+  });
+
+  it("queries the literal Massachusetts upper ordinal label evidenced by current roles", async () => {
+    const canonical = stateJurisdictionFromDivisions([
+      { type: "state", name: "Massachusetts", id: "ocd-division/country:us/state:ma", idScheme: "ocd" },
+      { type: "state_upper", name: "First Bristol and Plymouth", id: "ocd-division/country:us/state:ma/sldu:1st_bristol_and_plymouth", idScheme: "ocd" },
+      { type: "state_lower", name: "3rd Suffolk", id: "ocd-division/country:us/state:ma/sldl:3rd_suffolk", idScheme: "ocd" },
+    ]);
+    expect(canonical.status).toBe("available");
+    if (canonical.status !== "available") throw new Error("Expected Massachusetts jurisdiction.");
+    const pages = [
+      mutate(bicameralPage1, (page) => {
+        page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+        page.results[0].jurisdiction.name = "Massachusetts";
+        page.results[0].current_role.district = "First Bristol and Plymouth";
+        page.results[0].current_role.division_id = canonical.jurisdiction.districts[0]!.divisionId;
+        page.results[0].sources = [{ url: "https://malegislature.gov/Legislators/Profile/example-upper" }];
+      }),
+      mutate(bicameralPage2, (page) => {
+        page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+        page.results[0].jurisdiction.name = "Massachusetts";
+        page.results[0].current_role.district = "3rd Suffolk";
+        page.results[0].current_role.division_id = canonical.jurisdiction.districts[1]!.divisionId;
+        page.results[0].sources = [{ url: "https://malegislature.gov/Legislators/Profile/example-lower" }];
+      }),
+    ];
+    const requests: string[] = [];
+
+    const result = await fetchStateLegislators(canonical.jurisdiction, {
+      apiKey: API_KEY,
+      checkedAt: CHECKED_AT,
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse(pages[requests.length - 1]);
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests.map((value) => new URL(value).searchParams.get("district"))).toEqual([
+      "First Bristol and Plymouth",
+      "3rd Suffolk",
+    ]);
+    expect(result).toMatchObject({ status: "available" });
+  });
+
+  it("combines exact Idaho 1A and 1B role queries under canonical lower division 1", async () => {
+    const canonical = stateJurisdictionFromDivisions([
+      { type: "state", name: "Idaho", id: "ocd-division/country:us/state:id", idScheme: "ocd" },
+      { type: "state_upper", name: "1", id: "ocd-division/country:us/state:id/sldu:1", idScheme: "ocd" },
+      { type: "state_lower", name: "1", id: "ocd-division/country:us/state:id/sldl:1", idScheme: "ocd" },
+    ]);
+    expect(canonical.status).toBe("available");
+    if (canonical.status !== "available") throw new Error("Expected Idaho jurisdiction.");
+    const upper = mutate(bicameralPage1, (page) => {
+      page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+      page.results[0].jurisdiction.name = "Idaho";
+      page.results[0].current_role.district = "1";
+      page.results[0].current_role.division_id = canonical.jurisdiction.districts[0]!.divisionId;
+      page.results[0].sources = [{ url: "https://legislature.idaho.gov/legislators/membership/" }];
+    });
+    const lowerA = mutate(bicameralPage2, (page) => {
+      page.results[0].id = "ocd-person/idaho-1a";
+      page.results[0].name = "Idaho Representative A";
+      page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+      page.results[0].jurisdiction.name = "Idaho";
+      page.results[0].current_role.district = "1A";
+      page.results[0].current_role.division_id = "ocd-division/country:us/state:id/sldl:1a";
+      page.results[0].sources = [{ url: "https://legislature.idaho.gov/legislators/membership/" }];
+    });
+    const lowerB = mutate(bicameralPage2, (page) => {
+      page.results[0].id = "ocd-person/idaho-1b";
+      page.results[0].name = "Idaho Representative B";
+      page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+      page.results[0].jurisdiction.name = "Idaho";
+      page.results[0].current_role.district = "1B";
+      page.results[0].current_role.division_id = "ocd-division/country:us/state:id/sldl:1b";
+      page.results[0].sources = [{ url: "https://legislature.idaho.gov/legislators/membership/" }];
+    });
+    const pages = [upper, lowerA, lowerB];
+    const requests: string[] = [];
+
+    const result = await fetchStateLegislators(canonical.jurisdiction, {
+      apiKey: API_KEY,
+      checkedAt: CHECKED_AT,
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse(pages[requests.length - 1]);
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests.map((value) => new URL(value).searchParams.get("district"))).toEqual([
+      "1",
+      "1A",
+      "1B",
+    ]);
+    expect(result).toMatchObject({
+      status: "available",
+      roster: {
+        seats: [
+          { chamber: "upper", district: "1" },
+          { chamber: "lower", district: "1A" },
+          { chamber: "lower", district: "1B" },
+        ],
+      },
+    });
+  });
+
+  it("continues from an empty Idaho target to the second exact lower target", async () => {
+    const canonical = idahoJurisdiction();
+    const result = await run(canonical, [
+      idahoPage(canonical, "upper", "1", canonical.districts[0]!.divisionId, "idaho-upper"),
+      emptyPage,
+      idahoPage(
+        canonical,
+        "lower",
+        "1B",
+        "ocd-division/country:us/state:id/sldl:1b",
+        "idaho-lower-b",
+      ),
+    ]);
+
+    expect(result).toMatchObject({
+      status: "available",
+      roster: { seats: [
+        { chamber: "upper", district: "1" },
+        { chamber: "lower", district: "1B" },
+      ] },
+    });
+  });
+
+  it.each([
+    ["swapped", "ocd-division/country:us/state:id/sldl:1b"],
+    ["unlisted", "ocd-division/country:us/state:id/sldl:1c"],
+  ])("rejects a %s Idaho provider division for the 1A target", async (_label, divisionId) => {
+    const canonical = idahoJurisdiction();
+    await expect(run(canonical, [
+      idahoPage(canonical, "upper", "1", canonical.districts[0]!.divisionId, "idaho-upper"),
+      idahoPage(canonical, "lower", "1A", divisionId, "idaho-lower-a"),
+    ])).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("rejects a duplicate person returned by both Idaho lower targets", async () => {
+    const canonical = idahoJurisdiction();
+    await expect(run(canonical, [
+      idahoPage(canonical, "upper", "1", canonical.districts[0]!.divisionId, "idaho-upper"),
+      idahoPage(
+        canonical,
+        "lower",
+        "1A",
+        "ocd-division/country:us/state:id/sldl:1a",
+        "duplicate-idaho-person",
+      ),
+      idahoPage(
+        canonical,
+        "lower",
+        "1B",
+        "ocd-division/country:us/state:id/sldl:1b",
+        "duplicate-idaho-person",
+      ),
+    ])).resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("enforces one aggregate person bound across Idaho provider targets", async () => {
+    const canonical = idahoJurisdiction();
+    const lowerAPages = Array.from({ length: 5 }, (_, page) =>
+      idahoRosterPage(
+        canonical,
+        "1A",
+        "ocd-division/country:us/state:id/sldl:1a",
+        page + 1,
+        100,
+        page * 20,
+        20,
+      ),
+    );
+
+    await expect(run(canonical, [
+      emptyPage,
+      ...lowerAPages,
+      idahoPage(
+        canonical,
+        "lower",
+        "1B",
+        "ocd-division/country:us/state:id/sldl:1b",
+        "idaho-lower-b",
+      ),
+    ])).resolves.toEqual({ status: "unavailable", reason: "oversize" });
+  });
+
+  it("queries the literal Maryland 1C provider subdistrict", async () => {
+    const canonical = stateJurisdictionFromDivisions([
+      { type: "state", name: "Maryland", id: "ocd-division/country:us/state:md", idScheme: "ocd" },
+      { type: "state_upper", name: "1", id: "ocd-division/country:us/state:md/sldu:1", idScheme: "ocd" },
+      { type: "state_lower", name: "1C", id: "ocd-division/country:us/state:md/sldl:1c", idScheme: "ocd" },
+    ]);
+    expect(canonical.status).toBe("available");
+    if (canonical.status !== "available") throw new Error("Expected Maryland jurisdiction.");
+    const pages = [
+      mutate(bicameralPage1, (page) => {
+        page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+        page.results[0].jurisdiction.name = "Maryland";
+        page.results[0].current_role.district = "1";
+        page.results[0].current_role.division_id = canonical.jurisdiction.districts[0]!.divisionId;
+        page.results[0].sources = [{ url: "https://mgaleg.maryland.gov/mgawebsite/Members/Details/example-upper" }];
+      }),
+      mutate(bicameralPage2, (page) => {
+        page.results[0].jurisdiction.id = canonical.jurisdiction.jurisdictionId;
+        page.results[0].jurisdiction.name = "Maryland";
+        page.results[0].current_role.district = "1C";
+        page.results[0].current_role.division_id = canonical.jurisdiction.districts[1]!.divisionId;
+        page.results[0].sources = [{ url: "https://mgaleg.maryland.gov/mgawebsite/Members/Details/example-lower" }];
+      }),
+    ];
+    const requests: string[] = [];
+    const result = await fetchStateLegislators(canonical.jurisdiction, {
+      apiKey: API_KEY,
+      checkedAt: CHECKED_AT,
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse(pages[requests.length - 1]);
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests.map((value) => new URL(value).searchParams.get("district"))).toEqual(["1", "1C"]);
+    expect(result).toMatchObject({
+      status: "available",
+      roster: { seats: [{ chamber: "upper", district: "1" }, { chamber: "lower", district: "1C" }] },
+    });
+  });
+
+  it("queries the current Vermont canonical district through its exact provider target", async () => {
+    const canonical = vermontJurisdiction();
+    const pages = [
+      vermontPage(canonical, "ocd-division/country:us/state:vt/sldu:grand_isle"),
+      emptyPage,
+    ];
+    const requests: string[] = [];
+
+    const result = await fetchStateLegislators(canonical, {
+      apiKey: API_KEY,
+      checkedAt: CHECKED_AT,
+      fetch: async (url) => {
+        requests.push(String(url));
+        return jsonResponse(pages[requests.length - 1]);
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests.map((value) => new URL(value).searchParams.get("district"))).toEqual([
+      "Grand Isle",
+      "Addison-1",
+    ]);
+    expect(result).toMatchObject({
+      status: "available",
+      roster: { seats: [{ chamber: "upper", district: "Grand Isle" }] },
+    });
+  });
+
+  it("rejects a Vermont response using the canonical rather than provider division", async () => {
+    const canonical = vermontJurisdiction();
+
+    await expect(run(canonical, [
+      vermontPage(canonical, "ocd-division/country:us/state:vt/sldu:grand_isle-chittenden"),
+      emptyPage,
+    ])).resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 
   it("normalizes unicameral, multi-member, and verified-empty coverage without inventing a vacancy", async () => {
@@ -206,7 +553,7 @@ describe("fetchStateLegislators", () => {
       .resolves.toEqual({ status: "unavailable", reason: "partial" });
   });
 
-  it("normalizes valid RFC 3339 provider times while keeping checkedAt canonical", async () => {
+  it("validates provider record-update times without presenting them as role-effective dates", async () => {
     const offsetPage = mutate(bicameralPage1, (page) => {
       page.results[0].updated_at = "2026-07-01T05:30:00-04:00";
     });
@@ -217,8 +564,8 @@ describe("fetchStateLegislators", () => {
     await expect(run(bicameral, [offsetPage, microsecondPage])).resolves.toMatchObject({
       status: "available",
       roster: { seats: [
-        { people: [{ sources: [{ effectiveAt: "2026-07-01T09:30:00.000Z" }] }] },
-        { people: [{ sources: [{ effectiveAt: "2026-07-02T00:00:00.123Z" }] }] },
+        { people: [{ sources: [{ effectiveAt: null }] }] },
+        { people: [{ sources: [{ effectiveAt: null }] }] },
       ] },
     });
     await expect(run(unicameral, [emptyPage], "2026-07-31T08:00:00-04:00"))
@@ -244,6 +591,127 @@ describe("fetchStateLegislators", () => {
     expect(result.roster.seats[0]?.people[0]?.sources).toEqual([
       expect.objectContaining({ publicUrl: officialUrl }),
     ]);
+  });
+
+  it.each([
+    ["Arizona House with current session", "AZ", pinnedProfileUrls.AZ],
+    [
+      "Arizona Senate without optional session",
+      "AZ",
+      "https://www.azleg.gov/senate-member/?legislature=57&legislator=2293",
+    ],
+    ["Kentucky", "KY", pinnedProfileUrls.KY],
+    ["Montana", "MT", pinnedProfileUrls.MT],
+    ["New Mexico", "NM", pinnedProfileUrls.NM],
+    [
+      "New Mexico lower-case members path",
+      "NM",
+      "https://www.nmlegis.gov/members/Legislator?SponCode=SABCD",
+    ],
+    ["Texas Senate", "TX", pinnedProfileUrls.TX],
+    [
+      "Texas Senate District 30 www host",
+      "TX",
+      "https://www.senate.texas.gov/member.php?d=30",
+    ],
+  ] as const)("accepts the pinned %s official profile route", async (_label, state, sourceUrl) => {
+    const result = await runSourceUrls(state, [sourceUrl]);
+
+    expect(result).toMatchObject({ status: "available" });
+    if (result.status !== "available") throw new Error(`Expected ${state} profile route.`);
+    expect(result.roster.seats[0]?.people[0]?.sources).toEqual([
+      expect.objectContaining({ publicUrl: sourceUrl }),
+    ]);
+  });
+
+  it.each([
+    ["unknown query", "https://senate.ca.gov/member?sort=alpha"],
+    ["location query", "https://senate.ca.gov/member?address=1-main"],
+  ])("skips a policy-denied live %s while retaining the approved source", async (_label, denied) => {
+    const allowed = "https://senate.ca.gov/member";
+    const result = await runSourceUrls("CA", [allowed, denied]);
+
+    expect(result).toMatchObject({ status: "available" });
+    if (result.status !== "available") throw new Error("Expected approved source to survive filtering.");
+    expect(result.roster.seats[0]?.people[0]?.sources).toEqual([
+      expect.objectContaining({ publicUrl: allowed }),
+    ]);
+    expect(result.roster.seats[0]?.people[0]?.sources).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ publicUrl: denied })]),
+    );
+  });
+
+  it("keeps a policy-denied-only live profile unavailable", async () => {
+    await expect(runSourceUrls("CA", ["https://senate.ca.gov/member?sort=alpha"]))
+      .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("does not skip a malformed URL beside an approved source", async () => {
+    const invalidUrl = "not-a-url";
+    await expect(runSourceUrls("CA", ["https://senate.ca.gov/member", invalidUrl]))
+      .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it.each([
+    ["AZ", `${pinnedProfileUrls.AZ}&sort=alpha`, "unknown parameter"],
+    ["AZ", `${pinnedProfileUrls.AZ}&address=1-main`, "location parameter"],
+    ["AZ", `${pinnedProfileUrls.AZ}&legislator=2356`, "duplicate parameter"],
+    ["AZ", "https://www.azleg.gov/member/?legislature=57&session=129&legislator=2355", "wrong path"],
+    ["AZ", "https://www.azleg.gov/house-member/?legislature=56&session=129&legislator=2355", "wrong legislature"],
+    ["AZ", "https://www.azleg.gov/house-member/?legislature=57&session=130&legislator=2355", "wrong session"],
+    ["AZ", "https://www.azleg.gov/house-member/?legislature=57&session=129&legislator=355", "bad legislator"],
+    ["KY", `${pinnedProfileUrls.KY}&sort=alpha`, "unknown parameter"],
+    ["KY", `${pinnedProfileUrls.KY}&DistrictNumber=81`, "duplicate parameter"],
+    ["KY", "https://legislature.ky.gov/legislators/pages/legislator-profile.aspx?DistrictNumber=80", "wrong path case"],
+    ["KY", "https://legislature.ky.gov/Legislators/Pages/Legislator-Profile.aspx?DistrictNumber=8A", "bad district"],
+    ["MT", "https://legislators.legmt.gov/#/legislator/not-numeric", "bad legislator"],
+    ["MT", "https://legislators.legmt.gov/member/#/legislator/1553", "wrong path"],
+    ["MT", "https://legislators.legmt.gov/#/Legislator/1553", "wrong fragment case"],
+    ["MT", "https://legislators.legmt.gov/?id=1553#/legislator/1553", "unexpected query"],
+    ["NM", `${pinnedProfileUrls.NM}&sort=alpha`, "unknown parameter"],
+    ["NM", `${pinnedProfileUrls.NM}&SponCode=SABCD`, "duplicate parameter"],
+    ["NM", "https://www.nmlegis.gov/MEMBERS/Legislator?SponCode=HREGA", "wrong path case"],
+    ["NM", "https://www.nmlegis.gov/Members/Legislator?SponCode=XABCD", "bad sponsor chamber"],
+    ["NM", "https://www.nmlegis.gov/Members/Legislator?SponCode=HABC", "short sponsor code"],
+    ["TX", `${pinnedProfileUrls.TX}&sort=alpha`, "unknown parameter"],
+    ["TX", `${pinnedProfileUrls.TX}&d=15`, "duplicate parameter"],
+    ["TX", "https://senate.texas.gov/members.php?d=14", "wrong path"],
+    ["TX", "https://senate.texas.gov/member.php?d=0", "district below range"],
+    ["TX", "https://senate.texas.gov/member.php?d=32", "district above range"],
+  ] as const)(
+    "excludes the %s pinned-route near miss: %s",
+    async (state, deniedUrl, reason) => {
+      const allowedUrl = pinnedProfileUrls[state];
+      const result = await runSourceUrls(state, [allowedUrl, deniedUrl]);
+
+      expect(result, `${state} ${reason}`).toMatchObject({ status: "available" });
+      if (result.status !== "available") throw new Error(`Expected ${state} near miss filtering.`);
+      expect(result.roster.seats[0]?.people[0]?.sources).toEqual([
+        expect.objectContaining({ publicUrl: allowedUrl }),
+      ]);
+      expect(result.roster.seats[0]?.people[0]?.sources).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ publicUrl: deniedUrl })]),
+      );
+    },
+  );
+
+  it.each([
+    ["host sibling", "https://district30.senate.texas.gov/member.php?d=30"],
+    ["host spoof", "https://www.senate.texas.gov.attacker.example/member.php?d=30"],
+  ])("rejects pinned-route %s", async (_label, sourceUrl) => {
+    await expect(runSourceUrls("TX", [sourceUrl]))
+      .resolves.toEqual({ status: "unavailable", reason: "malformed" });
+  });
+
+  it("keeps Connecticut FTP-only coverage unavailable", async () => {
+    const connecticut = jurisdictionFor("CT");
+    const page = officialPageFor(
+      connecticut,
+      "ftp://ftp.cga.ct.gov/pub/data/people/profile.html",
+    );
+
+    await expect(run(connecticut, [page, emptyPage]))
+      .resolves.toEqual({ status: "unavailable", reason: "malformed" });
   });
 
   it("accepts only normalized query keys evidenced by public legislative sources", async () => {
@@ -322,6 +790,16 @@ describe("fetchStateLegislators", () => {
       officialPageFor(kansas, "https://www.kslegislature.org/li/b2025_26/members/rep_example_1/"),
       emptyPage,
     ])).resolves.toMatchObject({ status: "available" });
+  });
+
+  it.each([
+    ["AZ", "https://azleg.gov/member"],
+    ["KY", "https://legislature.ky.gov/member"],
+    ["MT", "https://leg.mt.gov/member"],
+    ["NM", "https://nmlegis.gov/member"],
+    ["TX", "https://senate.texas.gov/member"],
+  ] as const)("keeps ordinary queryless %s official URLs available", async (state, sourceUrl) => {
+    await expect(runSourceUrls(state, [sourceUrl])).resolves.toMatchObject({ status: "available" });
   });
 
   it("fails closed without a state-matched institutional source and protects trusted URLs", async () => {
@@ -425,32 +903,130 @@ function run(
   });
 }
 
+function idahoJurisdiction(): StateJurisdiction {
+  const result = stateJurisdictionFromDivisions([
+    { type: "state", name: "Idaho", id: "ocd-division/country:us/state:id", idScheme: "ocd" },
+    { type: "state_upper", name: "1", id: "ocd-division/country:us/state:id/sldu:1", idScheme: "ocd" },
+    { type: "state_lower", name: "1", id: "ocd-division/country:us/state:id/sldl:1", idScheme: "ocd" },
+  ]);
+  if (result.status !== "available") throw new Error("Expected Idaho jurisdiction.");
+  return result.jurisdiction;
+}
+
+function vermontJurisdiction(): StateJurisdiction {
+  const result = stateJurisdictionFromDivisions([
+    { type: "state", name: "Vermont", id: "ocd-division/country:us/state:vt", idScheme: "ocd" },
+    { type: "state_upper", name: "Grand Isle-Chittenden", id: "ocd-division/country:us/state:vt/sldu:grand_isle-chittenden", idScheme: "ocd" },
+    { type: "state_lower", name: "Addison-1", id: "ocd-division/country:us/state:vt/sldl:addison-1", idScheme: "ocd" },
+  ]);
+  if (result.status !== "available") throw new Error("Expected current Vermont jurisdiction.");
+  return result.jurisdiction;
+}
+
+function vermontPage(jurisdiction: StateJurisdiction, divisionId: string) {
+  return mutate(bicameralPage1, (page) => {
+    page.results[0].id = "ocd-person/vermont-grand-isle";
+    page.results[0].name = "Vermont Senator";
+    page.results[0].jurisdiction.id = jurisdiction.jurisdictionId;
+    page.results[0].jurisdiction.name = "Vermont";
+    page.results[0].current_role.org_classification = "upper";
+    page.results[0].current_role.district = "Grand Isle";
+    page.results[0].current_role.division_id = divisionId;
+    page.results[0].sources = [{ url: "https://legislature.vermont.gov/people/single/2026/123" }];
+  });
+}
+
+function idahoPage(
+  jurisdiction: StateJurisdiction,
+  chamber: "upper" | "lower",
+  label: string,
+  divisionId: string,
+  id: string,
+) {
+  return mutate(chamber === "upper" ? bicameralPage1 : bicameralPage2, (page) => {
+    page.results[0].id = `ocd-person/${id}`;
+    page.results[0].name = id;
+    page.results[0].jurisdiction.id = jurisdiction.jurisdictionId;
+    page.results[0].jurisdiction.name = "Idaho";
+    page.results[0].current_role.org_classification = chamber;
+    page.results[0].current_role.district = label;
+    page.results[0].current_role.division_id = divisionId;
+    page.results[0].sources = [{ url: "https://legislature.idaho.gov/legislators/membership/" }];
+  });
+}
+
+function idahoRosterPage(
+  jurisdiction: StateJurisdiction,
+  label: string,
+  divisionId: string,
+  page: number,
+  totalItems: number,
+  offset: number,
+  count: number,
+) {
+  const value = idahoPage(jurisdiction, "lower", label, divisionId, `${label}-${offset}`);
+  const person = value.results[0]!;
+  value.results = Array.from({ length: count }, (_, index) => ({
+    ...structuredClone(person),
+    id: `ocd-person/${label}-${offset + index}`,
+    name: `${label}-${offset + index}`,
+  }));
+  value.pagination = {
+    per_page: 20,
+    page,
+    max_page: Math.ceil(totalItems / 20),
+    total_items: totalItems,
+  };
+  return value;
+}
+
 function jurisdictionFor(state: string): StateJurisdiction {
   if (!Object.hasOwn(VETTED_LEGISLATIVE_HOSTS, state)) {
     throw new Error(`Missing vetted host fixture for ${state}.`);
   }
   const lowerState = state.toLowerCase();
-  const upper = {
-    chamber: "upper" as const,
-    district: "1",
-    divisionId: `ocd-division/country:us/state:${lowerState}/sldu:1`,
-  };
-  return {
-    stateCode: state,
-    stateDivisionId: `ocd-division/country:us/state:${lowerState}`,
-    jurisdictionId: `ocd-jurisdiction/country:us/state:${lowerState}/government`,
-    legislature: state === "NE" ? "unicameral" : "bicameral",
-    districts: state === "NE"
-      ? [upper]
-      : [
-          upper,
-          {
-            chamber: "lower",
-            district: "1",
-            divisionId: `ocd-division/country:us/state:${lowerState}/sldl:1`,
-          },
-        ],
-  };
+  const upperDistrict = state === "AK"
+    ? "a"
+    : state === "MA"
+      ? "worcester_and_middlesex"
+      : state === "VT"
+        ? "addison"
+        : "1";
+  const lowerDistrict = state === "ID"
+    ? "1"
+    : state === "MA"
+      ? "3rd_suffolk"
+      : state === "MN"
+        ? "1a"
+        : state === "NH"
+          ? "belknap_1"
+          : state === "VT"
+            ? "addison-1"
+            : "1";
+  const canonical = stateJurisdictionFromDivisions([
+    {
+      type: "state",
+      name: state,
+      id: `ocd-division/country:us/state:${lowerState}`,
+      idScheme: "ocd",
+    },
+    {
+      type: "state_upper",
+      name: upperDistrict,
+      id: `ocd-division/country:us/state:${lowerState}/sldu:${upperDistrict}`,
+      idScheme: "ocd",
+    },
+    ...(state === "NE" ? [] : [{
+      type: "state_lower" as const,
+      name: lowerDistrict,
+      id: `ocd-division/country:us/state:${lowerState}/sldl:${lowerDistrict}`,
+      idScheme: "ocd" as const,
+    }]),
+  ]);
+  if (canonical.status !== "available") {
+    throw new Error(`Missing canonical jurisdiction fixture for ${state}.`);
+  }
+  return canonical.jurisdiction;
 }
 
 function officialPageFor(jurisdiction: StateJurisdiction, sourceUrl: string): MutableFixturePage {
@@ -463,10 +1039,23 @@ function officialPageFor(jurisdiction: StateJurisdiction, sourceUrl: string): Mu
     page.results[0].jurisdiction.id = jurisdiction.jurisdictionId;
     page.results[0].jurisdiction.name = policy.name;
     page.results[0].current_role.org_classification = district.chamber;
-    page.results[0].current_role.district = district.district;
-    page.results[0].current_role.division_id = district.divisionId;
+    page.results[0].current_role.district = district.providerTargets[0].label;
+    page.results[0].current_role.division_id = district.providerTargets[0].divisionId;
     page.results[0].sources = [{ url: sourceUrl }];
   });
+}
+
+function runSourceUrls(
+  state: keyof typeof pinnedProfileUrls | "CA",
+  sourceUrls: readonly string[],
+) {
+  const jurisdiction = jurisdictionFor(state);
+  const page = officialPageFor(jurisdiction, sourceUrls[0]!);
+  page.results[0]!.sources = sourceUrls.map((url) => ({ url }));
+  return run(
+    jurisdiction,
+    jurisdiction.legislature === "unicameral" ? [page] : [page, emptyPage],
+  );
 }
 
 function jsonResponse(body: unknown) {

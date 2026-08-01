@@ -205,7 +205,11 @@ function missingDistricts(view: StateOfficialsView) {
       districts.map(({ district }) => `${chamber}:${district}`),
     ),
   );
-  return view.jurisdiction.districts.filter(
-    ({ chamber, district }) => !displayed.has(`${chamber}:${district}`),
+  return view.jurisdiction.districts.flatMap(({ chamber, providerTargets }) =>
+    providerTargets.flatMap(({ label }) =>
+      displayed.has(`${chamber}:${label}`)
+        ? []
+        : [{ chamber, district: label }],
+    ),
   );
 }

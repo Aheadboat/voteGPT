@@ -1,6 +1,14 @@
 import "server-only";
 
-import type { StateJurisdiction, StateRosterInput } from "./state-officials";
+import {
+  stateJurisdictionFromDivisions,
+  type StateJurisdiction,
+  type StateRosterInput,
+} from "./state-officials";
+import {
+  isSupportedStateLegislativeSourceState,
+  validateStateLegislativeSourceUrl,
+} from "./state-source-policy";
 
 export type OpenStatesFailureReason =
   | "auth"
@@ -42,90 +50,12 @@ const ROOT = "https://v3.openstates.org";
 const PER_PAGE = 20;
 const MAX_PAGES = 5;
 const MAX_RECORDS = 100;
+const MAX_DISTRICT_FILTERS = 3;
 const MAX_BODY_BYTES = 262_144;
 const MAX_OFFICIAL_SOURCES = 8;
-const MAX_SOURCE_URL_LENGTH = 2_048;
-const MAX_SOURCE_QUERY_LENGTH = 1_024;
-const MAX_SOURCE_QUERY_PARAMETERS = 20;
-const PUBLIC_LEGISLATIVE_QUERY_KEYS: ReadonlySet<string> = new Set([
-  "body",
-  "chamber",
-  "code",
-  "ddbienniumsession",
-  "district",
-  "ga",
-  "id",
-  "legislativetermid",
-  "member",
-  "memberid",
-  "memid",
-  "personid",
-  "pid",
-  "session",
-  "sessionid",
-  "sessionselect",
-  "sid",
-  "year",
-]);
 const publicText = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identifier = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const stateCode = /^[A-Z]{2}$/;
-
-// Conservative institutional baseline verified 2026-07-31 against current
-// OpenStates people scrapers and the Congress.gov state-legislature directory.
-// Party, caucus, social, reference, and personal hosts are intentionally absent.
-const OFFICIAL_LEGISLATIVE_HOSTS = {
-  ak: ["akleg.gov"],
-  al: ["legislature.state.al.us"],
-  ar: ["arkleg.state.ar.us"],
-  az: ["azleg.gov"],
-  ca: ["assembly.ca.gov", "senate.ca.gov"],
-  co: ["leg.colorado.gov"],
-  ct: ["cga.ct.gov"],
-  de: ["legis.delaware.gov"],
-  fl: ["flsenate.gov", "myfloridahouse.gov", "flhouse.gov"],
-  ga: ["legis.ga.gov", "house.ga.gov", "senate.ga.gov"],
-  hi: ["capitol.hawaii.gov"],
-  ia: ["legis.iowa.gov", "senate.iowa.gov"],
-  id: ["legislature.idaho.gov"],
-  il: ["ilga.gov"],
-  in: ["iga.in.gov"],
-  ks: ["kslegislature.gov", "kslegislature.org"],
-  ky: ["legislature.ky.gov", "lrc.ky.gov"],
-  la: ["house.louisiana.gov", "senate.la.gov"],
-  ma: ["malegislature.gov"],
-  md: ["mgaleg.maryland.gov"],
-  me: ["legislature.maine.gov"],
-  mi: ["house.mi.gov", "senate.michigan.gov"],
-  mn: ["house.mn.gov", "house.leg.state.mn.us", "senate.mn"],
-  mo: ["house.mo.gov", "senate.mo.gov"],
-  ms: ["billstatus.ls.state.ms.us", "legislature.ms.gov"],
-  mt: ["leg.mt.gov", "legmt.gov"],
-  nc: ["ncleg.gov", "ncga.state.nc.us"],
-  nd: ["legis.nd.gov", "ndlegis.gov"],
-  ne: ["nebraskalegislature.gov"],
-  nh: ["gencourt.state.nh.us", "gc.nh.gov"],
-  nj: ["njleg.state.nj.us"],
-  nm: ["nmlegis.gov"],
-  nv: ["leg.state.nv.us"],
-  ny: ["assembly.state.ny.us", "nyassembly.gov", "nysenate.gov"],
-  oh: ["legislature.ohio.gov", "ohiohouse.gov", "ohiosenate.gov"],
-  ok: ["okhouse.gov", "oksenate.gov", "oklegislature.gov"],
-  or: ["oregonlegislature.gov"],
-  pa: ["legis.state.pa.us", "palegis.us"],
-  ri: ["rilegislature.gov", "rilin.state.ri.us"],
-  sc: ["scstatehouse.gov"],
-  sd: ["sdlegislature.gov", "legis.sd.gov"],
-  tn: ["capitol.tn.gov", "legislature.state.tn.us"],
-  tx: ["house.texas.gov", "senate.texas.gov", "capitol.texas.gov"],
-  ut: ["le.utah.gov", "house.utah.gov", "house.utleg.gov", "senate.utah.gov"],
-  va: ["virginiageneralassembly.gov", "lis.virginia.gov", "senate.virginia.gov", "house.vga.virginia.gov"],
-  vt: ["legislature.vermont.gov"],
-  wa: ["leg.wa.gov"],
-  wi: ["legis.wisconsin.gov"],
-  wv: ["wvlegislature.gov", "legis.state.wv.us"],
-  wy: ["wyoleg.gov", "legisweb.state.wy.us"],
-} as const;
 
 export const fetchStateLegislators: FetchStateLegislators = async (
   jurisdiction,
@@ -145,25 +75,31 @@ export const fetchStateLegislators: FetchStateLegislators = async (
   const people: Person[] = [];
   const personIds = new Set<string>();
   for (const district of jurisdiction.districts) {
-    const response = await fetchDistrict(
-      jurisdiction.jurisdictionId,
-      jurisdiction.stateCode.toLowerCase(),
-      district,
-      apiKey,
-      checkedAt,
-      retrievedAt,
-      fetch,
-      signal,
-    );
-    if (response.status === "unavailable") {
-      return response;
-    }
-    for (const person of response.people) {
-      if (personIds.has(person.id)) {
-        return unavailable("malformed");
+    for (const target of district.providerTargets) {
+      const response = await fetchDistrict(
+        jurisdiction.jurisdictionId,
+        jurisdiction.stateCode.toLowerCase(),
+        district,
+        target,
+        apiKey,
+        checkedAt,
+        retrievedAt,
+        fetch,
+        signal,
+      );
+      if (response.status === "unavailable") {
+        return response;
       }
-      personIds.add(person.id);
-      people.push(person);
+      if (people.length + response.people.length > MAX_RECORDS) {
+        return unavailable("oversize");
+      }
+      for (const person of response.people) {
+        if (personIds.has(person.id)) {
+          return unavailable("malformed");
+        }
+        personIds.add(person.id);
+        people.push(person);
+      }
     }
   }
 
@@ -218,6 +154,7 @@ async function fetchDistrict(
   jurisdiction: string,
   state: string,
   district: StateJurisdiction["districts"][number],
+  target: StateJurisdiction["districts"][number]["providerTargets"][number],
   apiKey: string,
   checkedAt: string,
   retrievedAt: Date,
@@ -234,7 +171,7 @@ async function fetchDistrict(
     const url = new URL("/people", ROOT);
     url.searchParams.set("jurisdiction", jurisdiction);
     url.searchParams.set("org_classification", district.chamber);
-    url.searchParams.set("district", district.district);
+    url.searchParams.set("district", target.label);
     url.searchParams.set("include", "sources");
     url.searchParams.set("page", String(page));
     url.searchParams.set("per_page", String(PER_PAGE));
@@ -242,7 +179,7 @@ async function fetchDistrict(
     if (response.status === "unavailable") {
       return response;
     }
-    const parsed = parsePage(response.body, jurisdiction, state, district, page, checkedAt, retrievedAt);
+    const parsed = parsePage(response.body, jurisdiction, state, district, target, page, checkedAt, retrievedAt);
     if (parsed === "partial") {
       return unavailable("partial");
     }
@@ -356,6 +293,7 @@ function parsePage(
   jurisdiction: string,
   state: string,
   district: StateJurisdiction["districts"][number],
+  target: StateJurisdiction["districts"][number]["providerTargets"][number],
   expectedPage: number,
   checkedAt: string,
   retrievedAt: Date,
@@ -368,7 +306,7 @@ function parsePage(
     return null;
   }
   if (page !== expectedPage) return "partial";
-  const people = value.results.map((person) => parsePerson(person, jurisdiction, state, district, checkedAt, retrievedAt));
+  const people = value.results.map((person) => parsePerson(person, jurisdiction, state, district, target, checkedAt, retrievedAt));
   return people.some((person) => person === null) ? null : { results: people as Person[], maxPage, totalItems };
 }
 
@@ -377,6 +315,7 @@ function parsePerson(
   jurisdiction: string,
   state: string,
   district: StateJurisdiction["districts"][number],
+  target: StateJurisdiction["districts"][number]["providerTargets"][number],
   checkedAt: string,
   retrievedAt: Date,
 ): Person | null {
@@ -388,14 +327,14 @@ function parsePerson(
   if (typeof role.title !== "string" || typeof role.org_classification !== "string" || typeof role.division_id !== "string") return null;
   const roleDistrict = typeof role.district === "string" || typeof role.district === "number" ? String(role.district) : null;
   const updatedAt = parseProviderInstant(value.updated_at);
-  if (role.org_classification !== district.chamber || roleDistrict !== district.district || role.division_id !== district.divisionId || !publicText.test(role.title) || updatedAt === null || updatedAt > retrievedAt) {
+  if (role.org_classification !== district.chamber || roleDistrict !== target.label || role.division_id !== target.divisionId || !publicText.test(role.title) || updatedAt === null || updatedAt > retrievedAt) {
     return null;
   }
-  const sources = parseSources(value.sources, state, checkedAt, updatedAt.toISOString());
-  return sources === null ? null : { id: value.id, name: value.name, chamber: district.chamber, district: district.district, seat: role.title, sources };
+  const sources = parseSources(value.sources, state, checkedAt);
+  return sources === null ? null : { id: value.id, name: value.name, chamber: district.chamber, district: target.label, seat: role.title, sources };
 }
 
-function parseSources(values: readonly unknown[], state: string, checkedAt: string, effectiveAt: string) {
+function parseSources(values: readonly unknown[], state: string, checkedAt: string) {
   if (values.length === 0) return null;
   const urls = new Set<string>();
   const sources: Array<StateRosterInput["seats"][number]["people"][number]["sources"][number]> = [];
@@ -410,14 +349,13 @@ function parseSources(values: readonly unknown[], state: string, checkedAt: stri
     ) {
       return null;
     }
-    const url = parseCanonicalSourceUrl(value.url);
-    if (url === null) return null;
-    if (!isOfficialSourceHost(url.hostname, state)) continue;
-    if (!hasOnlyPublicLegislativeQueryKeys(url)) return null;
+    const validation = validateStateLegislativeSourceUrl(value.url, state);
+    if (validation.status === "invalid") return null;
+    if (validation.status === "untrusted") continue;
     if (urls.has(value.url)) continue;
     if (sources.length >= MAX_OFFICIAL_SOURCES) return null;
     urls.add(value.url);
-    sources.push({ sourceType: "official", publicUrl: value.url, retrievedAt: checkedAt, effectiveAt });
+    sources.push({ sourceType: "official", publicUrl: value.url, retrievedAt: checkedAt, effectiveAt: null });
   }
   return sources.length === 0
     ? null
@@ -427,54 +365,67 @@ function parseSources(values: readonly unknown[], state: string, checkedAt: stri
 function isCanonicalJurisdiction(value: StateJurisdiction): boolean {
   if (!isRecord(value) || !stateCode.test(value.stateCode) || !Array.isArray(value.districts) || value.districts.length === 0 || value.districts.length > 2 || (value.legislature !== "bicameral" && value.legislature !== "unicameral")) return false;
   const state = value.stateCode.toLowerCase();
-  if (!isSupportedState(state) || value.stateDivisionId !== `ocd-division/country:us/state:${state}` || value.jurisdictionId !== `ocd-jurisdiction/country:us/state:${state}/government`) return false;
+  if (!isSupportedStateLegislativeSourceState(state) || value.stateDivisionId !== `ocd-division/country:us/state:${state}` || value.jurisdictionId !== `ocd-jurisdiction/country:us/state:${state}/government`) return false;
   const chambers = new Set<string>();
+  let filterCount = 0;
   for (const district of value.districts) {
-    if (!isExactRecord(district, ["chamber", "district", "divisionId"]) || (district.chamber !== "upper" && district.chamber !== "lower") || typeof district.district !== "string" || typeof district.divisionId !== "string" || !publicText.test(district.district) || !identifier.test(district.divisionId) || district.divisionId !== `ocd-division/country:us/state:${state}/sld${district.chamber === "upper" ? "u" : "l"}:${district.district}` || chambers.has(district.chamber)) return false;
+    if (!isExactRecord(district, ["chamber", "district", "providerTargets", "divisionId"]) || (district.chamber !== "upper" && district.chamber !== "lower") || typeof district.district !== "string" || !isProviderTargets(district.providerTargets) || typeof district.divisionId !== "string" || !identifier.test(district.district) || !identifier.test(district.divisionId) || district.divisionId !== `ocd-division/country:us/state:${state}/sld${district.chamber === "upper" ? "u" : "l"}:${district.district}` || chambers.has(district.chamber)) return false;
+    filterCount += district.providerTargets.length;
     chambers.add(district.chamber);
   }
-  return value.legislature === "bicameral" ? chambers.size === 2 : chambers.size === 1 && value.stateCode === "NE" && chambers.has("upper");
+  if (filterCount > MAX_DISTRICT_FILTERS) return false;
+  const canonical = stateJurisdictionFromDivisions([
+    { type: "state", name: state, id: value.stateDivisionId, idScheme: "ocd" },
+    ...value.districts.map((district) => ({
+      type: district.chamber === "upper" ? "state_upper" as const : "state_lower" as const,
+      name: district.providerTargets[0].label,
+      id: district.divisionId,
+      idScheme: "ocd" as const,
+    })),
+  ]);
+  return canonical.status === "available" &&
+    canonical.jurisdiction.legislature === value.legislature &&
+    canonical.jurisdiction.districts.every((district, index) =>
+      district.chamber === value.districts[index]?.chamber &&
+      district.district === value.districts[index]?.district &&
+      sameProviderTargets(
+        district.providerTargets,
+        value.districts[index]?.providerTargets ?? [],
+      ) &&
+      district.divisionId === value.districts[index]?.divisionId,
+    );
 }
 
-function parseCanonicalSourceUrl(value: string): URL | null {
-  if (value.length === 0 || value.length > MAX_SOURCE_URL_LENGTH) return null;
-  try {
-    const url = new URL(value);
-    const queryParameterCount = [...url.searchParams].length;
-    return (
-      url.toString() === value &&
-      url.protocol === "https:" &&
-      url.username === "" &&
-      url.password === "" &&
-      url.port === "" &&
-      url.hash === "" &&
-      url.search.length <= MAX_SOURCE_QUERY_LENGTH &&
-      queryParameterCount <= MAX_SOURCE_QUERY_PARAMETERS
-    ) ? url : null;
-  } catch {
-    return null;
-  }
+function isProviderTargets(
+  value: unknown,
+): value is StateJurisdiction["districts"][number]["providerTargets"] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 2) return false;
+  const labels = new Set<string>();
+  const divisions = new Set<string>();
+  return value.every((target) => {
+    if (
+      !isExactRecord(target, ["label", "divisionId"]) ||
+      typeof target.label !== "string" ||
+      typeof target.divisionId !== "string" ||
+      !publicText.test(target.label) ||
+      !identifier.test(target.divisionId) ||
+      labels.has(target.label) ||
+      divisions.has(target.divisionId)
+    ) return false;
+    labels.add(target.label);
+    divisions.add(target.divisionId);
+    return true;
+  });
 }
 
-function isOfficialSourceHost(hostname: string, state: string): boolean {
-  if (!isSupportedState(state)) return false;
-  return OFFICIAL_LEGISLATIVE_HOSTS[state].some(
-    (allowedHost) => hostname === allowedHost || hostname.endsWith(`.${allowedHost}`),
+function sameProviderTargets(
+  left: StateJurisdiction["districts"][number]["providerTargets"],
+  right: readonly Readonly<{ label: string; divisionId: string }>[],
+): boolean {
+  return left.length === right.length && left.every((target, index) =>
+    target.label === right[index]?.label &&
+    target.divisionId === right[index]?.divisionId,
   );
-}
-
-function hasOnlyPublicLegislativeQueryKeys(url: URL): boolean {
-  return [...url.searchParams.keys()].every((key) =>
-    PUBLIC_LEGISLATIVE_QUERY_KEYS.has(normalizeSourceQueryKey(key)),
-  );
-}
-
-function normalizeSourceQueryKey(key: string): string {
-  return key.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function isSupportedState(value: string): value is keyof typeof OFFICIAL_LEGISLATIVE_HOSTS {
-  return Object.hasOwn(OFFICIAL_LEGISLATIVE_HOSTS, value);
 }
 
 function parseCanonicalInstant(value: string): Date | null {

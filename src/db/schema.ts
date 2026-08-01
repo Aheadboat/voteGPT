@@ -229,7 +229,7 @@ export const stateOfficialCache = pgTable(
   (table) => [
     check(
       "state_official_cache_key_check",
-      sql`${table.cacheKey} ~ '^state-roster:v1:[A-Z]{2}:U-[a-z0-9][a-z0-9-]{0,199}(:L-[a-z0-9][a-z0-9-]{0,199})?$'`,
+      sql`${table.cacheKey} ~ '^state-roster:v1:[A-Z]{2}:U-[a-z0-9][a-z0-9_-]{0,199}(:L-[a-z0-9][a-z0-9_-]{0,199})?$'`,
     ),
     check(
       "state_official_cache_refresh_after_check",

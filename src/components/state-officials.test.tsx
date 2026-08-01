@@ -11,7 +11,7 @@ const source = {
   sourceType: "official" as const,
   publicUrl: "https://legislature.example.test/members",
   retrievedAt: checkedAt,
-  effectiveAt: "2026-01-01T00:00:00.000Z",
+  effectiveAt: null,
 };
 const blairSource = {
   sourceType: "official" as const,
@@ -28,11 +28,19 @@ const jurisdiction = {
     {
       chamber: "upper" as const,
       district: "2",
+      providerTargets: [{
+        label: "2",
+        divisionId: "ocd-division/country:us/state:ga/sldu:2",
+      }] as const,
       divisionId: "ocd-division/country:us/state:ga/sldu:2",
     },
     {
       chamber: "lower" as const,
       district: "10",
+      providerTargets: [{
+        label: "10",
+        divisionId: "ocd-division/country:us/state:ga/sldl:10",
+      }] as const,
       divisionId: "ocd-division/country:us/state:ga/sldl:10",
     },
   ],
@@ -130,7 +138,7 @@ describe("StateOfficials", () => {
     expect(alexLink).toHaveAttribute("href", source.publicUrl);
     expect(alexLink.tabIndex).toBe(0);
     expect(alexSources.querySelector(`time[datetime="${source.retrievedAt}"]`)).not.toBeNull();
-    expect(alexSources.querySelector(`time[datetime="${source.effectiveAt}"]`)).not.toBeNull();
+    expect(within(alexSources).queryByText(/^Effective /)).not.toBeInTheDocument();
     const blairSources = within(cards[0]).getByRole("region", {
       name: "Sources for Blair Baker",
     });
@@ -265,4 +273,152 @@ describe("StateOfficials", () => {
     );
     expect(screen.getAllByRole("article")).toHaveLength(2);
   });
+
+  it.each([
+    [
+      "MA",
+      "1st_bristol_and_plymouth",
+      "First Bristol and Plymouth",
+      "ocd-division/country:us/state:ma/sldu:1st_bristol_and_plymouth",
+    ],
+    [
+      "MD",
+      "1c",
+      "1C",
+      "ocd-division/country:us/state:md/sldl:1c",
+    ],
+  ] as const)(
+    "treats complete %s named provider coverage as complete",
+    (stateCode, canonicalDistrict, providerLabel, providerDivisionId) => {
+      render(
+        <StateOfficials
+          result={{
+            status: "available",
+            view: coverageView({
+              stateCode,
+              chamber: stateCode === "MA" ? "upper" : "lower",
+              canonicalDistrict,
+              providerTargets: [{ label: providerLabel, divisionId: providerDivisionId }],
+              displayedDistricts: [providerLabel],
+            }),
+          }}
+        />,
+      );
+
+      expect(screen.queryByText(/coverage is incomplete/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it("treats complete Idaho 1A and 1B provider coverage as complete", () => {
+    render(
+      <StateOfficials
+        result={{
+          status: "available",
+          view: coverageView({
+            stateCode: "ID",
+            chamber: "lower",
+            canonicalDistrict: "1",
+            providerTargets: idahoProviderTargets,
+            displayedDistricts: ["1A", "1B"],
+          }),
+        }}
+      />,
+    );
+
+    expect(screen.queryByText(/coverage is incomplete/i)).not.toBeInTheDocument();
+  });
+
+  it("reports the missing Idaho provider target with safe recovery", () => {
+    render(
+      <StateOfficials
+        result={{
+          status: "available",
+          view: coverageView({
+            stateCode: "ID",
+            chamber: "lower",
+            canonicalDistrict: "1",
+            providerTargets: idahoProviderTargets,
+            displayedDistricts: ["1A"],
+          }),
+        }}
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(/District 1B/);
+    expect(status).toHaveTextContent("Current officeholder is unknown");
+    expect(status).toHaveTextContent("Try again later");
+  });
+
+  it("does not let an unapproved Idaho label satisfy either provider target", () => {
+    render(
+      <StateOfficials
+        result={{
+          status: "available",
+          view: coverageView({
+            stateCode: "ID",
+            chamber: "lower",
+            canonicalDistrict: "1",
+            providerTargets: idahoProviderTargets,
+            displayedDistricts: ["1C"],
+          }),
+        }}
+      />,
+    );
+
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(2);
+    expect(statuses[0]).toHaveTextContent(/District 1A/);
+    expect(statuses[1]).toHaveTextContent(/District 1B/);
+  });
 });
+
+const idahoProviderTargets = [
+  { label: "1A", divisionId: "ocd-division/country:us/state:id/sldl:1a" },
+  { label: "1B", divisionId: "ocd-division/country:us/state:id/sldl:1b" },
+] as const;
+
+function coverageView({
+  stateCode,
+  chamber,
+  canonicalDistrict,
+  providerTargets,
+  displayedDistricts,
+}: {
+  stateCode: string;
+  chamber: "upper" | "lower";
+  canonicalDistrict: string;
+  providerTargets: StateOfficialsView["jurisdiction"]["districts"][number]["providerTargets"];
+  displayedDistricts: readonly string[];
+}): StateOfficialsView {
+  const state = stateCode.toLowerCase();
+  return {
+    jurisdiction: {
+      stateCode,
+      stateDivisionId: `ocd-division/country:us/state:${state}`,
+      jurisdictionId: `ocd-jurisdiction/country:us/state:${state}/government`,
+      legislature: "bicameral",
+      districts: [{
+        chamber,
+        district: canonicalDistrict,
+        providerTargets,
+        divisionId: `ocd-division/country:us/state:${state}/sld${chamber === "upper" ? "u" : "l"}:${canonicalDistrict}`,
+      }],
+    },
+    freshness: view.freshness,
+    chambers: displayedDistricts.length === 0
+      ? []
+      : [{
+          chamber,
+          districts: displayedDistricts.map((district) => ({
+            district,
+            seats: [{
+              status: "unknown" as const,
+              seat: `District ${district}`,
+              people: [],
+              sources: [],
+            }],
+          })),
+        }],
+  };
+}
