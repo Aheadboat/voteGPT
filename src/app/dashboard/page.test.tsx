@@ -20,19 +20,38 @@ import {
   createFederalOfficialsService,
 } from "@/lib/federal-officials-service";
 import { fetchCurrentHouseVacancies } from "@/lib/house-clerk-vacancy";
+import { fetchStateLegislators } from "@/lib/openstates";
 import {
   getSavedResidence,
   getSavedResidenceDivisions,
   type SavedResidenceDivision,
   type SavedResidenceView,
 } from "@/lib/saved-residence";
+import {
+  stateJurisdictionFromDivisions,
+  type StateOfficialsView,
+} from "@/lib/state-officials";
+import {
+  createStateOfficialCacheRepository,
+  createStateOfficialsService,
+} from "@/lib/state-officials-service";
 import { matchedResidenceResponse } from "../../../tests/fixtures/residence-responses";
 import DashboardPage from "./page";
 
-const { federalCache, getOfficials, runtimeDatabase } = vi.hoisted(() => ({
+const {
+  federalCache,
+  getOfficials,
+  getStateOfficials,
+  governmentNavigationProps,
+  runtimeDatabase,
+  stateCache,
+} = vi.hoisted(() => ({
   federalCache: { kind: "federal-cache" },
   getOfficials: vi.fn(),
+  getStateOfficials: vi.fn(),
+  governmentNavigationProps: vi.fn(),
   runtimeDatabase: { kind: "runtime-database" },
+  stateCache: { kind: "state-cache" },
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
@@ -45,6 +64,17 @@ vi.mock("@/lib/congress-gov", () => ({ fetchCongressRoster: vi.fn() }));
 vi.mock("@/lib/house-clerk-vacancy", () => ({
   fetchCurrentHouseVacancies: vi.fn(),
 }));
+vi.mock("@/lib/openstates", () => ({ fetchStateLegislators: vi.fn() }));
+vi.mock("@/components/government-navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/government-navigation")>();
+  return {
+    ...actual,
+    GovernmentNavigation(properties: Parameters<typeof actual.GovernmentNavigation>[0]) {
+      governmentNavigationProps(properties);
+      return actual.GovernmentNavigation(properties);
+    },
+  };
+});
 vi.mock("@/lib/federal-officials-service", () => ({
   createFederalOfficialCacheRepository: vi.fn(() => federalCache),
   createFederalOfficialsService: vi.fn(() => ({
@@ -61,6 +91,17 @@ vi.mock("@/lib/federal-officials", async (importOriginal) => {
     ),
   };
 });
+vi.mock("@/lib/state-officials", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/state-officials")>();
+  return {
+    ...actual,
+    stateJurisdictionFromDivisions: vi.fn(actual.stateJurisdictionFromDivisions),
+  };
+});
+vi.mock("@/lib/state-officials-service", () => ({
+  createStateOfficialCacheRepository: vi.fn(() => stateCache),
+  createStateOfficialsService: vi.fn(() => ({ getOfficials: getStateOfficials })),
+}));
 vi.mock("@/lib/saved-residence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/saved-residence")>();
   return {
@@ -100,7 +141,33 @@ const unsupportedDivisions = [
     type: "congressional_district",
   },
 ] as const satisfies readonly SavedResidenceDivision[];
+const stateDivisions = [
+  {
+    id: "ocd-division/country:us/state:ga",
+    idScheme: "ocd",
+    name: "Georgia",
+    type: "state",
+  },
+  {
+    id: "ocd-division/country:us/state:ga/sldu:2",
+    idScheme: "ocd",
+    name: "Georgia Senate District 2",
+    type: "state_upper",
+  },
+  {
+    id: "ocd-division/country:us/state:ga/sldl:10",
+    idScheme: "ocd",
+    name: "Georgia House District 10",
+    type: "state_lower",
+  },
+] as const satisfies readonly SavedResidenceDivision[];
 const checkedAt = "2026-07-16T12:00:00.000Z";
+const stateSource = {
+  sourceType: "official" as const,
+  publicUrl: "https://legislature.example.test/officials",
+  retrievedAt: checkedAt,
+  effectiveAt: "2026-01-03T00:00:00.000Z",
+};
 const federalOfficialsView = {
   jurisdiction: {
     stateCode: "GA",
@@ -120,6 +187,42 @@ const federalOfficialsView = {
     state: "fresh",
   },
 } as const satisfies FederalOfficialsView;
+const stateOfficialsView = {
+  jurisdiction: {
+    stateCode: "GA",
+    stateDivisionId: stateDivisions[0].id,
+    jurisdictionId: "ocd-jurisdiction/country:us/state:ga/government",
+    legislature: "bicameral" as const,
+    districts: [
+      { chamber: "upper" as const, district: "2", divisionId: stateDivisions[1].id },
+      { chamber: "lower" as const, district: "10", divisionId: stateDivisions[2].id },
+    ],
+  },
+  freshness: {
+    checkedAt,
+    refreshAfter: "2026-08-01T12:00:00.000Z",
+    staleAfter: "2026-08-03T12:00:00.000Z",
+    state: "fresh" as const,
+  },
+  chambers: [
+    {
+      chamber: "upper" as const,
+      districts: [
+        {
+          district: "2",
+          seats: [
+            {
+              status: "serving" as const,
+              seat: "District 2",
+              people: [{ id: "state-1", name: "Avery State", sources: [stateSource] }],
+              sources: [stateSource],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+} as const satisfies StateOfficialsView;
 const savedResidence = {
   address: ownerVisibleAddress,
   resolution: {
@@ -262,6 +365,125 @@ describe("signed-in dashboard", () => {
     expectNoFederalLookup();
   });
 
+  it("uses only public saved divisions to render selected State legislature officials", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+    getStateOfficials.mockResolvedValue({
+      status: "available",
+      view: stateOfficialsView,
+    });
+
+    render(await dashboardFor({ level: "state", mode: "in-office" }));
+
+    expect(getSavedResidenceDivisions).toHaveBeenCalledOnce();
+    expect(getSavedResidenceDivisions).toHaveBeenCalledWith(sessionUserId);
+    expect(getSavedResidence).not.toHaveBeenCalled();
+    expect(stateJurisdictionFromDivisions).toHaveBeenCalledWith(stateDivisions);
+    expect(createDatabase).toHaveBeenCalledOnce();
+    expect(createStateOfficialCacheRepository).toHaveBeenCalledWith(runtimeDatabase);
+    expect(createStateOfficialsService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cache: stateCache,
+        fetchStateLegislators,
+        environment: { OPENSTATES_API_KEY: process.env.OPENSTATES_API_KEY },
+      }),
+    );
+    expect(getStateOfficials).toHaveBeenCalledWith(stateOfficialsView.jurisdiction);
+    expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
+    expect(createFederalOfficialsService).not.toHaveBeenCalled();
+    expect(getOfficials).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("region", { name: "State legislature for GA" }),
+    ).toHaveTextContent("Avery State");
+    expect(screen.queryByText(ownerVisibleAddress)).toBeNull();
+  });
+
+  it("keeps missing or incomplete State coverage out of state provider work", async () => {
+    const missing = render(
+      await dashboardFor({ level: "state", mode: "in-office" }),
+    );
+    expect(screen.getByText(/save a voting residence/i)).toBeVisible();
+    expect(stateJurisdictionFromDivisions).not.toHaveBeenCalled();
+    expectNoStateLookup();
+    missing.unmount();
+
+    vi.clearAllMocks();
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue([stateDivisions[0]]);
+    render(await dashboardFor({ level: "state", mode: "in-office" }));
+    expect(screen.getByText(/state-legislative coverage is incomplete/i)).toBeVisible();
+    expect(stateJurisdictionFromDivisions).toHaveBeenCalledWith([stateDivisions[0]]);
+    expectNoStateLookup();
+  });
+
+  it("shows State provider unavailability without starting the federal stack", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+    getStateOfficials.mockResolvedValue({ status: "unavailable" });
+
+    render(await dashboardFor({ level: "state", mode: "in-office" }));
+
+    expect(
+      screen.getByText("State legislature information is unavailable."),
+    ).toBeVisible();
+    expect(createFederalOfficialCacheRepository).not.toHaveBeenCalled();
+    expect(createFederalOfficialsService).not.toHaveBeenCalled();
+    expect(getOfficials).not.toHaveBeenCalled();
+  });
+
+  it("keeps Local and every Elections panel honest without any official infrastructure", async () => {
+    const selections = [
+      { level: "local", mode: "in-office" },
+      { level: "local", mode: "elections" },
+      { level: "state", mode: "elections" },
+      { level: "federal", mode: "elections" },
+    ] as const;
+
+    for (const selection of selections) {
+      vi.clearAllMocks();
+      const page = render(await dashboardFor(selection));
+      expect(
+        page.getByText(
+          selection.mode === "elections"
+            ? /unavailable until F7/i
+            : /Local coverage is unavailable/i,
+        ),
+      ).toBeVisible();
+      expect(getSavedResidenceDivisions).not.toHaveBeenCalled();
+      expect(getSavedResidence).not.toHaveBeenCalled();
+      expectNoStateLookup();
+      expectNoFederalLookup();
+      page.unmount();
+    }
+  });
+
+  it("normalizes invalid or repeated directives before selecting one safe federal panel", async () => {
+    render(
+      await dashboardFor({
+        level: ["state", "federal"],
+        mode: "surprise",
+        address: ownerVisibleAddress,
+      }),
+    );
+
+    expect(screen.getByRole("tab", { name: "Federal" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByText(ownerVisibleAddress)).toBeNull();
+    expect(screen.queryByText("surprise")).toBeNull();
+    expect(governmentNavigationProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        searchParams: { level: "federal", mode: "in-office" },
+      }),
+    );
+    expect(
+      JSON.stringify(
+        governmentNavigationProps.mock.calls.at(-1)?.[0].searchParams,
+      ),
+    ).not.toContain(ownerVisibleAddress);
+    expect(stateJurisdictionFromDivisions).not.toHaveBeenCalled();
+    expectNoStateLookup();
+    expect(getSavedResidence).not.toHaveBeenCalled();
+  });
+
   it("uses saved divisions to render sourced federal officials", async () => {
     vi.mocked(getSavedResidenceDivisions).mockResolvedValue(supportedDivisions);
     getOfficials.mockResolvedValue({
@@ -297,6 +519,10 @@ describe("signed-in dashboard", () => {
       district: 13,
       divisionIds: supportedDivisions.map(({ id }) => id),
     });
+    expect(createStateOfficialCacheRepository).not.toHaveBeenCalled();
+    expect(createStateOfficialsService).not.toHaveBeenCalled();
+    expect(getStateOfficials).not.toHaveBeenCalled();
+    expect(fetchStateLegislators).not.toHaveBeenCalled();
 
     const main = screen.getByRole("main");
     expect(
@@ -451,6 +677,24 @@ function expectNoFederalLookup() {
   expect(fetchCongressRoster).not.toHaveBeenCalled();
   expect(fetchCurrentHouseVacancies).not.toHaveBeenCalled();
   expect(getSavedResidence).not.toHaveBeenCalled();
+}
+
+function expectNoStateLookup() {
+  expect(createDatabase).not.toHaveBeenCalled();
+  expect(createStateOfficialCacheRepository).not.toHaveBeenCalled();
+  expect(createStateOfficialsService).not.toHaveBeenCalled();
+  expect(getStateOfficials).not.toHaveBeenCalled();
+  expect(fetchStateLegislators).not.toHaveBeenCalled();
+}
+
+function dashboardFor(
+  searchParams: Record<string, string | readonly string[] | undefined>,
+) {
+  return (
+    DashboardPage as unknown as (properties: {
+      searchParams: Promise<Record<string, string | readonly string[] | undefined>>;
+    }) => ReturnType<typeof DashboardPage>
+  )({ searchParams: Promise.resolve(searchParams) });
 }
 
 function servingSeat(
