@@ -153,14 +153,16 @@ async function refresh(
     const publishedAt = readClock(options.now);
     if (publishedAt === null) return null;
     if (write.status === "written") {
-      return publishedAt.getTime() < valid.staleAfter.getTime()
-        ? available(
-            valid,
-            jurisdiction,
-            publishedAt,
-            publishedAt.getTime() < valid.refreshAfter.getTime() ? "fresh" : "stale",
-          )
-        : null;
+      const published = validateCacheRecord(record, jurisdiction, publishedAt);
+      if (published === null || publishedAt.getTime() >= published.staleAfter.getTime()) {
+        return unavailable();
+      }
+      return available(
+        published,
+        jurisdiction,
+        publishedAt,
+        publishedAt.getTime() < published.refreshAfter.getTime() ? "fresh" : "stale",
+      );
     }
 
     const winnerRead = await readCache(options.cache, cacheKey);

@@ -125,12 +125,13 @@ postgres("PostgreSQL state official cache", () => {
     ] as const) {
       await primaryPool.query('TRUNCATE TABLE "state_official_cache"');
       const holder = await primaryPool.connect();
+      let pending: Promise<unknown> | undefined;
       try {
         await holder.query("BEGIN");
         await insertRecord(holder, holderRecord);
         const [{ pid }] = (await contenderPool.query<{ pid: number }>("select pg_backend_pid() as pid")).rows;
         if (!pid) throw new Error("missing contender PostgreSQL PID");
-        const pending = contender.write(contenderRecord);
+        pending = contender.write(contenderRecord);
         await waitForInsertLock(primaryPool, pid);
         await holder.query("COMMIT");
         await expect(pending).resolves.toEqual(
@@ -141,6 +142,7 @@ postgres("PostgreSQL state official cache", () => {
       } finally {
         await holder.query("ROLLBACK").catch(() => undefined);
         holder.release();
+        if (pending) await settle(pending, "state cache contender").catch(() => undefined);
       }
       await expect(primary.read("state-roster:v1:GA:U-13:L-25")).resolves.toMatchObject({ retrievedAt: NOW, payload: newerRecord.payload });
     }
@@ -167,4 +169,18 @@ async function waitForInsertLock(pool: Pool, pid: number) {
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("state cache contender did not wait for holder lock");
+}
+
+async function settle(promise: Promise<unknown>, label: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error(`${label} did not settle`)), 2_000);
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
 }

@@ -251,6 +251,22 @@ describe("createStateOfficialsService", () => {
     await expect(pending).resolves.toEqual({ status: "unavailable" });
   });
 
+  it("fails closed when a delayed write is followed by a backward clock before its generation", async () => {
+    const cache = memoryCache(record(hoursBefore(25)));
+    const write = Promise.withResolvers<void>();
+    cache.writeGate = write.promise;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({ status: "available", roster: roster(NOW) });
+    let clockCalls = 0;
+    const pending = createStateOfficialsService({
+      ...options(cache, fetchStateLegislators),
+      now: () => clockCalls++ < 2 ? NOW : new Date(NOW.getTime() - 1),
+    }).getOfficials(jurisdiction);
+    await vi.waitFor(() => expect(cache.writes).toHaveLength(1));
+    write.resolve();
+
+    await expect(pending).resolves.toEqual({ status: "unavailable" });
+  });
+
   it("rereads a valid newer winner when atomic publication is rejected", async () => {
     const winner = record(new Date(NOW.getTime() + 1));
     const cache = memoryCache(record(hoursBefore(25)));
