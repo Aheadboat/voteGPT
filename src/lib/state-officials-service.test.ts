@@ -31,6 +31,22 @@ const jurisdiction: StateJurisdiction = {
 };
 
 describe("createStateOfficialsService", () => {
+  it.each([
+    { ...jurisdiction, untrusted: true },
+    { ...jurisdiction, districts: [{ ...jurisdiction.districts[0], untrusted: true }] },
+    { ...jurisdiction, districts: { privateAddress: "no" } },
+    { ...jurisdiction, districts: null },
+  ])("rejects untrusted requested jurisdiction before clock, cache, or provider work", async (input) => {
+    const cache = memoryCache(record(hoursBefore(1)));
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>();
+    const now = vi.fn(() => NOW);
+
+    await expect(createStateOfficialsService({ ...options(cache, fetchStateLegislators), now }).getOfficials(input as StateJurisdiction)).resolves.toEqual({ status: "unavailable" });
+    expect(now).not.toHaveBeenCalled();
+    expect(cache.reads).toBe(0);
+    expect(fetchStateLegislators).not.toHaveBeenCalled();
+  });
+
   it("returns a fresh valid cache hit without provider work", async () => {
     const cache = memoryCache(record(hoursBefore(1)));
     const fetchStateLegislators = vi.fn<FetchStateLegislators>();
@@ -103,6 +119,39 @@ describe("createStateOfficialsService", () => {
 
     const atExpiry = memoryCache(record(hoursBefore(72)));
     await expect(createStateOfficialsService(options(atExpiry, refresh)).getOfficials(jurisdiction)).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("classifies cache freshness from a clock read after delayed cache reads", async () => {
+    const cache = memoryCache(record(new Date(NOW.getTime() - 24 * HOUR + 1)));
+    const read = Promise.withResolvers<void>();
+    cache.readGate = read.promise;
+    let currentTime = new Date(NOW.getTime() - 2);
+    const pending = createStateOfficialsService({ ...options(cache, vi.fn(), {}), now: () => currentTime }).getOfficials(jurisdiction);
+    currentTime = new Date(NOW.getTime() + 2);
+    read.resolve();
+
+    await expect(pending).resolves.toMatchObject({ status: "available", view: { freshness: { state: "stale" } } });
+  });
+
+  it("fails closed when delayed cache reads cross expiry", async () => {
+    const cache = memoryCache(record(new Date(NOW.getTime() - 72 * HOUR + 1)));
+    const read = Promise.withResolvers<void>();
+    cache.readGate = read.promise;
+    let currentTime = new Date(NOW.getTime() - 2);
+    const pending = createStateOfficialsService({ ...options(cache, vi.fn(), {}), now: () => currentTime }).getOfficials(jurisdiction);
+    currentTime = new Date(NOW.getTime() + 2);
+    read.resolve();
+
+    await expect(pending).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("fails closed when initial cache reads reject instead of treating them as misses", async () => {
+    const cache = memoryCache(null);
+    cache.readError = new Error("read failed");
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>();
+
+    await expect(createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction)).resolves.toEqual({ status: "unavailable" });
+    expect(fetchStateLegislators).not.toHaveBeenCalled();
   });
 
   it("fails closed for malformed, non-exact, or wrong-jurisdiction cache rows", async () => {
@@ -186,6 +235,22 @@ describe("createStateOfficialsService", () => {
     expect(cache.writes).toEqual([]);
   });
 
+  it("does not serve a successful publication after delayed writes cross expiry", async () => {
+    const cache = memoryCache(record(hoursBefore(25)));
+    const write = Promise.withResolvers<void>();
+    cache.writeGate = write.promise;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({ status: "available", roster: roster(NOW) });
+    let clockCalls = 0;
+    const pending = createStateOfficialsService({
+      ...options(cache, fetchStateLegislators),
+      now: () => (clockCalls++ < 2 ? NOW : new Date(NOW.getTime() + 72 * HOUR)),
+    }).getOfficials(jurisdiction);
+    await vi.waitFor(() => expect(cache.writes).toHaveLength(1));
+    write.resolve();
+
+    await expect(pending).resolves.toEqual({ status: "unavailable" });
+  });
+
   it("rereads a valid newer winner when atomic publication is rejected", async () => {
     const winner = record(new Date(NOW.getTime() + 1));
     const cache = memoryCache(record(hoursBefore(25)));
@@ -200,6 +265,24 @@ describe("createStateOfficialsService", () => {
     }).getOfficials(jurisdiction);
 
     expect(result).toMatchObject({ status: "available", view: { freshness: { checkedAt: winner.retrievedAt.toISOString(), state: "fresh" } } });
+  });
+
+  it("uses validated stale fallback when ignored-write winner rereads reject", async () => {
+    const cache = memoryCache(record(hoursBefore(25)));
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.readErrorAfter = 1;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({ status: "available", roster: roster(NOW) });
+
+    await expect(createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction)).resolves.toMatchObject({ status: "available", view: { freshness: { state: "stale" } } });
+  });
+
+  it("fails closed when ignored-write winner rereads reject without prior valid stale cache", async () => {
+    const cache = memoryCache(null);
+    cache.writeResult = { status: "ignored", reason: "older_generation" };
+    cache.readErrorAfter = 1;
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({ status: "available", roster: roster(NOW) });
+
+    await expect(createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction)).resolves.toEqual({ status: "unavailable" });
   });
 
   it("passes private key only to adapter and never exposes it", async () => {
@@ -226,14 +309,28 @@ function memoryCache(initial: StateOfficialCacheRecord | null) {
   const writes: StateOfficialCacheRecord[] = [];
   const cache: StateOfficialCacheRepository & {
     writes: StateOfficialCacheRecord[];
+    reads: number;
+    readError?: Error;
+    readErrorAfter?: number;
+    readGate?: Promise<void>;
     writeError?: Error;
+    writeGate?: Promise<void>;
     writeResult?: Awaited<ReturnType<StateOfficialCacheRepository["write"]>>;
     afterIgnoredWrite?: StateOfficialCacheRecord;
   } = {
     writes,
-    async read() { return current; },
+    reads: 0,
+    async read() {
+      cache.reads += 1;
+      await cache.readGate;
+      if (cache.readError || (cache.readErrorAfter !== undefined && cache.reads > cache.readErrorAfter)) {
+        throw cache.readError ?? new Error("read failed");
+      }
+      return current;
+    },
     async write(value) {
       writes.push(value);
+      await cache.writeGate;
       if (cache.writeError) throw cache.writeError;
       if (cache.writeResult?.status === "ignored") {
         current = cache.afterIgnoredWrite ?? current;

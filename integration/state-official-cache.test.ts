@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createDatabase } from "@/db";
@@ -116,13 +116,55 @@ postgres("PostgreSQL state official cache", () => {
     await expect(primary.read("state-roster:v1:GA:U-13:L-25")).resolves.toMatchObject({ retrievedAt: NOW, payload: newest.payload });
   });
 
-  it("keeps newest complete generation in cold-row concurrent reverse-order races", async () => {
+  it("keeps newest complete generation under deterministic physical-connection contention", async () => {
     const olderRecord = record(hoursBefore(1));
     const newerRecord = record(NOW);
-    for (const [first, second] of [[older, newer], [newer, older]] as const) {
+    for (const [holderRecord, contenderRecord, contenderPool, contender] of [
+      [olderRecord, newerRecord, newerPool, newer],
+      [newerRecord, olderRecord, olderPool, older],
+    ] as const) {
       await primaryPool.query('TRUNCATE TABLE "state_official_cache"');
-      await Promise.all([first.write(first === older ? olderRecord : newerRecord), second.write(second === older ? olderRecord : newerRecord)]);
+      const holder = await primaryPool.connect();
+      try {
+        await holder.query("BEGIN");
+        await insertRecord(holder, holderRecord);
+        const [{ pid }] = (await contenderPool.query<{ pid: number }>("select pg_backend_pid() as pid")).rows;
+        if (!pid) throw new Error("missing contender PostgreSQL PID");
+        const pending = contender.write(contenderRecord);
+        await waitForInsertLock(primaryPool, pid);
+        await holder.query("COMMIT");
+        await expect(pending).resolves.toEqual(
+          contenderRecord === newerRecord
+            ? { status: "written" }
+            : { status: "ignored", reason: "older_generation" },
+        );
+      } finally {
+        await holder.query("ROLLBACK").catch(() => undefined);
+        holder.release();
+      }
       await expect(primary.read("state-roster:v1:GA:U-13:L-25")).resolves.toMatchObject({ retrievedAt: NOW, payload: newerRecord.payload });
     }
   });
 });
+
+async function insertRecord(client: PoolClient, value: StateOfficialCacheRecord) {
+  await client.query(
+    `INSERT INTO state_official_cache
+      (cache_key, payload, retrieved_at, refresh_after, stale_after)
+     VALUES ($1, $2::jsonb, $3, $4, $5)`,
+    [value.cacheKey, JSON.stringify(value.payload), value.retrievedAt, value.refreshAfter, value.staleAfter],
+  );
+}
+
+async function waitForInsertLock(pool: Pool, pid: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 2_000) {
+    const [{ waiting }] = (await pool.query<{ waiting: boolean }>(
+      "select exists (select 1 from pg_stat_activity where pid = $1 and wait_event_type = 'Lock') as waiting",
+      [pid],
+    )).rows;
+    if (waiting) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("state cache contender did not wait for holder lock");
+}

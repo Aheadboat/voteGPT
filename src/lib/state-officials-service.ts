@@ -98,27 +98,30 @@ export function createStateOfficialsService(options: Readonly<{
     async getOfficials(
       jurisdiction: StateJurisdiction,
     ): Promise<StateOfficialsServiceResult> {
-      const now = readClock(options.now);
-      const cacheKey = stateCacheKey(jurisdiction);
-      if (now === null || cacheKey === null) return unavailable();
+      const canonicalJurisdiction = canonicalizeJurisdiction(jurisdiction);
+      if (canonicalJurisdiction === null) return unavailable();
+      const cacheKey = stateCacheKey(canonicalJurisdiction);
 
-      const cached = await safeRead(options.cache, cacheKey);
+      const read = await readCache(options.cache, cacheKey);
+      const now = readClock(options.now);
+      if (read.status === "failed" || now === null) return unavailable();
+      const cached = read.record;
       const validCached = cached
-        ? validateCacheRecord(cached, jurisdiction, now)
+        ? validateCacheRecord(cached, canonicalJurisdiction, now)
         : null;
       if (validCached && now.getTime() < validCached.refreshAfter.getTime()) {
-        return available(validCached, jurisdiction, now, "fresh");
+        return available(validCached, canonicalJurisdiction, now, "fresh");
       }
 
       const apiKey = options.environment.OPENSTATES_API_KEY?.trim() ?? "";
       if (apiKey !== "") {
-        const refreshed = await refresh(options, jurisdiction, cacheKey, now, apiKey);
+        const refreshed = await refresh(options, canonicalJurisdiction, cacheKey, now, apiKey);
         if (refreshed !== null) return refreshed;
       }
 
       const fallbackNow = readClock(options.now);
       return validCached && fallbackNow !== null && fallbackNow.getTime() < validCached.staleAfter.getTime()
-        ? available(validCached, jurisdiction, fallbackNow, "stale")
+        ? available(validCached, canonicalJurisdiction, fallbackNow, "stale")
         : unavailable();
     },
   };
@@ -147,21 +150,23 @@ async function refresh(
     const valid = validateCacheRecord(record, jurisdiction, completedAt);
     if (valid === null || completedAt.getTime() >= valid.staleAfter.getTime()) return null;
     const write = await options.cache.write(record);
+    const publishedAt = readClock(options.now);
+    if (publishedAt === null) return null;
     if (write.status === "written") {
-      return completedAt.getTime() < valid.staleAfter.getTime()
+      return publishedAt.getTime() < valid.staleAfter.getTime()
         ? available(
             valid,
             jurisdiction,
-            completedAt,
-            completedAt.getTime() < valid.refreshAfter.getTime() ? "fresh" : "stale",
+            publishedAt,
+            publishedAt.getTime() < valid.refreshAfter.getTime() ? "fresh" : "stale",
           )
         : null;
     }
 
-    const winner = await safeRead(options.cache, cacheKey);
+    const winnerRead = await readCache(options.cache, cacheKey);
     const winnerNow = readClock(options.now);
-    const validWinner = winner
-      ? validateCacheRecord(winner, jurisdiction, winnerNow ?? undefined)
+    const validWinner = winnerRead.status === "read" && winnerRead.record
+      ? validateCacheRecord(winnerRead.record, jurisdiction, winnerNow ?? undefined)
       : null;
     return validWinner && winnerNow !== null &&
       validWinner.retrievedAt.getTime() > record.retrievedAt.getTime() &&
@@ -274,15 +279,10 @@ function available(
   return { status: "available", view };
 }
 
-function stateCacheKey(jurisdiction: StateJurisdiction): StateOfficialCacheKey | null {
-  const reconstructed = stateJurisdictionFromCacheKey(
-    `state-roster:v1:${jurisdiction.stateCode}:${jurisdiction.districts
-      .map((district) => `${district.chamber === "upper" ? "U" : "L"}-${district.district}`)
-      .join(":")}`,
-  );
-  return reconstructed !== null && sameJurisdiction(reconstructed, jurisdiction)
-    ? `state-roster:v1:${jurisdiction.stateCode}:${jurisdiction.districts.map((district) => `${district.chamber === "upper" ? "U" : "L"}-${district.district}`).join(":")}`
-    : null;
+function stateCacheKey(jurisdiction: StateJurisdiction): StateOfficialCacheKey {
+  return `state-roster:v1:${jurisdiction.stateCode}:${jurisdiction.districts
+    .map((district) => `${district.chamber === "upper" ? "U" : "L"}-${district.district}`)
+    .join(":")}`;
 }
 
 function stateJurisdictionFromCacheKey(value: unknown): StateJurisdiction | null {
@@ -299,12 +299,39 @@ function stateJurisdictionFromCacheKey(value: unknown): StateJurisdiction | null
   return result.status === "available" ? result.jurisdiction : null;
 }
 
-async function safeRead(cache: StateOfficialCacheRepository, cacheKey: StateOfficialCacheKey) {
+async function readCache(cache: StateOfficialCacheRepository, cacheKey: StateOfficialCacheKey) {
   try {
-    return await cache.read(cacheKey);
+    return { status: "read" as const, record: await cache.read(cacheKey) };
   } catch {
-    return null;
+    return { status: "failed" as const };
   }
+}
+
+function canonicalizeJurisdiction(value: unknown): StateJurisdiction | null {
+  if (!exactRecord(value, ["stateCode", "stateDivisionId", "jurisdictionId", "legislature", "districts"]) ||
+    typeof value.stateCode !== "string" ||
+    typeof value.stateDivisionId !== "string" ||
+    typeof value.jurisdictionId !== "string" ||
+    (value.legislature !== "bicameral" && value.legislature !== "unicameral") ||
+    !Array.isArray(value.districts) ||
+    !value.districts.every((district) =>
+      exactRecord(district, ["chamber", "district", "divisionId"]) &&
+      (district.chamber === "upper" || district.chamber === "lower") &&
+      typeof district.district === "string" && typeof district.divisionId === "string",
+    )) return null;
+  const divisions = [
+    { type: "state" as const, name: "state", id: value.stateDivisionId, idScheme: "ocd" as const },
+    ...value.districts.map((district) => ({
+      type: district.chamber === "upper" ? "state_upper" as const : "state_lower" as const,
+      name: district.chamber,
+      id: district.divisionId,
+      idScheme: "ocd" as const,
+    })),
+  ];
+  const result = stateJurisdictionFromDivisions(divisions);
+  return result.status === "available" && sameJurisdiction(value, result.jurisdiction)
+    ? result.jurisdiction
+    : null;
 }
 
 function readClock(clock: () => Date) {
