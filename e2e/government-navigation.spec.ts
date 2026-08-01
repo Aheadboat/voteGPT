@@ -8,6 +8,11 @@ import {
   type TestInfo,
 } from "@playwright/test";
 import { Pool } from "pg";
+import {
+  reconcileStateOfficials,
+  type StateJurisdiction,
+  type StateOfficialsView,
+} from "../src/lib/state-officials";
 
 const baseURL = "http://127.0.0.1:3000";
 const authSecret = "e2e-secret-at-least-thirty-two-characters";
@@ -36,31 +41,118 @@ const privateSentinels = [
 
 type StateCacheRow = {
   cache_key: string;
-  payload: StateCachePayload;
+  payload: unknown;
   retrieved_at: Date;
   refresh_after: Date;
   stale_after: Date;
 };
 
-type StateCachePayload = {
-  roster: {
-    freshness: {
-      checkedAt: string;
-      refreshAfter: string;
-      staleAfter: string;
-      state: string;
-    };
-    seats: Array<{
-      people: Array<{ sources: StateSource[] }>;
-      vacancySources: StateSource[];
-    }>;
-  };
-};
-
-type StateSource = {
-  effectiveAt: string | null;
-  retrievedAt: string;
-};
+const expectedStateView = {
+  "state-roster:v1:GA:U-2:L-10": [
+    {
+      chamber: "upper",
+      district: "2",
+      seats: [
+        {
+          people: [
+            {
+              id: "ga-upper-avery",
+              name: "Avery State",
+              sources: [{ sourceType: "official", publicUrl: "https://www.legis.ga.gov/members/senate/2" }],
+            },
+            {
+              id: "ga-upper-blair",
+              name: "Blair State",
+              sources: [{ sourceType: "official", publicUrl: "https://www.legis.ga.gov/members/senate/3" }],
+            },
+          ],
+          seat: "District 2",
+          sources: [
+            { sourceType: "official", publicUrl: "https://www.legis.ga.gov/members/senate/2" },
+            { sourceType: "official", publicUrl: "https://www.legis.ga.gov/members/senate/3" },
+          ],
+          status: "serving",
+        },
+        {
+          people: [],
+          seat: "District 2 Seat B",
+          sources: [{ sourceType: "vacancy", publicUrl: "https://www.legis.ga.gov/vacancies" }],
+          status: "vacant",
+        },
+      ],
+    },
+    {
+      chamber: "lower",
+      district: "10",
+      seats: [
+        {
+          people: [],
+          seat: "District 10",
+          sources: [{ sourceType: "official", publicUrl: "https://www.legis.ga.gov/members/house/10" }],
+          status: "unknown",
+        },
+      ],
+    },
+  ],
+  "state-roster:v1:CA:U-1:L-1": [
+    {
+      chamber: "upper",
+      district: "1",
+      seats: [
+        {
+          people: [
+            {
+              id: "ca-upper-stale",
+              name: "California State Senator",
+              sources: [{ sourceType: "official", publicUrl: "https://www.legislature.ca.gov/senate/1" }],
+            },
+          ],
+          seat: "District 1",
+          sources: [{ sourceType: "official", publicUrl: "https://www.legislature.ca.gov/senate/1" }],
+          status: "serving",
+        },
+      ],
+    },
+    {
+      chamber: "lower",
+      district: "1",
+      seats: [
+        {
+          people: [
+            {
+              id: "ca-lower-stale",
+              name: "California State Assemblymember",
+              sources: [{ sourceType: "official", publicUrl: "https://www.assembly.ca.gov/assemblymembers/1" }],
+            },
+          ],
+          seat: "District 1",
+          sources: [{ sourceType: "official", publicUrl: "https://www.assembly.ca.gov/assemblymembers/1" }],
+          status: "serving",
+        },
+      ],
+    },
+  ],
+  "state-roster:v1:TX:U-1:L-1": [
+    {
+      chamber: "upper",
+      district: "1",
+      seats: [
+        {
+          people: [
+            {
+              id: "tx-upper-expired",
+              name: "Texas State Senator",
+              sources: [{ sourceType: "official", publicUrl: "https://capitol.texas.gov/senate/1" }],
+            },
+          ],
+          seat: "District 1",
+          sources: [{ sourceType: "official", publicUrl: "https://capitol.texas.gov/senate/1" }],
+          status: "serving",
+        },
+      ],
+    },
+  ],
+} as const;
 
 test("renders a fresh State legislature roster with ordered sourced seats", async ({
   context,
@@ -168,13 +260,14 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
   );
 
   await assertReducedMotion(page, tabs);
+  await assertSafeSurface(page, requests);
   await assertResponsiveGovernmentSurface(
     page,
     testInfo,
+    requests,
     roster,
     roster.getByRole("list", { name: "Upper chamber District 2 seats" }),
   );
-  await assertSafeSurface(page, requests);
 
   await state.focus();
   await assertTabStops(local, state, federal, "state");
@@ -401,6 +494,7 @@ async function assertReducedMotion(page: Page, tabs: Locator) {
 async function assertResponsiveGovernmentSurface(
   page: Page,
   testInfo: TestInfo,
+  requests: readonly string[],
   roster: Locator,
   list: Locator,
 ) {
@@ -452,7 +546,9 @@ async function assertResponsiveGovernmentSurface(
       ),
     );
     const path = testInfo.outputPath(`${viewport.name}.png`);
+    await assertSafeSurface(page, requests);
     await page.screenshot({ fullPage: true, path });
+    await assertSafeSurface(page, requests);
     await testInfo.attach(viewport.name, { contentType: "image/png", path });
   }
   expect(layouts[0]).toBeGreaterThan(layouts[1]!);
@@ -497,16 +593,29 @@ async function assertSeededStateCache(pool: Pool) {
     expect(row.stale_after.getTime() - row.retrieved_at.getTime()).toBe(
       72 * 60 * 60 * 1_000,
     );
-    expect(row.payload.roster.freshness).toEqual({
+    const payload = requireRecord(row.payload, `${row.cache_key} payload`);
+    expect(Object.keys(payload).sort()).toEqual(["jurisdiction", "roster"]);
+    const expectedJurisdiction = jurisdictionFromCacheKey(row.cache_key);
+    expect(payload.jurisdiction).toEqual(expectedJurisdiction);
+    const view = reconcileStateOfficials(expectedJurisdiction, payload.roster);
+    expect(view).not.toBeNull();
+    if (view === null) {
+      throw new Error(`${row.cache_key} roster failed public validation.`);
+    }
+    expect(view.freshness).toEqual({
       checkedAt: row.retrieved_at.toISOString(),
       refreshAfter: row.refresh_after.toISOString(),
       staleAfter: row.stale_after.toISOString(),
       state: "fresh",
     });
-    const sources = row.payload.roster.seats.flatMap((seat) => [
-      ...seat.vacancySources,
-      ...seat.people.flatMap((person) => person.sources),
-    ]);
+    expect(projectStateView(view)).toEqual(
+      expectedStateView[row.cache_key as keyof typeof expectedStateView],
+    );
+    const sources = view.chambers.flatMap((chamber) =>
+      chamber.districts.flatMap((district) =>
+        district.seats.flatMap((seat) => seat.sources),
+      ),
+    );
     expect(sources.length).toBeGreaterThan(0);
     for (const source of sources) {
       expect(source.retrievedAt).toBe(row.retrieved_at.toISOString());
@@ -526,4 +635,67 @@ async function assertSeededStateCache(pool: Pool) {
   expect(inspectedAt).toBeGreaterThanOrEqual(stale.refresh_after.getTime());
   expect(inspectedAt).toBeLessThan(stale.stale_after.getTime());
   expect(inspectedAt).toBeGreaterThanOrEqual(expired.stale_after.getTime());
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function jurisdictionFromCacheKey(cacheKey: string): StateJurisdiction {
+  const match = /^state-roster:v1:([A-Z]{2}):U-([a-z0-9][a-z0-9-]{0,199}):L-([a-z0-9][a-z0-9-]{0,199})$/.exec(
+    cacheKey,
+  );
+  if (!match?.[1] || !match[2] || !match[3]) {
+    throw new Error(`Unexpected State cache key: ${cacheKey}`);
+  }
+  const [stateCode, upperDistrict, lowerDistrict] = match.slice(1) as [
+    string,
+    string,
+    string,
+  ];
+  const state = stateCode.toLowerCase();
+  return {
+    stateCode,
+    stateDivisionId: `ocd-division/country:us/state:${state}`,
+    jurisdictionId: `ocd-jurisdiction/country:us/state:${state}/government`,
+    legislature: "bicameral",
+    districts: [
+      {
+        chamber: "upper",
+        district: upperDistrict,
+        divisionId: `ocd-division/country:us/state:${state}/sldu:${upperDistrict}`,
+      },
+      {
+        chamber: "lower",
+        district: lowerDistrict,
+        divisionId: `ocd-division/country:us/state:${state}/sldl:${lowerDistrict}`,
+      },
+    ],
+  };
+}
+
+function projectStateView(view: StateOfficialsView) {
+  return view.chambers.flatMap((chamber) =>
+    chamber.districts.map((district) => ({
+      chamber: chamber.chamber,
+      district: district.district,
+      seats: district.seats.map((seat) => ({
+        people: seat.people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          sources: person.sources.map(projectSource),
+        })),
+        seat: seat.seat,
+        sources: seat.sources.map(projectSource),
+        status: seat.status,
+      })),
+    })),
+  );
+}
+
+function projectSource(source: StateOfficialsView["chambers"][number]["districts"][number]["seats"][number]["sources"][number]) {
+  return { publicUrl: source.publicUrl, sourceType: source.sourceType };
 }
