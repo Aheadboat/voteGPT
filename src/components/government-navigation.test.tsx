@@ -161,6 +161,29 @@ describe("GovernmentNavigation", () => {
     expect(federal).toHaveAttribute("aria-selected", "true");
   });
 
+  it("activates a focused tab through its existing href when Space is pressed", () => {
+    render(<GovernmentNavigation panels={panels} />);
+
+    const state = screen.getByRole("tab", { name: "State" });
+    let activatedHref: string | null = null;
+    state.addEventListener("click", (event) => {
+      event.preventDefault();
+      activatedHref = (event.currentTarget as HTMLAnchorElement).getAttribute("href");
+    });
+    state.focus();
+    const keyDown = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: " ",
+    });
+
+    const dispatched = state.dispatchEvent(keyDown);
+
+    expect(activatedHref).toBe("?level=state&mode=in-office&category=legislature");
+    expect(dispatched).toBe(false);
+    expect(keyDown.defaultPrevented).toBe(true);
+  });
+
   it("resets roving ownership to a new URL-selected level", () => {
     const { rerender } = render(<GovernmentNavigation panels={panels} />);
     const local = screen.getByRole("tab", { name: "Local" });

@@ -1,6 +1,9 @@
 import type { SavedResidenceDivision } from "./saved-residence";
 import { validateStateLegislativeSourceUrl } from "./state-source-policy";
 
+export const MAX_STATE_ROSTER_RECORDS = 100;
+export const MAX_STATE_ROSTER_SOURCES = 8;
+
 type StateChamber = "upper" | "lower";
 type ProviderTarget = Readonly<{ label: string; divisionId: string }>;
 type ProviderTargets = readonly [ProviderTarget, ...ProviderTarget[]];
@@ -171,8 +174,22 @@ export function reconcileStateOfficials(
   if (!isJurisdiction(jurisdiction) || !isRecord(value) || !hasExactKeys(value, ["freshness", "seats"])) {
     return null;
   }
-  if (!isFreshness(value.freshness) || !Array.isArray(value.seats)) {
+  if (
+    !isFreshness(value.freshness) ||
+    !Array.isArray(value.seats) ||
+    value.seats.length > MAX_STATE_ROSTER_RECORDS
+  ) {
     return null;
+  }
+
+  let peopleCount = 0;
+  for (const candidate of value.seats) {
+    if (isRecord(candidate) && Array.isArray(candidate.people)) {
+      peopleCount += candidate.people.length;
+      if (peopleCount > MAX_STATE_ROSTER_RECORDS) {
+        return null;
+      }
+    }
   }
 
   const seatKeys = new Set<string>();
@@ -400,6 +417,9 @@ function parseSources(
   stateCode: string,
   requiredType?: StateSource["sourceType"],
 ): readonly StateSource[] | null {
+  if (values.length > MAX_STATE_ROSTER_SOURCES) {
+    return null;
+  }
   const sources: StateSource[] = [];
   const keys = new Set<string>();
   for (const value of values) {

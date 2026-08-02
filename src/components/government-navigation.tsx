@@ -94,6 +94,11 @@ function GovernmentLevelTabs({
   }
 
   function onTabKeyDown(event: KeyboardEvent<HTMLAnchorElement>) {
+    if (event.key === " ") {
+      event.preventDefault();
+      event.currentTarget.click();
+      return;
+    }
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       return;
     }

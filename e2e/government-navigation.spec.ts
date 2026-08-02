@@ -289,7 +289,7 @@ test("renders a fresh State legislature roster with ordered sourced seats", asyn
   await expect(state).toHaveAttribute("aria-selected", "true");
   await assertVisibleFocus(federal);
 
-  await page.keyboard.press("Enter");
+  await page.keyboard.press("Space");
   await expect(page).toHaveURL(/level=federal&mode=in-office&category=congress/);
   await expect(page.getByRole("tabpanel").getByRole("region", {
     name: "Federal officials for GA District 13",

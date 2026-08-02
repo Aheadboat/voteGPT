@@ -733,6 +733,112 @@ describe("reconcileStateOfficials", () => {
     ).toBeNull();
   });
 
+  it("enforces the 100-seat roster ceiling", () => {
+    const jurisdiction = nebraskaJurisdiction();
+    const seats = Array.from({ length: 101 }, (_, index) => ({
+      chamber: "upper" as const,
+      district: "8",
+      seat: String(index + 1),
+      people: [],
+      vacancySources: [],
+    }));
+
+    expect(
+      reconcileStateOfficials(jurisdiction, {
+        freshness,
+        seats: seats.slice(0, 100),
+      }),
+    ).not.toBeNull();
+    expect(reconcileStateOfficials(jurisdiction, { freshness, seats })).toBeNull();
+  });
+
+  it("enforces the 100-person aggregate ceiling across seats", () => {
+    const jurisdiction = nebraskaJurisdiction();
+    const roster = (secondSeatCount: number) => ({
+      freshness,
+      seats: [
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "Senator A",
+          people: Array.from({ length: 60 }, (_, index) =>
+            nebraskaPerson(index, "Senator A"),
+          ),
+          vacancySources: [],
+        },
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "Senator B",
+          people: Array.from({ length: secondSeatCount }, (_, index) =>
+            nebraskaPerson(index + 60, "Senator B"),
+          ),
+          vacancySources: [],
+        },
+      ],
+    });
+
+    expect(
+      reconcileStateOfficials(jurisdiction, roster(40)),
+    ).not.toBeNull();
+    expect(reconcileStateOfficials(jurisdiction, roster(41))).toBeNull();
+  });
+
+  it("enforces the 8-source ceiling for one person", () => {
+    const jurisdiction = nebraskaJurisdiction();
+    const sources = Array.from({ length: 9 }, (_, index) => ({
+      ...officialSource,
+      publicUrl: `https://nebraskalegislature.gov/senators/source-${index}`,
+    }));
+    const roster = (selectedSources: typeof sources) => ({
+      freshness,
+      seats: [
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "Senator",
+          people: [
+            {
+              ...nebraskaPerson(1, "Senator"),
+              sources: selectedSources,
+            },
+          ],
+          vacancySources: [],
+        },
+      ],
+    });
+
+    expect(
+      reconcileStateOfficials(jurisdiction, roster(sources.slice(0, 8))),
+    ).not.toBeNull();
+    expect(reconcileStateOfficials(jurisdiction, roster(sources))).toBeNull();
+  });
+
+  it("enforces the 8-source ceiling for one vacancy", () => {
+    const jurisdiction = nebraskaJurisdiction();
+    const vacancySources = Array.from({ length: 9 }, (_, index) => ({
+      ...vacancySource,
+      publicUrl: `https://nebraskalegislature.gov/vacancies/source-${index}`,
+    }));
+    const roster = (selectedSources: typeof vacancySources) => ({
+      freshness,
+      seats: [
+        {
+          chamber: "upper" as const,
+          district: "8",
+          seat: "Senator",
+          people: [],
+          vacancySources: selectedSources,
+        },
+      ],
+    });
+
+    expect(
+      reconcileStateOfficials(jurisdiction, roster(vacancySources.slice(0, 8))),
+    ).not.toBeNull();
+    expect(reconcileStateOfficials(jurisdiction, roster(vacancySources))).toBeNull();
+  });
+
   it("keeps multi-member seats and people in deterministic chamber, district, seat, and person order", () => {
     const result = stateJurisdictionFromDivisions([
       {
@@ -1241,6 +1347,41 @@ describe("reconcileStateOfficials", () => {
     }
   });
 });
+
+function nebraskaJurisdiction(): StateJurisdiction {
+  const result = stateJurisdictionFromDivisions([
+    {
+      type: "state",
+      name: "Nebraska",
+      id: "ocd-division/country:us/state:ne",
+      idScheme: "ocd",
+    },
+    {
+      type: "state_upper",
+      name: "Nebraska Legislative District 8",
+      id: "ocd-division/country:us/state:ne/sldu:8",
+      idScheme: "ocd",
+    },
+  ]);
+  if (result.status !== "available") {
+    throw new Error("fixture requires a Nebraska jurisdiction");
+  }
+  return result.jurisdiction;
+}
+
+function nebraskaPerson(index: number, seat: string) {
+  return {
+    id: `openstates:person-${index}`,
+    name: `Person ${index}`,
+    role: {
+      chamber: "upper" as const,
+      district: "8",
+      seat,
+      current: true,
+    },
+    sources: [officialSource],
+  };
+}
 
 function marylandDivisions(district: string) {
   return [

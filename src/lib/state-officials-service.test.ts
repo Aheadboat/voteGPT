@@ -246,6 +246,29 @@ describe("createStateOfficialsService", () => {
     }
   });
 
+  it("fails closed instead of serving an oversized cached roster", async () => {
+    const retrievedAt = hoursBefore(1);
+    const cached = record(retrievedAt);
+    const cache = memoryCache({
+      ...cached,
+      payload: {
+        jurisdiction,
+        roster: {
+          ...cachedRoster(retrievedAt),
+          seats: oversizedSeats(),
+        },
+      },
+    });
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>();
+
+    await expect(
+      createStateOfficialsService(
+        options(cache, fetchStateLegislators, {}),
+      ).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(fetchStateLegislators).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["wrong-state host", "https://senate.ca.gov/member"],
     ["unvetted host", "https://georgia.gov/legislator"],
@@ -281,6 +304,24 @@ describe("createStateOfficialsService", () => {
 
     await expect(
       createStateOfficialsService(options(cache, fetchStateLegislators)).getOfficials(jurisdiction),
+    ).resolves.toEqual({ status: "unavailable" });
+    expect(cache.writes).toEqual([]);
+  });
+
+  it("rejects an oversized provider roster before writing it", async () => {
+    const cache = memoryCache(null);
+    const fetchStateLegislators = vi.fn<FetchStateLegislators>().mockResolvedValue({
+      status: "available",
+      roster: {
+        ...roster(NOW),
+        seats: oversizedSeats(),
+      },
+    });
+
+    await expect(
+      createStateOfficialsService(
+        options(cache, fetchStateLegislators),
+      ).getOfficials(jurisdiction),
     ).resolves.toEqual({ status: "unavailable" });
     expect(cache.writes).toEqual([]);
   });
@@ -680,6 +721,16 @@ function withVacancySource(
       }],
     }],
   };
+}
+
+function oversizedSeats(): StateRosterInput["seats"] {
+  return Array.from({ length: 101 }, (_, index) => ({
+    chamber: "upper" as const,
+    district: "13",
+    seat: String(index + 1),
+    people: [],
+    vacancySources: [],
+  }));
 }
 
 function hoursBefore(hours: number) {

@@ -1,6 +1,8 @@
 import "server-only";
 
 import {
+  MAX_STATE_ROSTER_RECORDS,
+  MAX_STATE_ROSTER_SOURCES,
   stateJurisdictionFromDivisions,
   type StateJurisdiction,
   type StateRosterInput,
@@ -49,10 +51,8 @@ type JsonOutcome =
 const ROOT = "https://v3.openstates.org";
 const PER_PAGE = 20;
 const MAX_PAGES = 5;
-const MAX_RECORDS = 100;
 const MAX_DISTRICT_FILTERS = 3;
 const MAX_BODY_BYTES = 262_144;
-const MAX_OFFICIAL_SOURCES = 8;
 const publicText = /^(?=.{1,200}$)[^\u0000-\u001f\u007f]+$/;
 const identifier = /^(?=.{1,200}$)[^\s\u0000-\u001f\u007f]+$/;
 const stateCode = /^[A-Z]{2}$/;
@@ -90,7 +90,7 @@ export const fetchStateLegislators: FetchStateLegislators = async (
       if (response.status === "unavailable") {
         return response;
       }
-      if (people.length + response.people.length > MAX_RECORDS) {
+      if (people.length + response.people.length > MAX_STATE_ROSTER_RECORDS) {
         return unavailable("oversize");
       }
       for (const person of response.people) {
@@ -186,7 +186,7 @@ async function fetchDistrict(
     if (parsed === null) {
       return unavailable("malformed");
     }
-    if (parsed.maxPage > MAX_PAGES || parsed.totalItems > MAX_RECORDS) {
+    if (parsed.maxPage > MAX_PAGES || parsed.totalItems > MAX_STATE_ROSTER_RECORDS) {
       return unavailable("oversize");
     }
     const expectedMaxPage = Math.max(1, Math.ceil(parsed.totalItems / PER_PAGE));
@@ -199,7 +199,7 @@ async function fetchDistrict(
       parsed.results.length !== expectedPageSize ||
       (totalItems !== undefined && totalItems !== parsed.totalItems) ||
       (maxPage !== undefined && maxPage !== parsed.maxPage) ||
-      people.length + parsed.results.length > MAX_RECORDS
+      people.length + parsed.results.length > MAX_STATE_ROSTER_RECORDS
     ) {
       return unavailable("partial");
     }
@@ -353,7 +353,7 @@ function parseSources(values: readonly unknown[], state: string, checkedAt: stri
     if (validation.status === "invalid") return null;
     if (validation.status === "untrusted") continue;
     if (urls.has(value.url)) continue;
-    if (sources.length >= MAX_OFFICIAL_SOURCES) return null;
+    if (sources.length >= MAX_STATE_ROSTER_SOURCES) return null;
     urls.add(value.url);
     sources.push({ sourceType: "official", publicUrl: value.url, retrievedAt: checkedAt, effectiveAt: null });
   }
