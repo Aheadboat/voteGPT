@@ -4,7 +4,7 @@ voteGPT helps U.S. voters find current representatives, understand upcoming elec
 
 ## Status
 
-R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 is VERIFIED on draft PR #24 at reviewed feature implementation head `3debae081b42747647b5158dc08be32aef7471d6`: both exact-head hosted CI triggers passed, GitHub reported `CLEAN` and `MERGEABLE`, and independent whole-branch re-review is clean. The coordinator-only VERIFIED record is subject to its own current-head PR checks before presentation. Human Gate B is next; F6 has not merged and is not `DONE`. G1 and every later roadmap item remain TODO pending separate authorization.
+R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout; G1 and every later item remain `TODO` and inactive.
 
 ## Local identity setup
 
