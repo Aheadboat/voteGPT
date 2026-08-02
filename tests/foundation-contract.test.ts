@@ -172,6 +172,81 @@ function expectedAuthorizedPairActiveIds(statuses: Map<string, string>) {
     .map(([id]) => id)
 }
 
+type F6LifecycleContext = {
+  activeIds: string[]
+  item: string
+  readme: string
+  status: string
+}
+
+function expectF6Lifecycle({
+  activeIds,
+  item,
+  readme,
+  status,
+}: F6LifecycleContext): boolean {
+  if (status !== "VERIFIED" && status !== "DONE") {
+    throw new Error("Unsupported F6 lifecycle status: " + status)
+  }
+
+  const isDone = status === "DONE"
+
+  expect(activeIds).toEqual(isDone ? [] : ["F6"])
+  expect(readCoordinationField(item, "Phase")).toBe(
+    isDone ? "`DONE`" : "`VERIFIED`",
+  )
+
+  if (isDone) {
+    const featurePr = readCoordinationField(item, "Feature PR/CI")
+    const featureMerge = readCoordinationField(item, "Feature merge")
+    const postMerge = readCoordinationField(item, "Post-merge evidence")
+    const closeout = readCoordinationField(item, "Closeout PR/CI/merge")
+    const nextGate = readCoordinationField(item, "Next Human Gate")
+
+    expect(featurePr).toBe(
+      "[PR #24](https://github.com/Aheadboat/voteGPT/pull/24) merged after approved head `5abf51039bb4cd1d8de1861b598e1555f14f9f59` passed exact-head push CI run `30724914634` and pull-request CI run `30724915679`; each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported the approved head `CLEAN` and `MERGEABLE`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on 2026-08-02.",
+    )
+    expect(featureMerge).toBe(
+      "[PR #24](https://github.com/Aheadboat/voteGPT/pull/24) merged to `main` as `8ba96b61aa51b76355066b990b06498079cee92e` on 2026-08-02 UTC; feature head `5abf51039bb4cd1d8de1861b598e1555f14f9f59` is reachable from `main`, and the merge commit has parents `9f77d15d2ef15ab411fadebd2c688a2f217886e5` and `5abf51039bb4cd1d8de1861b598e1555f14f9f59` with tree `db0d7406aecdeab678a8e38509ac5ca4ba432554`.",
+    )
+    expect(postMerge).toBe(
+      "Exact merged `main` `8ba96b61aa51b76355066b990b06498079cee92e` passed local `npm.cmd run check` (35 files/944 tests plus typecheck, zero-warning lint, and production build), `npm.cmd run db:check`, the focused state-official cache contract (6 passed, 2 PostgreSQL-only skipped under PGlite), and the required local E2E guard `E2E database requires explicit destructive opt-in.` Hosted push [run `30764781792`](https://github.com/Aheadboat/voteGPT/actions/runs/30764781792) passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. After merge, `codegraph sync .` and `codegraph status --json .` reported 102 files, 2,125 nodes, 7,953 edges, zero pending files, no worktree mismatch, and no reindex recommendation.",
+    )
+    const closeoutMatch = closeout.match(
+      /^\[PR #(\d+)\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/pull\/(\d+)\) changes only `ROADMAP\.md` and `README\.md`; current-head hosted CI and its merge provide final closeout proof\.$/,
+    )
+    expect(closeoutMatch, "exact F6 closeout evidence").not.toBeNull()
+    expect(closeoutMatch?.[1], "matching F6 closeout PR numbers").toBe(
+      closeoutMatch?.[2],
+    )
+    expect(nextGate).toBe(
+      "None; Human Gate B was approved before the feature merge, this closeout activates no later item, and F6 is complete only when this closeout merge reaches `main`.",
+    )
+    expect(readme).toContain(
+      "F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout; G1 and every later item remain `TODO` and inactive.",
+    )
+
+    return true
+  }
+
+  expect(readCoordinationField(item, "Feature PR/CI")).toBe(
+    "Draft [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) contains feature implementation review head `3debae081b42747647b5158dc08be32aef7471d6`; its exact-head push CI run `30724661629` and pull-request CI run `30724663357` each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that implementation head `CLEAN` and `MERGEABLE`; independent whole-branch re-review found no unresolved Critical, Important, or Minor finding. The PR remains draft pending Human Gate B, and the coordinator-only `VERIFIED` record on top must pass its own current-head hosted CI before presentation.",
+  )
+  expect(readCoordinationField(item, "Feature merge")).toBe("Pending.")
+  expect(readCoordinationField(item, "Post-merge evidence")).toBe("Pending.")
+  expect(readCoordinationField(item, "Closeout PR/CI/merge")).toBe("Pending.")
+  expect(readCoordinationField(item, "Next Human Gate")).toBe(
+    "Human Gate B — after `VERIFIED`, successful feature PR CI, mergeability, and independent review, approve or reject the delivered behavior before merge.",
+  )
+  expect(readme).toContain("F6 is VERIFIED on draft PR #24")
+  expect(readme).toContain("both exact-head hosted CI triggers passed")
+  expect(readme).toContain(
+    "Human Gate B is next; F6 has not merged and is not `DONE`",
+  )
+
+  return isDone
+}
+
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
@@ -402,6 +477,83 @@ describe("repository context and hygiene contract", () => {
 })
 
 describe("concurrent roadmap delivery contract", () => {
+  it("accepts the exact F6 closeout lifecycle without activating a later item", () => {
+    const completedItem = [
+      "## F6 — State Officials and Government-Level Navigation [DONE]",
+      "",
+      "### Coordination record",
+      "",
+      "- **Phase:** `DONE`",
+      "- **Feature PR/CI:** [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) merged after approved head `5abf51039bb4cd1d8de1861b598e1555f14f9f59` passed exact-head push CI run `30724914634` and pull-request CI run `30724915679`; each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported the approved head `CLEAN` and `MERGEABLE`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on 2026-08-02.",
+      "- **Feature merge:** [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) merged to `main` as `8ba96b61aa51b76355066b990b06498079cee92e` on 2026-08-02 UTC; feature head `5abf51039bb4cd1d8de1861b598e1555f14f9f59` is reachable from `main`, and the merge commit has parents `9f77d15d2ef15ab411fadebd2c688a2f217886e5` and `5abf51039bb4cd1d8de1861b598e1555f14f9f59` with tree `db0d7406aecdeab678a8e38509ac5ca4ba432554`.",
+      "- **Post-merge evidence:** Exact merged `main` `8ba96b61aa51b76355066b990b06498079cee92e` passed local `npm.cmd run check` (35 files/944 tests plus typecheck, zero-warning lint, and production build), `npm.cmd run db:check`, the focused state-official cache contract (6 passed, 2 PostgreSQL-only skipped under PGlite), and the required local E2E guard `E2E database requires explicit destructive opt-in.` Hosted push [run `30764781792`](https://github.com/Aheadboat/voteGPT/actions/runs/30764781792) passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. After merge, `codegraph sync .` and `codegraph status --json .` reported 102 files, 2,125 nodes, 7,953 edges, zero pending files, no worktree mismatch, and no reindex recommendation.",
+      "- **Closeout PR/CI/merge:** [PR #26](https://github.com/Aheadboat/voteGPT/pull/26) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.",
+      "- **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and F6 is complete only when this closeout merge reaches `main`.",
+    ].join("\n")
+    const completedReadme =
+      "F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout; G1 and every later item remain `TODO` and inactive."
+
+    expect(
+      expectF6Lifecycle({
+        activeIds: [],
+        item: completedItem,
+        readme: completedReadme,
+        status: "DONE",
+      }),
+    ).toBe(true)
+    expect(() =>
+      expectF6Lifecycle({
+        activeIds: ["G1"],
+        item: completedItem,
+        readme: completedReadme,
+        status: "DONE",
+      }),
+    ).toThrow()
+    expect(() =>
+      expectF6Lifecycle({
+        activeIds: [],
+        item: completedItem,
+        readme: completedReadme,
+        status: "TODO",
+      }),
+    ).toThrow("Unsupported F6 lifecycle status: TODO")
+    for (const [valid, invalid] of [
+      ["- **Phase:** `DONE`", "- **Phase:** `VERIFIED`"],
+      ["the user approved Human Gate B", "the user did not approve Human Gate B"],
+      ["merged to `main`", "has not merged to `main`"],
+      ["Hosted push [run `30764781792`]", "Hosted push [run `30764781792`] failed after"],
+      [
+        "current-head hosted CI and its merge provide final closeout proof",
+        "current-head hosted CI and its merge remain Pending",
+      ],
+      [
+        "this closeout activates no later item",
+        "this closeout activates G1",
+      ],
+    ] as const) {
+      const mutatedItem = completedItem.replace(valid, invalid)
+      expect(mutatedItem, `missing F6 lifecycle mutation text: ${valid}`).not.toBe(
+        completedItem,
+      )
+      expect(() =>
+        expectF6Lifecycle({
+          activeIds: [],
+          item: mutatedItem,
+          readme: completedReadme,
+          status: "DONE",
+        }),
+      ).toThrow()
+    }
+    expect(() =>
+      expectF6Lifecycle({
+        activeIds: [],
+        item: completedItem,
+        readme: completedReadme.replace("is complete", "is incomplete"),
+        status: "DONE",
+      }),
+    ).toThrow()
+  })
+
   it("requires dependency-safe concurrent admission", () => {
     const agents = readRepositoryFile("AGENTS.md")
     const roadmap = readRepositoryFile("ROADMAP.md")
@@ -899,11 +1051,15 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
     expect(r2Status).toBe("DONE")
-    expect(f6Status).toBe("VERIFIED")
     const r2IsDone = r2Status === "DONE"
+    expectF6Lifecycle({
+      activeIds,
+      item: f6,
+      readme,
+      status: f6Status,
+    })
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
-    expect(activeIds).toEqual(["F6"])
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
     expect(
       expectedAuthorizedPairActiveIds(
@@ -979,11 +1135,6 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("F6 is VERIFIED on draft PR #24")
-      expect(readme).toContain("both exact-head hosted CI triggers passed")
-      expect(readme).toContain(
-        "Human Gate B is next; F6 has not merged and is not `DONE`",
-      )
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
       expect(readme).toContain("Human Gate B is approved")
@@ -1103,7 +1254,6 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
     expect(f6).toContain("single-item pre-activation audit passed")
     const expectedF6CoordinationFields = new Map<string, string>([
-      ["Phase", "`VERIFIED`"],
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
@@ -1126,18 +1276,7 @@ describe("concurrent roadmap delivery contract", () => {
         "Merge order",
         "F6 feature PR → post-merge verification on `main` → F6 closeout PR/CI/merge. No later item activates automatically.",
       ],
-      [
-        "Feature PR/CI",
-        "Draft [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) contains feature implementation review head `3debae081b42747647b5158dc08be32aef7471d6`; its exact-head push CI run `30724661629` and pull-request CI run `30724663357` each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that implementation head `CLEAN` and `MERGEABLE`; independent whole-branch re-review found no unresolved Critical, Important, or Minor finding. The PR remains draft pending Human Gate B, and the coordinator-only `VERIFIED` record on top must pass its own current-head hosted CI before presentation.",
-      ],
       ["Blockers", "None."],
-      ["Feature merge", "Pending."],
-      ["Post-merge evidence", "Pending."],
-      ["Closeout PR/CI/merge", "Pending."],
-      [
-        "Next Human Gate",
-        "Human Gate B — after `VERIFIED`, successful feature PR CI, mergeability, and independent review, approve or reject the delivered behavior before merge.",
-      ],
     ])
     const expectF6CoordinationFields = (item: string) => {
       for (const [field, expected] of expectedF6CoordinationFields) {
@@ -1285,10 +1424,6 @@ describe("concurrent roadmap delivery contract", () => {
       expect(mutated, `missing authorized F6 correction text: ${authorized}`).not.toBe(f6)
       expect(() => expectF6CorrectionScope(mutated)).toThrow()
     }
-    expect(readme).toContain("F6 is VERIFIED on draft PR #24")
-    expect(readme).toContain(
-      "Human Gate B is next; F6 has not merged and is not `DONE`",
-    )
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
@@ -1307,15 +1442,6 @@ describe("concurrent roadmap delivery contract", () => {
       [
         "Merge order",
         expectedF6CoordinationFields.get("Merge order") + " → G1 activation.",
-      ],
-      [
-        "Feature PR/CI",
-        "Not Pending; feature implementation may begin before Human Gate A.",
-      ],
-      ["Feature merge", "Not Pending."],
-      [
-        "Next Human Gate",
-        "Human Gate A is approved — production work may begin.",
       ],
     ] as const) {
       const valid = expectedF6CoordinationFields.get(field)
