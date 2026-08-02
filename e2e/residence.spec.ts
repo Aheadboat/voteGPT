@@ -6,6 +6,7 @@ import {
   expect,
   test,
   type BrowserContext,
+  type Locator,
   type Page,
   type Route,
   type TestInfo,
@@ -170,7 +171,14 @@ test("resolves a manual residence with equal provenance and coverage", async ({
     page.getByRole("link", { name: "Skip to main content" }),
     page.getByRole("link", { name: "voteGPT home" }),
     page.getByRole("link", { name: "Sign in" }),
-    address,
+  ]) {
+    await page.keyboard.press("Tab");
+    await expect(target).toBeFocused();
+  }
+
+  await tabTo(page, address);
+
+  for (const target of [
     page.getByRole("button", { name: "Check residence" }),
     page.getByRole("button", { name: "Use this device once" }),
   ]) {
@@ -985,6 +993,19 @@ async function expectSavedGetCountStable(
 
 function residenceStatus(page: Page) {
   return page.locator(".residence-preview").getByRole("status");
+}
+
+async function tabTo(page: Page, target: Locator) {
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((element) => element === document.activeElement)) {
+      await expect(target).toBeFocused();
+      return;
+    }
+  }
+  throw new Error(
+    "Keyboard focus did not reach Voting residence address within 20 Tab presses.",
+  );
 }
 
 function assertNoProviderOrUnexpectedResolverTraffic(

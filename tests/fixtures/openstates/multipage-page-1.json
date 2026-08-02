@@ -1,0 +1,650 @@
+{
+  "results": [
+    {
+      "id": "ocd-person/multi-01",
+      "name": "Member 01",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "01",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-01/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-01"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-02",
+      "name": "Member 02",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "02",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-02/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-02"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-03",
+      "name": "Member 03",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "03",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-03/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-03"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-04",
+      "name": "Member 04",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "04",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-04/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-04"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-05",
+      "name": "Member 05",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "05",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-05/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-05"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-06",
+      "name": "Member 06",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "06",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-06/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-06"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-07",
+      "name": "Member 07",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "07",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-07/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-07"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-08",
+      "name": "Member 08",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "08",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-08/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-08"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-09",
+      "name": "Member 09",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "09",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-09/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-09"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-10",
+      "name": "Member 10",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "10",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-10/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-10"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-11",
+      "name": "Member 11",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "11",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-11/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-11"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-12",
+      "name": "Member 12",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "12",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-12/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-12"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-13",
+      "name": "Member 13",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "13",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-13/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-13"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-14",
+      "name": "Member 14",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "14",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-14/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-14"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-15",
+      "name": "Member 15",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "15",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-15/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-15"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-16",
+      "name": "Member 16",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "16",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-16/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-16"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-17",
+      "name": "Member 17",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "17",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-17/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-17"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-18",
+      "name": "Member 18",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "18",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-18/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-18"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-19",
+      "name": "Member 19",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "19",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-19/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-19"
+        }
+      ]
+    },
+    {
+      "id": "ocd-person/multi-20",
+      "name": "Member 20",
+      "party": "Independent",
+      "jurisdiction": {
+        "id": "ocd-jurisdiction/country:us/state:ca/government",
+        "name": "California",
+        "classification": "state"
+      },
+      "given_name": "Member",
+      "family_name": "20",
+      "image": "",
+      "email": "",
+      "gender": "",
+      "birth_date": "",
+      "death_date": "",
+      "extras": {},
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-07-03T00:00:00.000Z",
+      "openstates_url": "https://openstates.org/person/multi-20/",
+      "current_role": {
+        "title": "Delegate",
+        "org_classification": "lower",
+        "district": "10",
+        "division_id": "ocd-division/country:us/state:ca/sldl:10"
+      },
+      "sources": [
+        {
+          "url": "https://www.assembly.ca.gov/members/multi-20"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "per_page": 20,
+    "page": 1,
+    "max_page": 2,
+    "total_items": 21
+  }
+}

@@ -1,0 +1,82 @@
+.shell {
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+.tabs,
+.modes {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tabs {
+  overflow-x: auto;
+  border-bottom: 1px solid #d1d5db;
+}
+
+.tab,
+.mode {
+  color: #1d4ed8;
+  font-weight: 650;
+  text-decoration-thickness: 0.125rem;
+  text-underline-offset: 0.2rem;
+}
+
+.tab {
+  flex: 1 0 auto;
+  padding: 0.625rem 0.75rem;
+  border-bottom: 0.25rem solid transparent;
+  text-align: center;
+}
+
+.tab[aria-selected="true"] {
+  color: #111827;
+  border-bottom-color: #1d4ed8;
+  text-decoration: none;
+}
+
+.modes {
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+.mode[aria-current="page"] {
+  color: #111827;
+  text-decoration-thickness: 0.1875rem;
+}
+
+.tab:focus-visible,
+.mode:focus-visible {
+  outline: 0.1875rem solid #1d4ed8;
+  outline-offset: 0.1875rem;
+}
+
+.category {
+  margin: 1rem 0 0;
+  color: #374151;
+}
+
+.category span {
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+.panel {
+  margin-top: 1rem;
+}
+
+@media (min-width: 48rem) {
+  .shell {
+    padding: 1.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .mode {
+    scroll-behavior: auto;
+  }
+}

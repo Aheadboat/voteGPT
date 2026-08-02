@@ -4,7 +4,9 @@ import { createDatabase } from "@/db";
 import { getRuntimeAuth } from "@/lib/auth";
 import { AccountControls } from "@/components/account-controls";
 import { FederalOfficials } from "@/components/federal-officials";
+import { GovernmentNavigation } from "@/components/government-navigation";
 import { ResidencePreview } from "@/components/residence-preview";
+import { StateOfficials } from "@/components/state-officials";
 import { fetchCongressRoster } from "@/lib/congress-gov";
 import { federalJurisdictionFromDivisions } from "@/lib/federal-officials";
 import {
@@ -12,11 +14,27 @@ import {
   createFederalOfficialsService,
 } from "@/lib/federal-officials-service";
 import { fetchCurrentHouseVacancies } from "@/lib/house-clerk-vacancy";
+import { normalizeGovernmentNavigation } from "@/lib/government-navigation";
+import type { GovernmentNavigationState } from "@/lib/government-navigation";
+import { fetchStateLegislators } from "@/lib/openstates";
 import { getSavedResidenceDivisions } from "@/lib/saved-residence";
+import { stateJurisdictionFromDivisions } from "@/lib/state-officials";
+import {
+  createStateOfficialCacheRepository,
+  createStateOfficialsService,
+} from "@/lib/state-officials-service";
 
 const signInURL = "/sign-in?next=%2Fdashboard";
 
-export default async function DashboardPage() {
+type DashboardPageProperties = Readonly<{
+  searchParams?: Promise<
+    Record<string, string | string[] | undefined>
+  >;
+}>;
+
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProperties = {}) {
   const requestHeaders = await headers();
   const cookie = requestHeaders.get("cookie");
 
@@ -33,7 +51,9 @@ export default async function DashboardPage() {
     redirect(signInURL);
   }
 
-  const federalOfficials = await federalOfficialsFor(
+  const navigation = normalizeGovernmentNavigation(await searchParams);
+  const selectedPanel = await selectedGovernmentPanel(
+    navigation,
     currentSession.user.id,
   );
 
@@ -51,14 +71,46 @@ export default async function DashboardPage() {
           from the home page.
         </p>
         <AccountControls>
-          <section aria-labelledby="federal-in-office-heading">
-            <h2 id="federal-in-office-heading">In office</h2>
-            {federalOfficials}
-          </section>
+          <GovernmentNavigation
+            panels={{ [navigation.level]: selectedPanel }}
+            searchParams={{ level: navigation.level, mode: navigation.mode }}
+          />
           <ResidencePreview />
         </AccountControls>
       </section>
     </main>
+  );
+}
+
+async function selectedGovernmentPanel(
+  navigation: GovernmentNavigationState,
+  userId: string,
+) {
+  if (navigation.mode === "elections") {
+    return (
+      <p role="status">
+        Election information is unavailable until F7. Choose In office for
+        current officials.
+      </p>
+    );
+  }
+  if (navigation.level === "local") {
+    return (
+      <p role="status">
+        Local coverage is unavailable for verified display. Choose State or
+        Federal for current coverage.
+      </p>
+    );
+  }
+  const officials =
+    navigation.level === "state"
+      ? await stateOfficialsFor(userId)
+      : await federalOfficialsFor(userId);
+  return (
+    <section aria-labelledby="in-office-heading">
+      <h2 id="in-office-heading">In office</h2>
+      {officials}
+    </section>
   );
 }
 
@@ -107,4 +159,32 @@ async function federalOfficialsFor(userId: string) {
   });
   const result = await service.getOfficials(jurisdiction.jurisdiction);
   return <FederalOfficials heading={null} result={result} />;
+}
+
+async function stateOfficialsFor(userId: string) {
+  const divisions = await getSavedResidenceDivisions(userId);
+  if (divisions.length === 0) {
+    return <p>Save a voting residence to see state legislature officials.</p>;
+  }
+
+  const jurisdiction = stateJurisdictionFromDivisions(divisions);
+  if (jurisdiction.status === "invalid") {
+    return (
+      <p>
+        Your saved state-legislative coverage is incomplete. Preview and save
+        it again to see state legislature officials.
+      </p>
+    );
+  }
+
+  const database = await createDatabase(process.env.DATABASE_URL!);
+  const service = createStateOfficialsService({
+    cache: createStateOfficialCacheRepository(database),
+    environment: { OPENSTATES_API_KEY: process.env.OPENSTATES_API_KEY },
+    fetch: globalThis.fetch,
+    fetchStateLegislators,
+    now: () => new Date(),
+  });
+  const result = await service.getOfficials(jurisdiction.jurisdiction);
+  return <StateOfficials heading={null} result={result} />;
 }

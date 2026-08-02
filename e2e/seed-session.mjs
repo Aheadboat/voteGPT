@@ -69,8 +69,13 @@ if (process.env.CONGRESS_GOV_API_KEY?.trim()) {
   throw new Error("E2E federal fixtures require a blank Congress.gov credential.");
 }
 process.env.CONGRESS_GOV_API_KEY = "";
+if (process.env.OPENSTATES_API_KEY?.trim()) {
+  throw new Error("E2E state fixtures require a blank OpenStates credential.");
+}
+process.env.OPENSTATES_API_KEY = "";
 const migrationsFolder = resolve(process.cwd(), "drizzle");
 const federalFixtureClock = createFederalFixtureClock(new Date());
+const stateFixtureClock = createStateFixtureClock(new Date());
 const identities = [
   {
     accountId: "e2e-google-account",
@@ -101,7 +106,14 @@ const federalIdentities = [
   federalIdentity("tx-01-expired", "Texas 1", "TX", 1),
   federalIdentity("dc-unsupported", "District of Columbia", "DC", 0),
 ];
-const fixtureIdentities = [...identities, ...federalIdentities];
+const stateIdentities = [
+  stateIdentity("fresh", "Georgia", "GA", "2", "10", 13),
+  stateIdentity("stale", "California", "CA", "1", "1"),
+  stateIdentity("expired", "Texas", "TX", "1", "1"),
+  stateIdentity("unavailable", "Florida", "FL", "1", "1"),
+];
+const residenceIdentities = [...federalIdentities, ...stateIdentities];
+const fixtureIdentities = [...identities, ...residenceIdentities];
 
 const pgliteDirectory = databaseUrl.startsWith("pglite://")
   ? databaseUrl.slice("pglite://".length)
@@ -139,7 +151,8 @@ if (process.argv.includes("--start-server")) {
 async function seedIdentities(query) {
   await query("BEGIN");
   try {
-    const cacheRecords = federalCacheRecords(federalFixtureClock);
+    const federalRecords = federalCacheRecords(federalFixtureClock);
+    const stateRecords = stateCacheRecords(stateFixtureClock);
     await query(
       `DELETE FROM "user"
        WHERE "id" = ANY($1::text[]) OR lower("email") = ANY($2::text[])`,
@@ -151,7 +164,12 @@ async function seedIdentities(query) {
     await query(
       `DELETE FROM "federal_official_cache"
        WHERE "cache_key" = ANY($1::text[])`,
-      [cacheRecords.map(({ cacheKey }) => cacheKey)],
+      [federalRecords.map(({ cacheKey }) => cacheKey)],
+    );
+    await query(
+      `DELETE FROM "state_official_cache"
+       WHERE "cache_key" = ANY($1::text[])`,
+      [stateCacheKeys()],
     );
 
     for (const identity of fixtureIdentities) {
@@ -180,7 +198,7 @@ async function seedIdentities(query) {
       );
     }
 
-    for (const identity of federalIdentities) {
+    for (const identity of residenceIdentities) {
       if (!identity.divisions) {
         continue;
       }
@@ -216,9 +234,23 @@ async function seedIdentities(query) {
       }
     }
 
-    for (const record of cacheRecords) {
+    for (const record of federalRecords) {
       await query(
         `INSERT INTO "federal_official_cache" (
+          "cache_key", "payload", "retrieved_at", "refresh_after", "stale_after"
+        ) VALUES ($1, $2::jsonb, $3::timestamptz, $4::timestamptz, $5::timestamptz)`,
+        [
+          record.cacheKey,
+          JSON.stringify(record.payload),
+          record.retrievedAt.toISOString(),
+          record.refreshAfter.toISOString(),
+          record.staleAfter.toISOString(),
+        ],
+      );
+    }
+    for (const record of stateRecords) {
+      await query(
+        `INSERT INTO "state_official_cache" (
           "cache_key", "payload", "retrieved_at", "refresh_after", "stale_after"
         ) VALUES ($1, $2::jsonb, $3::timestamptz, $4::timestamptz, $5::timestamptz)`,
         [
@@ -266,6 +298,141 @@ function federalIdentity(slug, name, stateCode, district) {
                   : `${stateCode} Congressional District ${district}`,
             },
           ],
+  };
+}
+
+function stateIdentity(slug, name, stateCode, upperDistrict, lowerDistrict, congressionalDistrict) {
+  const lower = stateCode.toLowerCase();
+  const userId = `e2e-state-${slug}-user`;
+  return {
+    accountId: `e2e-state-${slug}-google-account`,
+    accountRowId: `e2e-state-${slug}-account`,
+    email: `e2e-state-${slug}@example.invalid`,
+    name: `${name} State E2E Voter`,
+    sessionId: `e2e-state-${slug}-session`,
+    sessionToken: `e2e-state-${slug}-session-token`,
+    userId,
+    divisions: [
+      { type: "state", id: `ocd-division/country:us/state:${lower}`, name },
+      {
+        type: "state_upper",
+        id: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}`,
+        name: `${name} Upper District ${upperDistrict}`,
+      },
+      {
+        type: "state_lower",
+        id: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}`,
+        name: `${name} Lower District ${lowerDistrict}`,
+      },
+      ...(congressionalDistrict === undefined
+        ? []
+        : [{
+            type: "congressional_district",
+            id: `ocd-division/country:us/state:${lower}/cd:${congressionalDistrict}`,
+            name: `${name} Congressional District ${congressionalDistrict}`,
+          }]),
+    ],
+  };
+}
+
+function createStateFixtureClock(now) {
+  return {
+    freshRetrievedAt: new Date(now.getTime() - 60 * 60 * 1_000),
+    staleRetrievedAt: new Date(now.getTime() - 25 * 60 * 60 * 1_000),
+    expiredRetrievedAt: new Date(now.getTime() - 73 * 60 * 60 * 1_000),
+  };
+}
+
+function stateCacheRecords(clock) {
+  return [
+    stateCacheRecord("GA", "2", "10", clock.freshRetrievedAt, [
+      stateSeat("upper", "2", "District 2", [
+        statePerson("ga-upper-avery", "Avery State", "upper", "2", "District 2", "https://www.legis.ga.gov/members/senate/2", clock.freshRetrievedAt),
+        statePerson("ga-upper-blair", "Blair State", "upper", "2", "District 2", "https://www.legis.ga.gov/members/senate/3", clock.freshRetrievedAt),
+      ]),
+      stateSeat("upper", "2", "District 2 Seat B", [], [stateSource("vacancy", "https://www.legis.ga.gov/vacancies", clock.freshRetrievedAt)]),
+      stateSeat("lower", "10", "District 10", [
+        statePerson("ga-lower-unverified", "Unverified State Record", "lower", "10", "District 10", "https://www.legis.ga.gov/members/house/10", clock.freshRetrievedAt, false),
+      ]),
+    ]),
+    stateCacheRecord("CA", "1", "1", clock.staleRetrievedAt, [
+      stateSeat("upper", "1", "District 1", [
+        statePerson("ca-upper-stale", "California State Senator", "upper", "1", "District 1", "https://www.senate.ca.gov/senate/1", clock.staleRetrievedAt),
+      ]),
+      stateSeat("lower", "1", "District 1", [
+        statePerson("ca-lower-stale", "California State Assemblymember", "lower", "1", "District 1", "https://www.assembly.ca.gov/assemblymembers/1", clock.staleRetrievedAt),
+      ]),
+    ]),
+    stateCacheRecord("TX", "1", "1", clock.expiredRetrievedAt, [
+      stateSeat("upper", "1", "District 1", [
+        statePerson("tx-upper-expired", "Texas State Senator", "upper", "1", "District 1", "https://capitol.texas.gov/senate/1", clock.expiredRetrievedAt),
+      ]),
+    ]),
+  ];
+}
+
+function stateCacheKeys() {
+  return [
+    "state-roster:v1:GA:U-2:L-10",
+    "state-roster:v1:CA:U-1:L-1",
+    "state-roster:v1:TX:U-1:L-1",
+    "state-roster:v1:FL:U-1:L-1",
+  ];
+}
+
+function stateCacheRecord(stateCode, upperDistrict, lowerDistrict, retrievedAt, seats) {
+  const refreshAfter = new Date(retrievedAt.getTime() + 24 * 60 * 60 * 1_000);
+  const staleAfter = new Date(retrievedAt.getTime() + 72 * 60 * 60 * 1_000);
+  const lower = stateCode.toLowerCase();
+  const jurisdiction = {
+    stateCode,
+    stateDivisionId: `ocd-division/country:us/state:${lower}`,
+    jurisdictionId: `ocd-jurisdiction/country:us/state:${lower}/government`,
+    legislature: "bicameral",
+    districts: [
+      { chamber: "upper", district: upperDistrict, providerTargets: [{ label: upperDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}` }], divisionId: `ocd-division/country:us/state:${lower}/sldu:${upperDistrict}` },
+      { chamber: "lower", district: lowerDistrict, providerTargets: [{ label: lowerDistrict, divisionId: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}` }], divisionId: `ocd-division/country:us/state:${lower}/sldl:${lowerDistrict}` },
+    ],
+  };
+  return {
+    cacheKey: `state-roster:v1:${stateCode}:U-${upperDistrict}:L-${lowerDistrict}`,
+    payload: {
+      jurisdiction,
+      roster: {
+        freshness: {
+          checkedAt: retrievedAt.toISOString(),
+          refreshAfter: refreshAfter.toISOString(),
+          staleAfter: staleAfter.toISOString(),
+          state: "fresh",
+        },
+        seats,
+      },
+    },
+    retrievedAt,
+    refreshAfter,
+    staleAfter,
+  };
+}
+
+function stateSeat(chamber, district, seat, people, vacancySources = []) {
+  return { chamber, district, seat, people, vacancySources };
+}
+
+function statePerson(id, name, chamber, district, seat, publicUrl, retrievedAt, current = true) {
+  return {
+    id,
+    name,
+    role: { chamber, district, seat, current },
+    sources: [stateSource("official", publicUrl, retrievedAt)],
+  };
+}
+
+function stateSource(sourceType, publicUrl, retrievedAt) {
+  return {
+    sourceType,
+    publicUrl,
+    retrievedAt: retrievedAt.toISOString(),
+    effectiveAt: null,
   };
 }
 

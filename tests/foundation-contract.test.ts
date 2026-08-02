@@ -272,6 +272,7 @@ describe("development foundation", () => {
         "GOOGLE_CLIENT_ID=",
         "GOOGLE_CLIENT_SECRET=",
         "GOOGLE_CIVIC_API_KEY=",
+        "OPENSTATES_API_KEY=",
         "RESIDENCE_ENCRYPTION_ACTIVE_KEY=",
         "RESIDENCE_ENCRYPTION_KEYS=",
       ].sort(),
@@ -898,7 +899,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
     expect(r2Status).toBe("DONE")
-    expect(f6Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(f6Status).toBe("VERIFIED")
     const r2IsDone = r2Status === "DONE"
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
@@ -978,8 +979,11 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("F6 is active in DISCOVER/DESIGN/PLAN")
-      expect(readme).toContain("Human Gate A")
+      expect(readme).toContain("F6 is VERIFIED on draft PR #24")
+      expect(readme).toContain("both exact-head hosted CI triggers passed")
+      expect(readme).toContain(
+        "Human Gate B is next; F6 has not merged and is not `DONE`",
+      )
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
       expect(readme).toContain("Human Gate B is approved")
@@ -1099,12 +1103,12 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
     expect(f6).toContain("single-item pre-activation audit passed")
     const expectedF6CoordinationFields = new Map<string, string>([
-      ["Phase", "`DISCOVER/DESIGN/PLAN`"],
+      ["Phase", "`VERIFIED`"],
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
         "Integrated-main commit",
-        "`ea8bff3417896ba8ca669ccb517e7617d070b00d`",
+        "`9f77d15d2ef15ab411fadebd2c688a2f217886e5`",
       ],
       [
         "Admission result",
@@ -1112,7 +1116,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Assigned feature lead",
-        "`f6_state_navigation_lead` — dispatch begins only after the activation PR merges and that merge is integrated into the inert F6 branch.",
+        "`f6_state_navigation_lead` — the activation merge and approved plan are integrated; the lead may execute the approved task graph and must stop after `VERIFIED` for coordinator review, feature PR/CI, and Human Gate B.",
       ],
       [
         "Ownership",
@@ -1124,7 +1128,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Feature PR/CI",
-        "Pending; activation and Human Gate A precede feature implementation or PR.",
+        "Draft [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) contains feature implementation review head `3debae081b42747647b5158dc08be32aef7471d6`; its exact-head push CI run `30724661629` and pull-request CI run `30724663357` each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that implementation head `CLEAN` and `MERGEABLE`; independent whole-branch re-review found no unresolved Critical, Important, or Minor finding. The PR remains draft pending Human Gate B, and the coordinator-only `VERIFIED` record on top must pass its own current-head hosted CI before presentation.",
       ],
       ["Blockers", "None."],
       ["Feature merge", "Pending."],
@@ -1132,7 +1136,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["Closeout PR/CI/merge", "Pending."],
       [
         "Next Human Gate",
-        "Human Gate A — approve the overall F6 design, applicable UX DNA, tests-first task graph, dependencies, interfaces, ownership, risks, and non-goals before RED or production work.",
+        "Human Gate B — after `VERIFIED`, successful feature PR CI, mergeability, and independent review, approve or reject the delivered behavior before merge.",
       ],
     ])
     const expectF6CoordinationFields = (item: string) => {
@@ -1142,6 +1146,149 @@ describe("concurrent roadmap delivery contract", () => {
     }
 
     expectF6CoordinationFields(f6)
+    expect(f6).toContain(
+      "[PR #23](https://github.com/Aheadboat/voteGPT/pull/23)",
+    )
+    expect(f6).toContain("30611790622")
+    expect(f6).toContain("30611800273")
+    expect(f6).toContain("4d50a417c3a613453d5832218c5abd467f2b93b0")
+    expect(f6).toContain("9f77d15d2ef15ab411fadebd2c688a2f217886e5")
+    expect(f6).toContain("CLEAN")
+    expect(f6).toContain("MERGEABLE")
+    expect(f6).toContain("codegraph status --json .")
+    expect(f6).toContain("**F6-T1 RED/GREEN/review evidence:**")
+    expect(f6).toContain("43c9b0b00ae810c27ec587d93fd786e24511a941")
+    expect(f6).toContain("5581edc645729fd74cde8ae720ed9e0175406e76")
+    expect(f6).toContain("f9f10a3f59d5f796ebdc1937fe18f95f1e2fa049")
+    expect(f6).toContain("c1ed4a3b77191ff679936961b3b6b7133d96d366")
+    expect(f6).toContain("a58e64f9c46a73639a45130fc680f8279e35da56")
+    expect(f6).toContain("18/18")
+    expect(f6).toContain("**F6-T2 RED/GREEN/review evidence:**")
+    expect(f6).toContain("090c865abe4c43abc7b77eee15a6cf44e50b725e")
+    expect(f6).toContain("d3f29429ad844862941af51eb30c8680b1a206eb")
+    expect(f6).toContain("1402e4cd8e3b2d4ab28c2cd471b802302e64ed6c")
+    expect(f6).toContain("471d13721a4117e9fb7efe8ca5d9740f02229a1c")
+    expect(f6).toContain("server-only@0.0.1")
+    expect(f6).toContain("50-state institutional host policy")
+    expect(f6).toContain("public legislative query-key allowlist")
+    expect(f6).toContain("29/29")
+    expect(f6).toContain("32 files/767 tests")
+    expect(f6).toContain("**F6-T4 RED/GREEN/review evidence:**")
+    expect(f6).toContain("a5bdc58e9cff54394bf530a4f376cdfdfd55ded0")
+    expect(f6).toContain("46a6a9408a471912a3d24c2961e7f392fd4ef41b")
+    expect(f6).toContain("directive-free shared query contract")
+    expect(f6).toContain("hydration-safe manual roving focus")
+    expect(f6).toContain("no-JavaScript")
+    expect(f6).toContain("7/7")
+    expect(f6).toContain("33 files/774 tests")
+    expect(f6).toContain("**F6-T3 RED/GREEN/review evidence:**")
+    expect(f6).toContain("f9a37d70763b3805992d3fd759753e8344d36cdc")
+    expect(f6).toContain("6ae50dd3a8952376452af35787da18294f8f2493")
+    expect(f6).toContain("bf15e7640f2213fa8b20eb043ae224bb3bdc5545")
+    expect(f6).toContain("ba4e1d54eec2664b9b13ae9b459659186b2e14a1")
+    expect(f6).toContain("canonical jurisdiction envelope")
+    expect(f6).toContain("physical-connection lock contention")
+    expect(f6).toContain("25/25")
+    expect(f6).toContain("2/2 local PGlite")
+    expect(f6).toContain("34 files/799 tests")
+    expect(f6).toContain("**F6-T5 RED/GREEN/review evidence:**")
+    expect(f6).toContain("ca21501e20a984e2cd79718b83226dc0351be9f0")
+    expect(f6).toContain("8250927cf56523f4f773d9db9e3ea3fb6db0bc5b")
+    expect(f6).toContain("per-person source evidence")
+    expect(f6).toContain("client-bound prop tree")
+    expect(f6).toContain("35 files/810 tests")
+    expect(f6).toContain("**F6-T6 RED/GREEN/review evidence:**")
+    for (const commit of [
+      "f8674ad",
+      "775883d",
+      "fbc1ea6",
+      "98677e0",
+      "0ab6f0b",
+      "cd0a6df",
+    ]) {
+      expect(f6).toContain(commit)
+    }
+    expect(f6).toContain("4 files/56 tests")
+    expect(f6).toContain("4 files/104 tests")
+    expect(f6).toContain("**F6-T6 hosted VERIFIED evidence:**")
+    expect(f6).toContain("30680018371")
+    expect(f6).toContain("cd0a6df9e013492ac8316c9c732efa5f51f00d87")
+    expect(f6).toContain("3 files/33 tests")
+    expect(f6).toContain("26/26 Chromium journeys")
+    expect(f6).toContain("**F6 UX-DNA VERIFIED evidence:**")
+    expect(f6).toContain("16.57:1")
+    expect(f6).toContain("6.26:1")
+    expect(f6).toContain("`TEMPORARY.md` remains `None.`")
+    expect(f6).toContain("**F6 whole-branch review RED evidence:**")
+    expect(f6).toContain("30719077587")
+    expect(f6).toContain("30719089648")
+    expect(f6).toContain("named district representation")
+    expect(f6).toContain("cached-source trust-policy bypass")
+    expect(f6).toContain("false `Effective` timestamps")
+    expect(f6).toContain("equal-generation cache losers")
+    expect(f6).toContain("### Whole-branch review correction task graph")
+    expectTokensInOrder(f6, [
+      "| T6-C1 |",
+      "| T6-C2 |",
+      "| T6-C3 |",
+      "| T6-C4 |",
+      "| T6-C5 |",
+      "| T6-C6 |",
+    ])
+    expect(f6).toContain("canonical named OCD district")
+    expect(f6).toContain("one state-scoped source validator")
+    expect(f6).toContain("Person `updated_at` is not role-effective evidence")
+    expect(f6).toContain("equal-generation authoritative winner")
+    expect(f6).toContain("focused manual-activation tab")
+    expect(f6).toContain("shared provider/cache cardinality ceilings")
+    expect(f6).toContain("**F6 whole-branch correction VERIFIED evidence:**")
+    expect(f6).toContain("ae8e57782e7ffb26fb2c3aca92e86b0b696df7a9")
+    expect(f6).toContain("3debae081b42747647b5158dc08be32aef7471d6")
+    expect(f6).toContain("30724007880")
+    expect(f6).toContain("30724009154")
+    expect(f6).toContain("30724661629")
+    expect(f6).toContain("30724663357")
+    expect(f6).toContain("6 files/213 tests")
+    expect(f6).toContain("35 files/944 tests")
+    expect(f6).toContain("no unresolved Critical, Important, or Minor finding")
+    const expectF6CorrectionScope = (item: string) => {
+      const lines = item.split(/\r?\n/)
+      const task = lines.find((line) => line.startsWith("| T6 |"))
+      const approval = lines.find((line) =>
+        line.startsWith("- **F6-T6 hosted integration correction approval:**"),
+      )
+      expect(task).toBe(
+        "| T6 | Integrated journey, routing, hygiene, and verification evidence. | Seeded authenticated deep links, keyboard navigation, source/freshness, stale/unavailable recovery, no-JS links, responsive layout, map route, and temporary-artifact checks fail or are absent. | Create `e2e/government-navigation.spec.ts`; modify `e2e/seed-session.mjs` and `PROJECT-MAP.md`; after explicit user approval on 2026-07-31, modify `e2e/residence.spec.ts` only to replace its obsolete pre-F6 exact tab-order oracle with bounded address-focus reachability; modify `TEMPORARY.md` only if an intentional temporary entry exists; no live provider call. | T5. | `npm.cmd run check`; `npm.cmd run test:e2e` | Focused suites, PostgreSQL contract, full check, guarded Chromium, 375px/1280px visual checks, keyboard/screen-reader review, JavaScript-disabled navigation, `git diff --check`, map impact, and zero open temporary entries pass; independent review has no unresolved Critical/Important finding. |",
+      )
+      expect(approval).toBe(
+        "- **F6-T6 hosted integration correction approval:** Approved by the user on 2026-07-31 after exact head `fbc1ea674b975d83b596dbefd83cdbb35d5aa593` [pre-PR push CI run `30679042700`](https://github.com/Aheadboat/voteGPT/actions/runs/30679042700) passed migrations, PostgreSQL contracts, all non-E2E checks, and 25 passed Chromium journeys. Its sole failure repeated pre-T6 run `30676985461`: `e2e/residence.spec.ts` hard-coded pre-F6 tab order and expected the residence input immediately after the three header links, while the approved accessible government navigation now contributes focusable controls before that input. The user approved one test-only correction: preserve the three exact header focus assertions, use bounded keyboard reachability for the address, then preserve the exact form-control order. No production, provider, privacy, residence, or navigation behavior may change.",
+      )
+    }
+    expectF6CorrectionScope(f6)
+    for (const [authorized, widened] of [
+      [
+        "modify `e2e/residence.spec.ts` only",
+        "modify `e2e/residence.spec.ts` and `src/app/dashboard/page.tsx`",
+      ],
+      ["pre-T6 run `30676985461`", "an unrecorded pre-T6 run"],
+      ["one test-only correction", "production and test corrections"],
+      [
+        "preserve the three exact header focus assertions, use bounded keyboard reachability for the address, then preserve the exact form-control order",
+        "replace the keyboard assertions as needed",
+      ],
+      [
+        "No production, provider, privacy, residence, or navigation behavior may change.",
+        "Production and navigation behavior may change.",
+      ],
+    ] as const) {
+      const mutated = f6.replace(authorized, widened)
+      expect(mutated, `missing authorized F6 correction text: ${authorized}`).not.toBe(f6)
+      expect(() => expectF6CorrectionScope(mutated)).toThrow()
+    }
+    expect(readme).toContain("F6 is VERIFIED on draft PR #24")
+    expect(readme).toContain(
+      "Human Gate B is next; F6 has not merged and is not `DONE`",
+    )
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
       [
@@ -1285,6 +1432,82 @@ describe("concurrent roadmap delivery contract", () => {
     ])
     expect(f5MergeOrder).toContain(
       "cannot reach Gate B until it integrates completed F4",
+    )
+  })
+
+  it("records the approved F6 Gate A plan without starting implementation", () => {
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const f6 = readRoadmapItem(roadmap, "F6")
+
+    expect(f6).toContain("**Applicable UX DNA IDs:**")
+    for (const id of [
+      "UX-01",
+      "UX-02",
+      "UX-04",
+      "UX-05",
+      "UX-06",
+      "UX-07",
+      "UX-08",
+      "UX-09",
+    ]) {
+      expect(f6, "F6 must map " + id).toContain(id)
+    }
+    expect(f6).toContain(
+      "UX-03 is not applicable because F6 presents officials, not candidates",
+    )
+    for (const field of [
+      "**Recommended design:**",
+      "**Provider and privacy interface:**",
+      "**Data and freshness interface:**",
+      "**Navigation and recovery interface:**",
+      "**Alternatives rejected:**",
+      "**Parallel lanes:**",
+      "**Risks and decisions:**",
+      "**UX evidence plan:**",
+    ]) {
+      expect(f6).toContain(field)
+    }
+    expect(f6).toContain("https://docs.openstates.org/api-v3/")
+    expect(f6).toContain("https://v3.openstates.org/openapi.json")
+    expect(f6).toContain("API v3 `/people`")
+    expect(f6).toContain("`X-API-KEY`")
+    expect(f6).toContain("`/people.geo` is forbidden")
+    expect(f6).toContain("zero people means `unknown`, never `vacant`")
+    expect(f6).toContain("default selection remains `Federal`")
+    expect(f6).toContain("Elections")
+    expect(f6).toContain("F7")
+    expect(f6).toContain("verified local provider")
+    expect(f6).toContain("### Tests-first task graph")
+    expect(f6).toContain(
+      "| Task | Outcome | Expected RED | Files/interfaces | Depends on | Focused check | Done |",
+    )
+    expectTokensInOrder(f6, [
+      "| T1 |",
+      "| T2 |",
+      "| T3 |",
+      "| T4 |",
+      "| T5 |",
+      "| T6 |",
+    ])
+    for (const command of [
+      "npm.cmd test -- src/lib/state-officials.test.ts",
+      "npm.cmd test -- src/lib/openstates.test.ts",
+      "npm.cmd run test:postgres -- integration/state-official-cache.test.ts",
+      "npm.cmd test -- src/components/government-navigation.test.tsx",
+      "npm.cmd test -- src/components/state-officials.test.tsx src/app/dashboard/page.test.tsx",
+      "npm.cmd run check",
+      "npm.cmd run test:e2e",
+    ]) {
+      expect(f6).toContain(command)
+    }
+    expect(f6).toContain("375px")
+    expect(f6).toContain("1280px")
+    expect(f6).toContain(
+      "**Human Gate A approval:** Approved by the user on 2026-07-31",
+    )
+    expect(f6).not.toContain("Human Gate A candidate")
+    expect(readCoordinationField(f6, "Next Human Gate")).toContain(
+      "Human Gate B",
     )
   })
 })
