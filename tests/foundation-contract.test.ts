@@ -899,7 +899,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f4Status).toBe("DONE")
     expect(f5Status).toBe("DONE")
     expect(r2Status).toBe("DONE")
-    expect(f6Status).toBe("IN PROGRESS (RED)")
+    expect(f6Status).toBe("VERIFIED")
     const r2IsDone = r2Status === "DONE"
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
@@ -979,11 +979,11 @@ describe("concurrent roadmap delivery contract", () => {
     }
     if (r2IsDone) {
       expect(readme).toMatch(/R2[^.\n]*complete/i)
-      expect(readme).toContain("F6 returned to RED after whole-branch review")
+      expect(readme).toContain("F6 is VERIFIED on draft PR #24")
+      expect(readme).toContain("both exact-head hosted CI triggers passed")
       expect(readme).toContain(
-        "four Important defects in named district coverage, cached-source trust, effective-time labeling, and equal-generation cache availability",
+        "Human Gate B is next; F6 has not merged and is not `DONE`",
       )
-      expect(readme).toContain("Human Gate B")
     } else {
       expect(readme).toContain("R2 is `VERIFIED`")
       expect(readme).toContain("Human Gate B is approved")
@@ -1103,7 +1103,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("User explicitly activated F6 on 2026-07-30")
     expect(f6).toContain("single-item pre-activation audit passed")
     const expectedF6CoordinationFields = new Map<string, string>([
-      ["Phase", "`RED`"],
+      ["Phase", "`VERIFIED`"],
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
       [
@@ -1128,7 +1128,7 @@ describe("concurrent roadmap delivery contract", () => {
       ],
       [
         "Feature PR/CI",
-        "Draft [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) is open at review head `1669b829b681613a6dbe604289f34846f4384437`; exact-head push CI run `30719077587` and pull-request CI run `30719089648` passed, and GitHub reported `CLEAN` and `MERGEABLE`. Two independent whole-branch reviews found four Important defects, so the PR remains draft and Human Gate B is blocked until RED-first corrections, renewed verification, current-head CI, mergeability, and clean re-review.",
+        "Draft [PR #24](https://github.com/Aheadboat/voteGPT/pull/24) contains feature implementation review head `3debae081b42747647b5158dc08be32aef7471d6`; its exact-head push CI run `30724661629` and pull-request CI run `30724663357` each passed migrations, 3 files/37 PostgreSQL tests, 35 files/944 non-E2E tests, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that implementation head `CLEAN` and `MERGEABLE`; independent whole-branch re-review found no unresolved Critical, Important, or Minor finding. The PR remains draft pending Human Gate B, and the coordinator-only `VERIFIED` record on top must pass its own current-head hosted CI before presentation.",
       ],
       ["Blockers", "None."],
       ["Feature merge", "Pending."],
@@ -1227,11 +1227,30 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f6).toContain("false `Effective` timestamps")
     expect(f6).toContain("equal-generation cache losers")
     expect(f6).toContain("### Whole-branch review correction task graph")
-    expectTokensInOrder(f6, ["| T6-C1 |", "| T6-C2 |", "| T6-C3 |", "| T6-C4 |"])
+    expectTokensInOrder(f6, [
+      "| T6-C1 |",
+      "| T6-C2 |",
+      "| T6-C3 |",
+      "| T6-C4 |",
+      "| T6-C5 |",
+      "| T6-C6 |",
+    ])
     expect(f6).toContain("canonical named OCD district")
     expect(f6).toContain("one state-scoped source validator")
     expect(f6).toContain("Person `updated_at` is not role-effective evidence")
     expect(f6).toContain("equal-generation authoritative winner")
+    expect(f6).toContain("focused manual-activation tab")
+    expect(f6).toContain("shared provider/cache cardinality ceilings")
+    expect(f6).toContain("**F6 whole-branch correction VERIFIED evidence:**")
+    expect(f6).toContain("ae8e57782e7ffb26fb2c3aca92e86b0b696df7a9")
+    expect(f6).toContain("3debae081b42747647b5158dc08be32aef7471d6")
+    expect(f6).toContain("30724007880")
+    expect(f6).toContain("30724009154")
+    expect(f6).toContain("30724661629")
+    expect(f6).toContain("30724663357")
+    expect(f6).toContain("6 files/213 tests")
+    expect(f6).toContain("35 files/944 tests")
+    expect(f6).toContain("no unresolved Critical, Important, or Minor finding")
     const expectF6CorrectionScope = (item: string) => {
       const lines = item.split(/\r?\n/)
       const task = lines.find((line) => line.startsWith("| T6 |"))
@@ -1266,11 +1285,9 @@ describe("concurrent roadmap delivery contract", () => {
       expect(mutated, `missing authorized F6 correction text: ${authorized}`).not.toBe(f6)
       expect(() => expectF6CorrectionScope(mutated)).toThrow()
     }
+    expect(readme).toContain("F6 is VERIFIED on draft PR #24")
     expect(readme).toContain(
-      "F6 returned to RED after whole-branch review of draft PR #24",
-    )
-    expect(readme).toContain(
-      "Human Gate B is blocked until the four Important findings are corrected and reverified",
+      "Human Gate B is next; F6 has not merged and is not `DONE`",
     )
     for (const [field, invalid] of [
       ["Branch", "`codex/f6-state-officials-navigation-wrong`"],
