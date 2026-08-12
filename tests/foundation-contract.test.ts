@@ -1,13 +1,33 @@
 import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
 const repositoryRoot = process.cwd()
+const expectedG1ActivationSnapshots = {
+  "README.md": "a2c67b8201661fc726bdbc035405a00eb9ba2761fcfb0ec086396448730b9f7a",
+  "ROADMAP.md": "8c5592f85304881a1d84b7ccc97c2806ba89590f5665aeaf3091c112a61a60b5",
+} as const
 
 function readRepositoryFile(path: string): string {
   return readFileSync(resolve(repositoryRoot, path), "utf8")
+}
+
+function governanceSha256(contents: string): string {
+  return createHash("sha256")
+    .update(contents.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"))
+    .digest("hex")
+}
+
+function expectG1ActivationSnapshot(
+  path: keyof typeof expectedG1ActivationSnapshots,
+  contents: string,
+): void {
+  expect(governanceSha256(contents), path + " exact G1 activation snapshot").toBe(
+    expectedG1ActivationSnapshots[path],
+  )
 }
 
 function findUnsafeEnvironmentEntries(contents: string): string[] {
@@ -223,7 +243,7 @@ function expectF6Lifecycle({
       "None; Human Gate B was approved before the feature merge, this closeout activates no later item, and F6 is complete only when this closeout merge reaches `main`.",
     )
     expect(readme).toContain(
-      "F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout; G1 and every later item remain `TODO` and inactive.",
+      "F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout",
     )
 
     return true
@@ -361,7 +381,6 @@ describe("development foundation", () => {
     expect(config).not.toContain("postgres://localhost")
   })
 })
-
 describe("repository context and hygiene contract", () => {
   it("routes current capabilities through one compact root project map", () => {
     const projectMapPath = resolve(repositoryRoot, "PROJECT-MAP.md")
@@ -927,7 +946,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps completed items closed and activates only F6", () => {
+  it("keeps completed items closed and activates only G1", () => {
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -984,6 +1003,23 @@ describe("concurrent roadmap delivery contract", () => {
 
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
+    expectG1ActivationSnapshot("ROADMAP.md", roadmap)
+    expectG1ActivationSnapshot("README.md", readme)
+
+    for (const [path, current, mutated] of [
+      ["ROADMAP.md", roadmap, roadmap + "\n- **Authorization:** F7 implementation is approved."],
+      ["ROADMAP.md", roadmap, roadmap.replace("## R0 — Durable Project Contract [DONE]", "## R0 — Durable Project Contract [TODO]")],
+      ["ROADMAP.md", roadmap, roadmap.replace("## G1 — Candidate-Data Vendor Proof of Concept", "## **G1 — Candidate-Data Vendor Proof of Concept**")],
+      ["ROADMAP.md", roadmap, "<!--\n" + roadmap],
+      ["README.md", readme, readme + "\n### Vendor access\n\nCredentialed production use is approved."],
+      ["README.md", readme, readme + "\nStatus\n------\n\nVendor production access is approved."],
+      ["README.md", readme, "<!--\n" + readme],
+    ] as const) {
+      expect(mutated, path + " mutation must change the document").not.toBe(
+        current,
+      )
+      expect(() => expectG1ActivationSnapshot(path, mutated)).toThrow()
+    }
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
     const recoveryDesign = readRepositoryFile(
       "F4-F5-LEAN-RECOVERY-DESIGN.md",
@@ -1001,7 +1037,6 @@ describe("concurrent roadmap delivery contract", () => {
       "F12",
       "F13",
       "F14",
-      "G1",
       "G2",
     ]
     const activeIds = [...statuses]
@@ -1011,10 +1046,12 @@ describe("concurrent roadmap delivery contract", () => {
     const f5 = readRoadmapItem(roadmap, "F5")
     const r2 = readRoadmapItem(roadmap, "R2")
     const f6 = readRoadmapItem(roadmap, "F6")
+    const g1 = readRoadmapItem(roadmap, "G1")
     const f4Status = statuses.get("F4") ?? ""
     const f5Status = statuses.get("F5") ?? ""
     const r2Status = statuses.get("R2") ?? ""
     const f6Status = statuses.get("F6") ?? ""
+    const g1Status = statuses.get("G1") ?? ""
     const f4Ownership = readCoordinationField(f4, "Ownership")
     const f5Ownership = readCoordinationField(f5, "Ownership")
     const f4MergeOrder = readCoordinationField(f4, "Merge order")
@@ -1053,11 +1090,87 @@ describe("concurrent roadmap delivery contract", () => {
     expect(r2Status).toBe("DONE")
     const r2IsDone = r2Status === "DONE"
     expectF6Lifecycle({
-      activeIds,
+      activeIds: activeIds.filter((id) => id === "F6"),
       item: f6,
       readme,
       status: f6Status,
     })
+    const expectedStatuses = new Map<string, string>([
+      ["R0", "DONE"],
+      ["F1", "DONE"],
+      ["F2", "DONE"],
+      ["F3", "DONE"],
+      ["R1", "DONE"],
+      ["F4", "DONE"],
+      ["F5", "DONE"],
+      ["R2", "DONE"],
+      ["F6", "DONE"],
+      ["G1", "IN PROGRESS (DISCOVER/DESIGN/PLAN)"],
+      ["F7", "TODO"],
+      ["F8", "TODO"],
+      ["G2", "TODO"],
+      ["F9", "TODO"],
+      ["F10", "TODO"],
+      ["F11", "TODO"],
+      ["F12", "TODO"],
+      ["F13", "TODO"],
+      ["F14", "TODO"],
+    ])
+    expect([...statuses]).toEqual([...expectedStatuses])
+    expect(activeIds).toEqual(["G1"])
+    expect(g1Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(g1.split(/\r?\n/, 1)[0]).toBe(
+      "## G1 — Candidate-Data Vendor Proof of Concept [IN PROGRESS (DISCOVER/DESIGN/PLAN)]",
+    )
+    expect(g1).toContain(
+      "**Dependencies:** F6. The official comparison sample set is created and validated as G1-T1 rather than treated as an external prerequisite.",
+    )
+    expect(g1).toContain(
+      "User approved creating the 100-record official comparison set as G1's first deliverable",
+    )
+    expect(g1).toContain("F7 plus every later item remain inactive")
+    expect(g1).toContain(
+      "No vendor credential, trial, quote, contract, spend, or production use is authorized by activation.",
+    )
+    expect(g1).toContain(
+      "G1-T1 creates and validates that official comparison set before any vendor score is accepted.",
+    )
+    expect(readCoordinationField(g1, "Phase")).toBe(
+      "`DISCOVER/DESIGN/PLAN`",
+    )
+    expect(readCoordinationField(g1, "Branch")).toBe(
+      "`codex/g1-candidate-vendor-poc`",
+    )
+    expect(readCoordinationField(g1, "Base commit")).toBe(
+      "`3e4449ca10fa36609726c1ca8c52a5eb626cb49c`",
+    )
+    expect(readCoordinationField(g1, "Integrated-main commit")).toBe(
+      "`3e4449ca10fa36609726c1ca8c52a5eb626cb49c`",
+    )
+    expect(readCoordinationField(g1, "Admission result")).toContain(
+      "G1 is the sole active item",
+    )
+    expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
+      "dispatch begins only after the activation PR merges",
+    )
+    expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
+      "stop for Human Gate A before RED or production work",
+    )
+    expect(readCoordinationField(g1, "Ownership")).toContain(
+      "No credentialed vendor request",
+    )
+    expect(readCoordinationField(g1, "Merge order")).toBe(
+      "G1 feature PR → post-merge verification on `main` → G1 closeout PR/CI/merge. No later item activates automatically.",
+    )
+    expect(readCoordinationField(g1, "Feature merge")).toBe("Pending.")
+    expect(readCoordinationField(g1, "Post-merge evidence")).toBe("Pending.")
+    expect(readCoordinationField(g1, "Closeout PR/CI/merge")).toBe("Pending.")
+    expect(readCoordinationField(g1, "Next Human Gate")).toContain(
+      "Human Gate A",
+    )
+    expect(readMarkdownSection(readme, "## Status")).toContain(
+      "G1 — Candidate-Data Vendor Proof of Concept is active in `DISCOVER/DESIGN/PLAN`; its first deliverable is the 100-record official comparison set, Human Gate A is next, and F7 plus every later item remain `TODO` and inactive.",
+    )
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
