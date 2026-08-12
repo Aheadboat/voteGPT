@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1ActivationSnapshots = {
   "README.md": "a2c67b8201661fc726bdbc035405a00eb9ba2761fcfb0ec086396448730b9f7a",
-  "ROADMAP.md": "2337b3a94f025b58c89715a3f48cd98da956ab9149e40c7bc72a77409c649785",
+  "ROADMAP.md": "a088e511d061fa7d3eca28a91e4164423d154859ec5dbc7edde607fca3b9036e",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1135,6 +1135,51 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "G1-T1 creates and validates that official comparison set before any vendor score is accepted.",
     )
+    expect(g1).toContain(
+      "Cell totals for federal-primary/federal-general/state-primary/state-general/local-primary/local-general are `17/17/17/16/16/17`",
+    )
+    for (const task of [
+      "G1-T1 official comparison set",
+      "G1-T2 deterministic evaluator",
+      "G1-T3 rights and operations gate",
+      "G1-T4 public-evidence decision",
+      "G1-T5 separate vendor decision",
+      "G1-T6 conditional adapter/evaluation",
+      "G1-T7 verify and decide",
+      "G1-T8 coordinator lifecycle guard",
+    ]) {
+      expect(g1).toContain("Task graph — " + task)
+    }
+    expect(g1).toContain(
+      "Gate A approval does not authorize this task or any external action.",
+    )
+    expect(g1).toContain(
+      "`lifecycle_status=qualified|withdrawn|disqualified`",
+    )
+    expect(g1).toContain(
+      "Unicode lowercase while preserving punctuation, diacritics, suffixes, and word order",
+    )
+    expect(g1).toContain(
+      "An identical issuer/namespace/value candidate identifier may match only when the exact jurisdiction/election-date/stage/office/district contest identity also matches",
+    )
+    expect(g1).toContain(
+      "zero matched-row contradictions across identity, contest, level, jurisdiction, stage, office, district, lifecycle, appearance, or exact party-line set",
+    )
+    expect(g1).toContain(
+      "Legal permissions and operational commitments are separate evidence records",
+    )
+    expect(g1).toContain(
+      "current `NO-GO (reopenable)` for vendor data access and production",
+    )
+    expect(g1).toContain(
+      "a new explicit user authorization for T6 RED/implementation",
+    )
+    expect(g1).toContain(
+      "completed T5 retaining NO-GO with no approved T6",
+    )
+    expect(g1).toContain(
+      "No terminal path is added now and no feature agent edits authority files.",
+    )
     expect(readCoordinationField(g1, "Phase")).toBe(
       "`DISCOVER/DESIGN/PLAN`",
     )
@@ -1165,8 +1210,14 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(g1, "Feature merge")).toBe("Pending.")
     expect(readCoordinationField(g1, "Post-merge evidence")).toBe("Pending.")
     expect(readCoordinationField(g1, "Closeout PR/CI/merge")).toBe("Pending.")
+    expect(readCoordinationField(g1, "Blockers")).toContain(
+      "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain blocked",
+    )
     expect(readCoordinationField(g1, "Next Human Gate")).toContain(
       "Human Gate A",
+    )
+    expect(readCoordinationField(g1, "Next Human Gate")).toContain(
+      "G1-T5/T6 external vendor actions remain separately unapproved",
     )
     expect(readMarkdownSection(readme, "## Status")).toContain(
       "G1 — Candidate-Data Vendor Proof of Concept is active in `DISCOVER/DESIGN/PLAN`; its first deliverable is the 100-record official comparison set, Human Gate A is next, and F7 plus every later item remain `TODO` and inactive.",
