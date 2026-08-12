@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1ActivationSnapshots = {
   "README.md": "a2c67b8201661fc726bdbc035405a00eb9ba2761fcfb0ec086396448730b9f7a",
-  "ROADMAP.md": "8c5592f85304881a1d84b7ccc97c2806ba89590f5665aeaf3091c112a61a60b5",
+  "ROADMAP.md": "2337b3a94f025b58c89715a3f48cd98da956ab9149e40c7bc72a77409c649785",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1145,13 +1145,13 @@ describe("concurrent roadmap delivery contract", () => {
       "`3e4449ca10fa36609726c1ca8c52a5eb626cb49c`",
     )
     expect(readCoordinationField(g1, "Integrated-main commit")).toBe(
-      "`3e4449ca10fa36609726c1ca8c52a5eb626cb49c`",
+      "`d4e1f2d411847b44ab1d50996d0ded22cba218c3`",
     )
     expect(readCoordinationField(g1, "Admission result")).toContain(
       "G1 is the sole active item",
     )
     expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
-      "dispatch begins only after the activation PR merges",
+      "the activation merge and coordinator handoff are integrated",
     )
     expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
       "stop for Human Gate A before RED or production work",
