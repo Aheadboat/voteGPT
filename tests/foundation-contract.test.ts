@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "c4f1f127e40bd40836001a40fa87eaf5314a0f0fae8a0b23d28efec72f51e0ed",
+  "ROADMAP.md": "e291c42e20211b79674467485c052974ecbb553856a489562feb485a663f1a97",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1196,6 +1196,15 @@ describe("concurrent roadmap delivery contract", () => {
       "Exact feature head `e648293e38323fa25d69f1fe9efd6233b3593a56` implements only the provider-neutral truth types",
     )
     expect(g1).toContain("pass 189/189 cases covering exact plain/null-prototype data")
+    expect(g1).toContain(
+      "Feature-lead commit `dff78f07a7fd0dcec0e62b912a74047538d4b8b1` changed only `src/lib/candidate-vendor-evaluation.test.ts`",
+    )
+    expect(g1).toContain(
+      "sole new failure `TypeError: validateCandidateComparisonSet is not a function`",
+    )
+    expect(g1).toContain(
+      "No set representation, implementation, fixture, source data, vendor/external action, or F7 surface exists before this recorded RED.",
+    )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
       "`codex/g1-candidate-vendor-poc`",
