@@ -6,9 +6,9 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 const repositoryRoot = process.cwd()
-const expectedG1ActivationSnapshots = {
-  "README.md": "a2c67b8201661fc726bdbc035405a00eb9ba2761fcfb0ec086396448730b9f7a",
-  "ROADMAP.md": "a088e511d061fa7d3eca28a91e4164423d154859ec5dbc7edde607fca3b9036e",
+const expectedG1GovernanceSnapshots = {
+  "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
+  "ROADMAP.md": "325b02ee32bd3f92d8039089aba98e92bbcdd938772a5735df6d9615c874b4b0",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -21,12 +21,12 @@ function governanceSha256(contents: string): string {
     .digest("hex")
 }
 
-function expectG1ActivationSnapshot(
-  path: keyof typeof expectedG1ActivationSnapshots,
+function expectG1GovernanceSnapshot(
+  path: keyof typeof expectedG1GovernanceSnapshots,
   contents: string,
 ): void {
-  expect(governanceSha256(contents), path + " exact G1 activation snapshot").toBe(
-    expectedG1ActivationSnapshots[path],
+  expect(governanceSha256(contents), path + " exact G1 governance snapshot").toBe(
+    expectedG1GovernanceSnapshots[path],
   )
 }
 
@@ -1003,8 +1003,8 @@ describe("concurrent roadmap delivery contract", () => {
 
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
-    expectG1ActivationSnapshot("ROADMAP.md", roadmap)
-    expectG1ActivationSnapshot("README.md", readme)
+    expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
+    expectG1GovernanceSnapshot("README.md", readme)
 
     for (const [path, current, mutated] of [
       ["ROADMAP.md", roadmap, roadmap + "\n- **Authorization:** F7 implementation is approved."],
@@ -1018,7 +1018,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(mutated, path + " mutation must change the document").not.toBe(
         current,
       )
-      expect(() => expectG1ActivationSnapshot(path, mutated)).toThrow()
+      expect(() => expectG1GovernanceSnapshot(path, mutated)).toThrow()
     }
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
     const recoveryDesign = readRepositoryFile(
@@ -1105,7 +1105,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["F5", "DONE"],
       ["R2", "DONE"],
       ["F6", "DONE"],
-      ["G1", "IN PROGRESS (DISCOVER/DESIGN/PLAN)"],
+      ["G1", "IN PROGRESS (RED)"],
       ["F7", "TODO"],
       ["F8", "TODO"],
       ["G2", "TODO"],
@@ -1118,9 +1118,9 @@ describe("concurrent roadmap delivery contract", () => {
     ])
     expect([...statuses]).toEqual([...expectedStatuses])
     expect(activeIds).toEqual(["G1"])
-    expect(g1Status).toBe("IN PROGRESS (DISCOVER/DESIGN/PLAN)")
+    expect(g1Status).toBe("IN PROGRESS (RED)")
     expect(g1.split(/\r?\n/, 1)[0]).toBe(
-      "## G1 — Candidate-Data Vendor Proof of Concept [IN PROGRESS (DISCOVER/DESIGN/PLAN)]",
+      "## G1 — Candidate-Data Vendor Proof of Concept [IN PROGRESS (RED)]",
     )
     expect(g1).toContain(
       "**Dependencies:** F6. The official comparison sample set is created and validated as G1-T1 rather than treated as an external prerequisite.",
@@ -1180,9 +1180,13 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "No terminal path is added now and no feature agent edits authority files.",
     )
-    expect(readCoordinationField(g1, "Phase")).toBe(
-      "`DISCOVER/DESIGN/PLAN`",
+    expect(g1).toContain(
+      "**Human Gate A approval:** The user approved the presented design and tests-first plan on 2026-08-15 PT.",
     )
+    expect(g1).toContain(
+      "Approval authorizes RED/GREEN/REFACTOR/VERIFIED for offline G1-T1 through G1-T4 and G1-T7 only.",
+    )
+    expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
       "`codex/g1-candidate-vendor-poc`",
     )
@@ -1199,7 +1203,10 @@ describe("concurrent roadmap delivery contract", () => {
       "the activation merge and coordinator handoff are integrated",
     )
     expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
-      "stop for Human Gate A before RED or production work",
+      "Human Gate A is approved",
+    )
+    expect(readCoordinationField(g1, "Assigned feature lead")).toContain(
+      "must not begin G1-T5/T6 or any external/vendor action",
     )
     expect(readCoordinationField(g1, "Ownership")).toContain(
       "No credentialed vendor request",
@@ -1214,13 +1221,13 @@ describe("concurrent roadmap delivery contract", () => {
       "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain blocked",
     )
     expect(readCoordinationField(g1, "Next Human Gate")).toContain(
-      "Human Gate A",
+      "Human Gate B",
     )
     expect(readCoordinationField(g1, "Next Human Gate")).toContain(
       "G1-T5/T6 external vendor actions remain separately unapproved",
     )
     expect(readMarkdownSection(readme, "## Status")).toContain(
-      "G1 — Candidate-Data Vendor Proof of Concept is active in `DISCOVER/DESIGN/PLAN`; its first deliverable is the 100-record official comparison set, Human Gate A is next, and F7 plus every later item remain `TODO` and inactive.",
+      "G1 — Candidate-Data Vendor Proof of Concept is active in `RED`; Human Gate A approved the offline G1-T1 through G1-T4/G1-T7 tests-first plan, Human Gate B follows `VERIFIED`, successful feature PR CI/mergeability, and independent review, and F7 plus every later item remain `TODO` and inactive. G1-T5/T6 external vendor actions remain unapproved.",
     )
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
