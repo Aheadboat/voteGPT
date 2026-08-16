@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "e291c42e20211b79674467485c052974ecbb553856a489562feb485a663f1a97",
+  "ROADMAP.md": "9aa0ac1ebe4e1fb8a21583971df4dddf92db825fd83c75bcee5780c928a74035",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1203,7 +1203,13 @@ describe("concurrent roadmap delivery contract", () => {
       "sole new failure `TypeError: validateCandidateComparisonSet is not a function`",
     )
     expect(g1).toContain(
-      "No set representation, implementation, fixture, source data, vendor/external action, or F7 surface exists before this recorded RED.",
+      "feature-lead commit `2acb075602fd22ee189894dd1e7fc440c28c8cd1` expanded only that test file",
+    )
+    expect(g1).toContain(
+      "coordinator independently reproduced 189/240 existing cases passing and all 51 set cases failing only because `validateCandidateComparisonSet` was absent",
+    )
+    expect(g1).toContain(
+      "No set implementation, fixture, source data, vendor/external action, or F7 surface exists before this recorded RED.",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
