@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "8a0c555726c1fb592d8998c8298ba2f383b754328c9a5a474c4f62fb4f087601",
+  "ROADMAP.md": "c4f1f127e40bd40836001a40fa87eaf5314a0f0fae8a0b23d28efec72f51e0ed",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1192,6 +1192,10 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "Vite could not resolve the intentionally absent `./candidate-vendor-evaluation` module",
     )
+    expect(g1).toContain(
+      "Exact feature head `e648293e38323fa25d69f1fe9efd6233b3593a56` implements only the provider-neutral truth types",
+    )
+    expect(g1).toContain("pass 189/189 cases covering exact plain/null-prototype data")
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
       "`codex/g1-candidate-vendor-poc`",
