@@ -126,6 +126,474 @@ function arrayWithAccessorIndex<T>(value: T) {
   return values;
 }
 
+type TestLevel = "federal" | "state" | "local";
+type TestStage = "primary" | "general";
+type TestStratum =
+  | "ordinary"
+  | "nonpartisan"
+  | "write_in"
+  | "cross_filed"
+  | "withdrawn"
+  | "disqualified";
+type TestCandidateParticipation = ReturnType<
+  typeof validCandidateParticipation
+>;
+type TestAuthority = {
+  authority_id: string;
+  authority_name: string;
+  authority_level: string;
+  state_code: string;
+};
+type TestAuthorityAssignment = {
+  record_key: string;
+  authority_id: string;
+  source_url: string;
+  locator: string;
+};
+type TestManifestCell = {
+  level: string;
+  stage: string;
+  eligible_record_keys: string[];
+};
+type TestComparisonSet = {
+  as_of: string;
+  records: TestCandidateParticipation[];
+  authorities: TestAuthority[];
+  authority_assignments: TestAuthorityAssignment[];
+  ordinary_control_manifest: TestManifestCell[];
+};
+
+const comparisonCellSpecs = [
+  {
+    level: "federal",
+    stage: "primary",
+    eligible: [
+      "ordinary-federal-primary-01",
+      "ordinary-federal-primary-02",
+      "ordinary-federal-primary-03",
+      "ordinary-federal-primary-04",
+      "ordinary-federal-primary-05",
+      "ordinary-federal-primary-06",
+      "ordinary-federal-primary-07",
+      "ordinary-federal-primary-08",
+      "ordinary-federal-primary-09",
+    ],
+    ordinary: [
+      "ordinary-federal-primary-08",
+      "ordinary-federal-primary-02",
+      "ordinary-federal-primary-09",
+      "ordinary-federal-primary-04",
+      "ordinary-federal-primary-03",
+      "ordinary-federal-primary-07",
+      "ordinary-federal-primary-06",
+      "ordinary-federal-primary-01",
+    ],
+    edges: [
+      ["nonpartisan", 1],
+      ["write_in", 2],
+      ["cross_filed", 2],
+      ["withdrawn", 2],
+      ["disqualified", 2],
+    ],
+  },
+  {
+    level: "federal",
+    stage: "general",
+    eligible: [
+      "ordinary-federal-general-01",
+      "ordinary-federal-general-02",
+      "ordinary-federal-general-03",
+      "ordinary-federal-general-04",
+      "ordinary-federal-general-05",
+      "ordinary-federal-general-06",
+      "ordinary-federal-general-07",
+      "ordinary-federal-general-08",
+      "ordinary-federal-general-09",
+      "ordinary-federal-general-10",
+    ],
+    ordinary: [
+      "ordinary-federal-general-04",
+      "ordinary-federal-general-10",
+      "ordinary-federal-general-01",
+      "ordinary-federal-general-02",
+      "ordinary-federal-general-09",
+      "ordinary-federal-general-06",
+      "ordinary-federal-general-03",
+      "ordinary-federal-general-08",
+      "ordinary-federal-general-07",
+    ],
+    edges: [
+      ["nonpartisan", 1],
+      ["write_in", 2],
+      ["cross_filed", 2],
+      ["withdrawn", 2],
+      ["disqualified", 1],
+    ],
+  },
+  {
+    level: "state",
+    stage: "primary",
+    eligible: [
+      "ordinary-state-primary-01",
+      "ordinary-state-primary-02",
+      "ordinary-state-primary-03",
+      "ordinary-state-primary-04",
+      "ordinary-state-primary-05",
+      "ordinary-state-primary-06",
+      "ordinary-state-primary-07",
+      "ordinary-state-primary-08",
+      "ordinary-state-primary-09",
+      "ordinary-state-primary-10",
+    ],
+    ordinary: [
+      "ordinary-state-primary-09",
+      "ordinary-state-primary-10",
+      "ordinary-state-primary-01",
+      "ordinary-state-primary-02",
+      "ordinary-state-primary-08",
+      "ordinary-state-primary-03",
+      "ordinary-state-primary-04",
+      "ordinary-state-primary-07",
+      "ordinary-state-primary-06",
+    ],
+    edges: [
+      ["nonpartisan", 2],
+      ["write_in", 1],
+      ["cross_filed", 2],
+      ["withdrawn", 2],
+      ["disqualified", 1],
+    ],
+  },
+  {
+    level: "state",
+    stage: "general",
+    eligible: [
+      "ordinary-state-general-01",
+      "ordinary-state-general-02",
+      "ordinary-state-general-03",
+      "ordinary-state-general-04",
+      "ordinary-state-general-05",
+      "ordinary-state-general-06",
+      "ordinary-state-general-07",
+      "ordinary-state-general-08",
+      "ordinary-state-general-09",
+    ],
+    ordinary: [
+      "ordinary-state-general-01",
+      "ordinary-state-general-09",
+      "ordinary-state-general-05",
+      "ordinary-state-general-08",
+      "ordinary-state-general-03",
+      "ordinary-state-general-04",
+      "ordinary-state-general-06",
+      "ordinary-state-general-02",
+    ],
+    edges: [
+      ["nonpartisan", 2],
+      ["write_in", 1],
+      ["cross_filed", 2],
+      ["withdrawn", 1],
+      ["disqualified", 2],
+    ],
+  },
+  {
+    level: "local",
+    stage: "primary",
+    eligible: [
+      "ordinary-local-primary-01",
+      "ordinary-local-primary-02",
+      "ordinary-local-primary-03",
+      "ordinary-local-primary-04",
+      "ordinary-local-primary-05",
+      "ordinary-local-primary-06",
+      "ordinary-local-primary-07",
+      "ordinary-local-primary-08",
+      "ordinary-local-primary-09",
+    ],
+    ordinary: [
+      "ordinary-local-primary-06",
+      "ordinary-local-primary-09",
+      "ordinary-local-primary-01",
+      "ordinary-local-primary-04",
+      "ordinary-local-primary-07",
+      "ordinary-local-primary-02",
+      "ordinary-local-primary-05",
+      "ordinary-local-primary-03",
+    ],
+    edges: [
+      ["nonpartisan", 2],
+      ["write_in", 2],
+      ["cross_filed", 1],
+      ["withdrawn", 1],
+      ["disqualified", 2],
+    ],
+  },
+  {
+    level: "local",
+    stage: "general",
+    eligible: [
+      "ordinary-local-general-01",
+      "ordinary-local-general-02",
+      "ordinary-local-general-03",
+      "ordinary-local-general-04",
+      "ordinary-local-general-05",
+      "ordinary-local-general-06",
+      "ordinary-local-general-07",
+      "ordinary-local-general-08",
+      "ordinary-local-general-09",
+    ],
+    ordinary: [
+      "ordinary-local-general-04",
+      "ordinary-local-general-05",
+      "ordinary-local-general-08",
+      "ordinary-local-general-09",
+      "ordinary-local-general-07",
+      "ordinary-local-general-03",
+      "ordinary-local-general-01",
+      "ordinary-local-general-02",
+    ],
+    edges: [
+      ["nonpartisan", 2],
+      ["write_in", 2],
+      ["cross_filed", 1],
+      ["withdrawn", 2],
+      ["disqualified", 2],
+    ],
+  },
+] as const satisfies readonly {
+  level: TestLevel;
+  stage: TestStage;
+  eligible: readonly string[];
+  ordinary: readonly string[];
+  edges: readonly (readonly [Exclude<TestStratum, "ordinary">, number])[];
+}[];
+
+const authorityStates = [
+  "CT",
+  "NY",
+  "IL",
+  "IA",
+  "CA",
+  "WA",
+  "TX",
+  "FL",
+  "CO",
+  "GA",
+] as const;
+
+function syntheticStratumState(
+  stratum: TestStratum,
+  withdrawnAppearance: "printed" | "not_on_ballot",
+) {
+  switch (stratum) {
+    case "nonpartisan":
+      return {
+        lifecycle_status: "qualified",
+        ballot_appearance: "printed",
+        party_lines: [],
+      };
+    case "write_in":
+      return {
+        lifecycle_status: "qualified",
+        ballot_appearance: "write_in",
+        party_lines: [],
+      };
+    case "cross_filed":
+      return {
+        lifecycle_status: "qualified",
+        ballot_appearance: "printed",
+        party_lines: ["Party A", "Party B"],
+      };
+    case "withdrawn":
+      return {
+        lifecycle_status: "withdrawn",
+        ballot_appearance: withdrawnAppearance,
+        party_lines: ["Independent"],
+      };
+    case "disqualified":
+      return {
+        lifecycle_status: "disqualified",
+        ballot_appearance: "not_on_ballot",
+        party_lines: ["Independent"],
+      };
+    default:
+      return {
+        lifecycle_status: "qualified",
+        ballot_appearance: "printed",
+        party_lines: ["Party A"],
+      };
+  }
+}
+
+function syntheticCandidateParticipation(
+  recordKey: string,
+  level: TestLevel,
+  stage: TestStage,
+  stratum: TestStratum,
+  sequence: number,
+  authority: TestAuthority,
+  withdrawnAppearance: "printed" | "not_on_ballot",
+): TestCandidateParticipation {
+  const base = validCandidateParticipation();
+  const state = syntheticStratumState(stratum, withdrawnAppearance);
+  const sourceUrl = `https://${authority.authority_id}.example.gov/candidates`;
+  return {
+    ...base,
+    record_key: recordKey,
+    contest_key: `contest-${recordKey}`,
+    candidate_name: `Candidate ${sequence + 1}`,
+    official_ids: [
+      {
+        issuer: authority.authority_name,
+        namespace: "candidate",
+        value: recordKey,
+      },
+    ],
+    jurisdiction: `ocd-division/country:us/state:${authority.state_code.toLowerCase()}/place:${sequence + 1}`,
+    election_date: stage === "primary" ? "2024-06-04" : "2024-11-05",
+    office: `Office ${sequence + 1}`,
+    district: String(sequence + 1),
+    level,
+    stage,
+    sample_stratum: stratum,
+    ...state,
+    sources: [
+      {
+        ...base.sources[0]!,
+        url: sourceUrl,
+        locator: `record ${recordKey}`,
+        sha256: sequence.toString(16).padStart(64, "0"),
+      },
+    ],
+  };
+}
+
+function validCandidateComparisonSet(): TestComparisonSet {
+  const authorities = authorityStates.map((stateCode, index) => ({
+    authority_id: `authority-${index + 1}`,
+    authority_name: `Local Election Authority ${index + 1}`,
+    authority_level: "local",
+    state_code: stateCode,
+  }));
+  const records: TestCandidateParticipation[] = [];
+  const authorityAssignments: TestAuthorityAssignment[] = [];
+  let sequence = 0;
+  let withdrawnCount = 0;
+
+  const appendRecord = (
+    recordKey: string,
+    level: TestLevel,
+    stage: TestStage,
+    stratum: TestStratum,
+  ) => {
+    const authority = authorities[sequence % authorities.length]!;
+    const withdrawnAppearance =
+      stratum === "withdrawn" && withdrawnCount >= 5
+        ? "not_on_ballot"
+        : "printed";
+    const row = syntheticCandidateParticipation(
+      recordKey,
+      level,
+      stage,
+      stratum,
+      sequence,
+      authority,
+      withdrawnAppearance,
+    );
+    if (stratum === "withdrawn") {
+      withdrawnCount += 1;
+    }
+    const source = row.sources[0]!;
+    records.push(row);
+    authorityAssignments.push({
+      record_key: row.record_key,
+      authority_id: authority.authority_id,
+      source_url: source.url,
+      locator: source.locator,
+    });
+    sequence += 1;
+  };
+
+  for (const cell of comparisonCellSpecs) {
+    for (const recordKey of cell.ordinary) {
+      appendRecord(recordKey, cell.level, cell.stage, "ordinary");
+    }
+    for (const [stratum, count] of cell.edges) {
+      for (let index = 0; index < count; index += 1) {
+        appendRecord(
+          `edge-${cell.level}-${cell.stage}-${stratum}-${String(index + 1).padStart(2, "0")}`,
+          cell.level,
+          cell.stage,
+          stratum,
+        );
+      }
+    }
+  }
+
+  return {
+    as_of: "2026-08-15T12:00:00Z",
+    records,
+    authorities,
+    authority_assignments: authorityAssignments,
+    ordinary_control_manifest: comparisonCellSpecs.map((cell) => ({
+      level: cell.level,
+      stage: cell.stage,
+      eligible_record_keys: [...cell.eligible],
+    })),
+  };
+}
+
+function recordIndex(
+  value: TestComparisonSet,
+  level: TestLevel,
+  stage: TestStage,
+  stratum: TestStratum,
+  occurrence = 0,
+) {
+  let remaining = occurrence;
+  for (let index = 0; index < value.records.length; index += 1) {
+    const row = value.records[index]!;
+    if (
+      row.level === level &&
+      row.stage === stage &&
+      row.sample_stratum === stratum
+    ) {
+      if (remaining === 0) {
+        return index;
+      }
+      remaining -= 1;
+    }
+  }
+  throw new Error("missing synthetic record");
+}
+
+function manifestCell(
+  value: TestComparisonSet,
+  level: TestLevel,
+  stage: TestStage,
+) {
+  const cell = value.ordinary_control_manifest.find(
+    (candidate) => candidate.level === level && candidate.stage === stage,
+  );
+  if (cell === undefined) {
+    throw new Error("missing synthetic manifest cell");
+  }
+  return cell;
+}
+
+function copyContest(
+  target: TestCandidateParticipation,
+  source: TestCandidateParticipation,
+) {
+  target.contest_key = source.contest_key;
+  target.jurisdiction = source.jurisdiction;
+  target.election_date = source.election_date;
+  target.office = source.office;
+  target.district = source.district;
+  target.level = source.level;
+  target.stage = source.stage;
+}
+
 describe("normalizeCandidateName", () => {
   it.each([
     ["  JOSÉ\u00a0O’Neil, JR.  ", "josé o’neil, jr."],
@@ -1205,11 +1673,550 @@ describe("validateCandidateParticipation", () => {
 });
 
 describe("validateCandidateComparisonSet", () => {
+  it("accepts the exact synthetic 100-row comparison set", () => {
+    expect(validateCandidateComparisonSet(validCandidateComparisonSet())).toBe(
+      true,
+    );
+  });
+
   it("rejects aggregate-only partial truth as the official comparison set", () => {
     expect(
       validateCandidateComparisonSet({
         records: [validCandidateParticipation()],
       }),
     ).toBe(false);
+  });
+
+  it.each([
+    [
+      "a missing top-level key",
+      () => {
+        const { as_of: _asOf, ...value } = validCandidateComparisonSet();
+        return value;
+      },
+    ],
+    [
+      "an extra top-level key",
+      () => ({ ...validCandidateComparisonSet(), totals: { records: 100 } }),
+    ],
+  ])("rejects %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it("returns false for hostile set input instead of throwing", () => {
+    const value = new Proxy(validCandidateComparisonSet(), {
+      getPrototypeOf() {
+        throw new Error("hostile set prototype");
+      },
+    });
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects fewer than 100 exhaustive records", () => {
+    const value = validCandidateComparisonSet();
+    const removed = value.records.pop()!;
+    value.authority_assignments = value.authority_assignments.filter(
+      (assignment) => assignment.record_key !== removed.record_key,
+    );
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a per-cell stratum quota mutation", () => {
+    const value = validCandidateComparisonSet();
+    const index = recordIndex(value, "federal", "primary", "ordinary");
+    value.records[index] = {
+      ...value.records[index]!,
+      sample_stratum: "nonpartisan",
+      party_lines: [],
+    };
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a six-to-four withdrawn appearance split", () => {
+    const value = validCandidateComparisonSet();
+    const row = value.records.find(
+      (candidate) =>
+        candidate.sample_stratum === "withdrawn" &&
+        candidate.ballot_appearance === "not_on_ballot",
+    )!;
+    row.ballot_appearance = "printed";
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects one contest key describing two contest tuples", () => {
+    const value = validCandidateComparisonSet();
+    value.records[1]!.contest_key = value.records[0]!.contest_key;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a normalized candidate-name collision within one contest", () => {
+    const value = validCandidateComparisonSet();
+    copyContest(value.records[1]!, value.records[0]!);
+    value.records[1]!.candidate_name = `  ${value.records[0]!.candidate_name.toUpperCase()}  `;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a scoped official-ID collision within one contest", () => {
+    const value = validCandidateComparisonSet();
+    copyContest(value.records[1]!, value.records[0]!);
+    value.records[1]!.official_ids = structuredClone(
+      value.records[0]!.official_ids,
+    );
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects an authority assignment with a split source pair", () => {
+    const value = validCandidateComparisonSet();
+    value.authority_assignments[0]!.locator =
+      value.authority_assignments[1]!.locator;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it.each([
+    [
+      "nine assigned states",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[9]!.state_code = value.authorities[8]!.state_code;
+        return value;
+      },
+    ],
+    [
+      "no Northeast authority",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[0]!.state_code = "AZ";
+        value.authorities[1]!.state_code = "OR";
+        return value;
+      },
+    ],
+    [
+      "nine local authorities",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[0]!.authority_level = "state";
+        return value;
+      },
+    ],
+    [
+      "eleven records from one authority",
+      () => {
+        const value = validCandidateComparisonSet();
+        const assignment = value.authority_assignments.find(
+          (candidate) => candidate.authority_id === "authority-2",
+        )!;
+        assignment.authority_id = "authority-1";
+        return value;
+      },
+    ],
+  ])("rejects coverage with %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it("rejects source retrieval after the set as-of instant", () => {
+    const value = validCandidateComparisonSet();
+    value.records[0]!.sources[0]!.retrieved_at = "2026-08-15T12:00:01Z";
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects FEC-hosted qualification evidence despite its claimed type", () => {
+    const value = validCandidateComparisonSet();
+    const url = "https://www.fec.gov/data/candidate/H4CA12000/";
+    value.records[0]!.sources[0]!.url = url;
+    value.authority_assignments[0]!.source_url = url;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects an ordinary eligible pool with no excluded control", () => {
+    const value = validCandidateComparisonSet();
+    manifestCell(value, "federal", "primary").eligible_record_keys =
+      manifestCell(value, "federal", "primary").eligible_record_keys.filter(
+        (recordKey) => recordKey !== "ordinary-federal-primary-05",
+      );
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a non-winning ordinary control in the selected rows", () => {
+    const value = validCandidateComparisonSet();
+    const winner = "ordinary-federal-primary-08";
+    const loser = "ordinary-federal-primary-05";
+    const row = value.records.find(
+      (candidate) => candidate.record_key === winner,
+    )!;
+    const assignment = value.authority_assignments.find(
+      (candidate) => candidate.record_key === winner,
+    )!;
+    row.record_key = loser;
+    assignment.record_key = loser;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a selected edge record in the ordinary manifest", () => {
+    const value = validCandidateComparisonSet();
+    const cell = manifestCell(value, "federal", "primary");
+    const loserIndex = cell.eligible_record_keys.indexOf(
+      "ordinary-federal-primary-05",
+    );
+    cell.eligible_record_keys[loserIndex] =
+      "edge-federal-primary-nonpartisan-01";
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it.each([
+    [
+      "a sparse records array",
+      () => {
+        const value = validCandidateComparisonSet();
+        Reflect.deleteProperty(value.records, "0");
+        return value;
+      },
+    ],
+    [
+      "a custom authorities array key",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities = arrayWithExtraKey(value.authorities, "unexpected");
+        return value;
+      },
+    ],
+    [
+      "an accessor assignment index",
+      () => {
+        const value = validCandidateComparisonSet();
+        const first = value.authority_assignments[0]!;
+        Object.defineProperty(value.authority_assignments, "0", {
+          configurable: true,
+          enumerable: true,
+          get: () => first,
+        });
+        return value;
+      },
+    ],
+    [
+      "an input-owned manifest iterator",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.ordinary_control_manifest = arrayWithOwnIterator(
+          value.ordinary_control_manifest,
+          value.ordinary_control_manifest,
+        );
+        return value;
+      },
+    ],
+  ])("rejects %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it.each([
+    [
+      "an extra authority key",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[0] = {
+          ...value.authorities[0]!,
+          unexpected: true,
+        } as TestAuthority;
+        return value;
+      },
+    ],
+    [
+      "a missing assignment key",
+      () => {
+        const value = validCandidateComparisonSet();
+        const { locator: _locator, ...assignment } =
+          value.authority_assignments[0]!;
+        value.authority_assignments[0] = assignment as TestAuthorityAssignment;
+        return value;
+      },
+    ],
+    [
+      "a custom manifest-cell prototype",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.ordinary_control_manifest[0] = Object.assign(
+          Object.create({ inherited: true }) as Record<string, unknown>,
+          value.ordinary_control_manifest[0],
+        ) as TestManifestCell;
+        return value;
+      },
+    ],
+    [
+      "a getter-backed authority field",
+      () => {
+        const value = validCandidateComparisonSet();
+        Object.defineProperty(value.authorities[0], "state_code", {
+          enumerable: true,
+          get: () => "CT",
+        });
+        return value;
+      },
+    ],
+  ])("rejects %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it("accepts exact null-prototype set metadata", () => {
+    const value = validCandidateComparisonSet();
+    value.authorities[0] = Object.assign(
+      Object.create(null) as Record<string, unknown>,
+      value.authorities[0],
+    ) as TestAuthority;
+    value.authority_assignments[0] = Object.assign(
+      Object.create(null) as Record<string, unknown>,
+      value.authority_assignments[0],
+    ) as TestAuthorityAssignment;
+    value.ordinary_control_manifest[0] = Object.assign(
+      Object.create(null) as Record<string, unknown>,
+      value.ordinary_control_manifest[0],
+    ) as TestManifestCell;
+    const topLevel = Object.assign(
+      Object.create(null) as Record<string, unknown>,
+      value,
+    );
+
+    expect(validateCandidateComparisonSet(topLevel)).toBe(true);
+  });
+
+  it("rejects a deceptive nested authority proxy", () => {
+    const value = validCandidateComparisonSet();
+    value.authorities[0] = new Proxy(value.authorities[0]!, {
+      get(target, key, receiver) {
+        return key === "state_code" ? "DC" : Reflect.get(target, key, receiver);
+      },
+    });
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects two contest keys for one exact contest tuple", () => {
+    const value = validCandidateComparisonSet();
+    const originalKey = value.records[1]!.contest_key;
+    copyContest(value.records[1]!, value.records[0]!);
+    value.records[1]!.contest_key = originalKey;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects a normalized reviewed-alias collision within one contest", () => {
+    const value = validCandidateComparisonSet();
+    copyContest(value.records[1]!, value.records[0]!);
+    const source = value.records[1]!.sources[0]!;
+    value.records[1]!.reviewed_aliases = [
+      {
+        name: value.records[0]!.candidate_name,
+        source_url: source.url,
+        locator: source.locator,
+      },
+    ];
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("allows the same official ID in different exact contests", () => {
+    const value = validCandidateComparisonSet();
+    value.records[1]!.official_ids = structuredClone(
+      value.records[0]!.official_ids,
+    );
+
+    expect(validateCandidateComparisonSet(value)).toBe(true);
+  });
+
+  it("rejects duplicate candidate participation record keys", () => {
+    const value = validCandidateComparisonSet();
+    value.records[1]!.record_key = value.records[0]!.record_key;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it.each([
+    [
+      "a missing record assignment",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authority_assignments.pop();
+        return value;
+      },
+    ],
+    [
+      "a duplicate record assignment",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authority_assignments[1]!.record_key =
+          value.authority_assignments[0]!.record_key;
+        return value;
+      },
+    ],
+    [
+      "a dangling authority assignment",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authority_assignments[0]!.authority_id = "missing-authority";
+        return value;
+      },
+    ],
+    [
+      "an unused authority",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities.push({
+          authority_id: "authority-11",
+          authority_name: "Unused Election Authority",
+          authority_level: "state",
+          state_code: "AZ",
+        });
+        return value;
+      },
+    ],
+    [
+      "a split duplicate authority identity",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities.push({
+          ...value.authorities[0]!,
+          authority_id: "authority-11",
+        });
+        value.authority_assignments.find(
+          (assignment) => assignment.authority_id === "authority-1",
+        )!.authority_id = "authority-11";
+        return value;
+      },
+    ],
+  ])("rejects %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it.each([
+    [
+      "DC",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[0]!.state_code = "DC";
+        return value;
+      },
+    ],
+    [
+      "an unknown authority level",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities[0]!.authority_level = "county";
+        return value;
+      },
+    ],
+  ])("rejects authority metadata using %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+
+  it("rejects an invalid set as-of timestamp", () => {
+    const value = validCandidateComparisonSet();
+    value.as_of = "2026-08-15";
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("compares retrieval and as-of timestamps as instants", () => {
+    const value = validCandidateComparisonSet();
+    value.records[0]!.sources[0]!.retrieved_at = "2026-08-15T05:00:00-07:00";
+
+    expect(validateCandidateComparisonSet(value)).toBe(true);
+  });
+
+  it("allows an FEC identifier when non-FEC official evidence qualifies", () => {
+    const value = validCandidateComparisonSet();
+    value.records[0]!.official_ids = [
+      {
+        issuer: "Federal Election Commission",
+        namespace: "candidate_id",
+        value: "H4CA12000",
+      },
+    ];
+
+    expect(validateCandidateComparisonSet(value)).toBe(true);
+  });
+
+  it("rejects every FEC subdomain as qualification evidence", () => {
+    const value = validCandidateComparisonSet();
+    const url = "https://data.api.fec.gov/candidates";
+    value.records[0]!.sources[0]!.url = url;
+    value.authority_assignments[0]!.source_url = url;
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it.each([
+    [
+      "a missing cell",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.ordinary_control_manifest.pop();
+        return value;
+      },
+    ],
+    [
+      "a duplicate cell",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.ordinary_control_manifest[5]!.level = "federal";
+        value.ordinary_control_manifest[5]!.stage = "primary";
+        return value;
+      },
+    ],
+    [
+      "a duplicate eligible key across cells",
+      () => {
+        const value = validCandidateComparisonSet();
+        const target = manifestCell(value, "federal", "general");
+        const loserIndex = target.eligible_record_keys.indexOf(
+          "ordinary-federal-general-05",
+        );
+        target.eligible_record_keys[loserIndex] = "ordinary-federal-primary-05";
+        return value;
+      },
+    ],
+    [
+      "an ordinary key in the wrong cell",
+      () => {
+        const value = validCandidateComparisonSet();
+        const primary = manifestCell(value, "federal", "primary");
+        const general = manifestCell(value, "federal", "general");
+        const primaryIndex = primary.eligible_record_keys.indexOf(
+          "ordinary-federal-primary-08",
+        );
+        const generalIndex = general.eligible_record_keys.indexOf(
+          "ordinary-federal-general-04",
+        );
+        primary.eligible_record_keys[primaryIndex] =
+          "ordinary-federal-general-04";
+        general.eligible_record_keys[generalIndex] =
+          "ordinary-federal-primary-08";
+        return value;
+      },
+    ],
+    [
+      "a blank eligible key",
+      () => {
+        const value = validCandidateComparisonSet();
+        const cell = manifestCell(value, "federal", "primary");
+        const loserIndex = cell.eligible_record_keys.indexOf(
+          "ordinary-federal-primary-05",
+        );
+        cell.eligible_record_keys[loserIndex] = " ";
+        return value;
+      },
+    ],
+  ])("rejects an ordinary manifest with %s", (_label, makeValue) => {
+    expect(validateCandidateComparisonSet(makeValue())).toBe(false);
   });
 });
