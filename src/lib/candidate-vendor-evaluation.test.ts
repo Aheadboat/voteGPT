@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   normalizeCandidateName,
+  validateCandidateComparisonSet,
   validateCandidateParticipation,
 } from "./candidate-vendor-evaluation";
 
@@ -1198,6 +1199,16 @@ describe("validateCandidateParticipation", () => {
               "0000000000000000000000000000000000000000000000000000000000000000",
           },
         ],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("validateCandidateComparisonSet", () => {
+  it("rejects aggregate-only partial truth as the official comparison set", () => {
+    expect(
+      validateCandidateComparisonSet({
+        records: [validCandidateParticipation()],
       }),
     ).toBe(false);
   });
