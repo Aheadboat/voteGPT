@@ -658,6 +658,34 @@ describe("validateCandidateParticipation", () => {
     ["a raw vertical bar", [sourceWith({ url: "https://example.gov/|x" })]],
     ["a raw caret", [sourceWith({ url: "https://example.gov/^x" })]],
     [
+      "a rewritten double-at userinfo authority",
+      [sourceWith({ url: "https://user@@example.gov/path" })],
+    ],
+    [
+      "a username authority",
+      [sourceWith({ url: "https://user@example.gov/path" })],
+    ],
+    [
+      "a username and password authority",
+      [sourceWith({ url: "https://user:pass@example.gov/path" })],
+    ],
+    [
+      "a second raw fragment delimiter",
+      [sourceWith({ url: "https://example.gov/path#first#second" })],
+    ],
+    [
+      "raw brackets in the path",
+      [sourceWith({ url: "https://example.gov/[candidate]" })],
+    ],
+    [
+      "raw brackets in the query",
+      [sourceWith({ url: "https://example.gov/path?candidate=[avery]" })],
+    ],
+    [
+      "raw brackets in the fragment",
+      [sourceWith({ url: "https://example.gov/path#[candidate]" })],
+    ],
+    [
       "source URL whitespace",
       [sourceWith({ url: " https://elections.example.gov/list " })],
     ],
@@ -682,6 +710,8 @@ describe("validateCandidateParticipation", () => {
   it.each([
     "https://example.gov/%25/%7Btag%7D?q=%22quote%22#encoded",
     "https://example.gov/candidates?office=mayor&name=avery#ballot",
+    "https://[2001:db8::1]/candidates",
+    "https://example.gov/a%5Bb%5D;v=1:@!$&'()*+,=?q=/?:@!$&'()*+,;=#frag/?:@!$&'()*+,;=",
   ])("accepts an RFC 3986-compatible source URL %s", (url) => {
     expect(
       validateCandidateParticipation(

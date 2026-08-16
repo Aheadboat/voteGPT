@@ -107,8 +107,11 @@ const sourceKeys = [
 ] as const;
 const officialIdKeys = ["issuer", "namespace", "value"] as const;
 const aliasKeys = ["name", "source_url", "locator"] as const;
-// RFC 3986 unreserved and reserved ASCII punctuation; percent triplets are checked separately.
-const rfc3986UriPunctuation = "-._~:/?#[]@!$&'()*+,;=%";
+const rfc3986UnreservedAndSubDelimiterPunctuation = "-._~!$&'()*+,;=";
+const rfc3986RegNamePunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}%`;
+const rfc3986IpLiteralPunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}:`;
+const rfc3986PathPunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}:@/%`;
+const rfc3986QueryOrFragmentPunctuation = `${rfc3986PathPunctuation}?`;
 
 export function normalizeCandidateName(value: string): string {
   return value
@@ -453,27 +456,103 @@ function isCalendarDate(value: unknown): value is string {
 function isHttpsUrl(value: unknown): value is string {
   if (
     typeof value !== "string" ||
-    !/^https:\/\/[^/?#\\]+(?:[/?#]|$)/i.test(value) ||
-    !hasOnlyRfc3986AsciiCharacters(value) ||
+    !hasValidRawHttpsComponents(value) ||
     /%(?![0-9A-Fa-f]{2})/.test(value)
   ) {
     return false;
   }
   try {
-    return new URL(value).protocol === "https:";
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === "https:" &&
+      parsed.username === "" &&
+      parsed.password === ""
+    );
   } catch {
     return false;
   }
 }
 
-function hasOnlyRfc3986AsciiCharacters(value: string): boolean {
+function hasValidRawHttpsComponents(value: string): boolean {
+  const match = /^https:\/\/([^/?#\\]+)(.*)$/i.exec(value);
+  if (match === null || !hasValidRfc3986Authority(match[1]!)) {
+    return false;
+  }
+
+  const remainder = match[2]!;
+  const fragmentIndex = remainder.indexOf("#");
+  if (
+    fragmentIndex !== -1 &&
+    remainder.indexOf("#", fragmentIndex + 1) !== -1
+  ) {
+    return false;
+  }
+  const beforeFragment =
+    fragmentIndex === -1 ? remainder : remainder.slice(0, fragmentIndex);
+  const fragment =
+    fragmentIndex === -1 ? "" : remainder.slice(fragmentIndex + 1);
+  const queryIndex = beforeFragment.indexOf("?");
+  const path =
+    queryIndex === -1 ? beforeFragment : beforeFragment.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : beforeFragment.slice(queryIndex + 1);
+
+  return (
+    hasOnlyRfc3986AsciiCharacters(path, rfc3986PathPunctuation) &&
+    hasOnlyRfc3986AsciiCharacters(query, rfc3986QueryOrFragmentPunctuation) &&
+    hasOnlyRfc3986AsciiCharacters(fragment, rfc3986QueryOrFragmentPunctuation)
+  );
+}
+
+function hasValidRfc3986Authority(value: string): boolean {
+  if (value.includes("@")) {
+    return false;
+  }
+  if (value.startsWith("[")) {
+    const closingBracket = value.indexOf("]");
+    const port = value.slice(closingBracket + 1);
+    if (
+      closingBracket <= 1 ||
+      value.indexOf("[", 1) !== -1 ||
+      value.indexOf("]", closingBracket + 1) !== -1 ||
+      (port !== "" && !/^:\d*$/.test(port))
+    ) {
+      return false;
+    }
+    return hasOnlyRfc3986AsciiCharacters(
+      value.slice(1, closingBracket),
+      rfc3986IpLiteralPunctuation,
+    );
+  }
+  if (value.includes("[") || value.includes("]")) {
+    return false;
+  }
+
+  const portDelimiter = value.indexOf(":");
+  if (
+    portDelimiter !== -1 &&
+    (value.indexOf(":", portDelimiter + 1) !== -1 ||
+      !/^\d*$/.test(value.slice(portDelimiter + 1)))
+  ) {
+    return false;
+  }
+  const host = portDelimiter === -1 ? value : value.slice(0, portDelimiter);
+  return (
+    host !== "" &&
+    hasOnlyRfc3986AsciiCharacters(host, rfc3986RegNamePunctuation)
+  );
+}
+
+function hasOnlyRfc3986AsciiCharacters(
+  value: string,
+  punctuation: string,
+): boolean {
   for (const character of value) {
     const code = character.charCodeAt(0);
     const isAsciiAlphaNumeric =
       (code >= 48 && code <= 57) ||
       (code >= 65 && code <= 90) ||
       (code >= 97 && code <= 122);
-    if (!isAsciiAlphaNumeric && !rfc3986UriPunctuation.includes(character)) {
+    if (!isAsciiAlphaNumeric && !punctuation.includes(character)) {
       return false;
     }
   }
