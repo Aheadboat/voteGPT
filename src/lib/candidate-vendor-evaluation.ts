@@ -111,7 +111,7 @@ const aliasKeys = ["name", "source_url", "locator"] as const;
 export function normalizeCandidateName(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/\p{White_Space}+/gu, " ")
+    .replace(/[\p{White_Space}\uFEFF]+/gu, " ")
     .trim()
     .toLowerCase();
 }
@@ -129,45 +129,50 @@ export function validateCandidateParticipation(
 function validateCandidateParticipationValue(
   value: unknown,
 ): value is CandidateParticipation {
-  if (!isRecord(value) || !hasExactKeys(value, participationKeys)) {
+  const row = readExactDataRecord(value, participationKeys);
+  if (row === null) {
     return false;
   }
+  const officialIds = readExactDenseArray(row.official_ids);
+  const reviewedAliases = readExactDenseArray(row.reviewed_aliases);
+  const partyLines = readExactDenseArray(row.party_lines);
+  const sourceValues = readExactDenseArray(row.sources);
   if (
-    !isNonblank(value.record_key) ||
-    !isNonblank(value.contest_key) ||
-    !isNonblank(value.candidate_name) ||
-    !isNonblank(value.jurisdiction) ||
-    !isNonblank(value.office) ||
-    !isNonblank(value.district) ||
-    !isCalendarDate(value.election_date) ||
-    !isOneOf(value.level, levels) ||
-    !isOneOf(value.stage, stages) ||
-    !isOneOf(value.sample_stratum, strata) ||
-    !isOneOf(value.lifecycle_status, lifecycleStatuses) ||
-    !isOneOf(value.ballot_appearance, ballotAppearances) ||
-    !Array.isArray(value.official_ids) ||
-    !Array.isArray(value.reviewed_aliases) ||
-    !Array.isArray(value.party_lines) ||
-    !Array.isArray(value.sources) ||
-    value.sources.length === 0
+    !isNonblank(row.record_key) ||
+    !isNonblank(row.contest_key) ||
+    !isNonblank(row.candidate_name) ||
+    normalizeCandidateName(row.candidate_name).length === 0 ||
+    !isNonblank(row.jurisdiction) ||
+    !isNonblank(row.office) ||
+    !isNonblank(row.district) ||
+    !isCalendarDate(row.election_date) ||
+    !isOneOf(row.level, levels) ||
+    !isOneOf(row.stage, stages) ||
+    !isOneOf(row.sample_stratum, strata) ||
+    !isOneOf(row.lifecycle_status, lifecycleStatuses) ||
+    !isOneOf(row.ballot_appearance, ballotAppearances) ||
+    officialIds === null ||
+    reviewedAliases === null ||
+    partyLines === null ||
+    sourceValues === null ||
+    sourceValues.length === 0
   ) {
     return false;
   }
+  const sources = readCandidateSources(sourceValues);
+  if (sources === null) {
+    return false;
+  }
   return (
-    areOfficialCandidateIds(value.official_ids) &&
-    areUniqueNonblankStrings(value.party_lines) &&
+    areOfficialCandidateIds(officialIds) &&
+    areUniqueNonblankStrings(partyLines) &&
     matchesStratumRules(
-      value.sample_stratum,
-      value.lifecycle_status,
-      value.ballot_appearance,
-      value.party_lines,
+      row.sample_stratum,
+      row.lifecycle_status,
+      row.ballot_appearance,
+      partyLines,
     ) &&
-    areCandidateSources(value.sources) &&
-    areReviewedCandidateAliases(
-      value.reviewed_aliases,
-      value.candidate_name,
-      value.sources,
-    )
+    areReviewedCandidateAliases(reviewedAliases, row.candidate_name, sources)
   );
 }
 
@@ -176,16 +181,20 @@ function areOfficialCandidateIds(
 ): values is readonly OfficialCandidateId[] {
   const seen = new Set<string>();
   for (const value of values) {
+    const officialId = readExactDataRecord(value, officialIdKeys);
     if (
-      !isRecord(value) ||
-      !hasExactKeys(value, officialIdKeys) ||
-      !isNonblank(value.issuer) ||
-      !isNonblank(value.namespace) ||
-      !isNonblank(value.value)
+      officialId === null ||
+      !isNonblank(officialId.issuer) ||
+      !isNonblank(officialId.namespace) ||
+      !isNonblank(officialId.value)
     ) {
       return false;
     }
-    const key = JSON.stringify([value.issuer, value.namespace, value.value]);
+    const key = JSON.stringify([
+      officialId.issuer,
+      officialId.namespace,
+      officialId.value,
+    ]);
     if (seen.has(key)) {
       return false;
     }
@@ -210,14 +219,14 @@ function areUniqueNonblankStrings(
 function areReviewedCandidateAliases(
   aliases: readonly unknown[],
   candidateName: string,
-  sources: readonly unknown[],
+  sources: readonly CandidateSource[],
 ): aliases is readonly ReviewedCandidateAlias[] {
   const canonicalName = normalizeCandidateName(candidateName);
   const seen = new Set<string>();
-  for (const alias of aliases) {
+  for (const value of aliases) {
+    const alias = readExactDataRecord(value, aliasKeys);
     if (
-      !isRecord(alias) ||
-      !hasExactKeys(alias, aliasKeys) ||
+      alias === null ||
       !isNonblank(alias.name) ||
       !isNonblank(alias.source_url) ||
       !isNonblank(alias.locator)
@@ -225,16 +234,20 @@ function areReviewedCandidateAliases(
       return false;
     }
     const normalizedName = normalizeCandidateName(alias.name);
-    if (normalizedName === canonicalName || seen.has(normalizedName)) {
+    if (
+      normalizedName.length === 0 ||
+      normalizedName === canonicalName ||
+      seen.has(normalizedName)
+    ) {
       return false;
     }
-    const matchingSources = sources.filter(
-      (source) =>
-        isRecord(source) &&
-        source.url === alias.source_url &&
-        source.locator === alias.locator,
-    );
-    if (matchingSources.length !== 1) {
+    let matchingSourceCount = 0;
+    for (const source of sources) {
+      if (source.url === alias.source_url && source.locator === alias.locator) {
+        matchingSourceCount += 1;
+      }
+    }
+    if (matchingSourceCount !== 1) {
       return false;
     }
     seen.add(normalizedName);
@@ -280,54 +293,117 @@ function matchesStratumRules(
   }
 }
 
-function isCandidateSource(value: unknown): value is CandidateSource {
-  if (!isRecord(value) || !hasExactKeys(value, sourceKeys)) {
-    return false;
+function readCandidateSource(value: unknown): CandidateSource | null {
+  const source = readExactDataRecord(value, sourceKeys);
+  if (source === null) {
+    return null;
   }
   const hasPublishedEffectiveTime =
-    isRfc3339(value.effective_at) && value.effective_time_reason === null;
+    isRfc3339(source.effective_at) && source.effective_time_reason === null;
   const hasUnpublishedEffectiveTime =
-    value.effective_at === null &&
-    value.effective_time_reason === "not_published";
+    source.effective_at === null &&
+    source.effective_time_reason === "not_published";
 
-  return (
-    isHttpsUrl(value.url) &&
-    isOneOf(value.source_type, sourceTypes) &&
-    isRfc3339(value.retrieved_at) &&
-    isNonblank(value.locator) &&
-    typeof value.sha256 === "string" &&
-    /^[0-9a-f]{64}$/.test(value.sha256) &&
-    (hasPublishedEffectiveTime || hasUnpublishedEffectiveTime)
-  );
-}
-
-function areCandidateSources(
-  values: readonly unknown[],
-): values is readonly CandidateSource[] {
-  for (const value of values) {
-    if (!isCandidateSource(value)) {
-      return false;
-    }
+  if (
+    !isHttpsUrl(source.url) ||
+    !isOneOf(source.source_type, sourceTypes) ||
+    !isRfc3339(source.retrieved_at) ||
+    !isNonblank(source.locator) ||
+    typeof source.sha256 !== "string" ||
+    !/^[0-9a-f]{64}$/.test(source.sha256) ||
+    (!hasPublishedEffectiveTime && !hasUnpublishedEffectiveTime)
+  ) {
+    return null;
   }
-  return true;
+  return source as CandidateSource;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function readCandidateSources(
+  values: readonly unknown[],
+): readonly CandidateSource[] | null {
+  const sources: CandidateSource[] = [];
+  for (const value of values) {
+    const source = readCandidateSource(value);
+    if (source === null) {
+      return null;
+    }
+    sources.push(source);
+  }
+  return sources;
 }
 
-function hasExactKeys(
-  value: Record<string, unknown>,
+function readExactDataRecord(
+  value: unknown,
   keys: readonly string[],
-): boolean {
-  return (
-    Object.keys(value).length === keys.length &&
-    keys.every((key) => Object.hasOwn(value, key))
-  );
+): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const prototype = Reflect.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return null;
+  }
+  const ownKeys = Reflect.ownKeys(value);
+  if (
+    ownKeys.length !== keys.length ||
+    ownKeys.some((key) => typeof key !== "string" || !keys.includes(key))
+  ) {
+    return null;
+  }
+  const snapshot: Record<string, unknown> = Object.create(null);
+  for (const key of keys) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (
+      descriptor === undefined ||
+      !descriptor.enumerable ||
+      !("value" in descriptor)
+    ) {
+      return null;
+    }
+    snapshot[key] = descriptor.value;
+  }
+  return snapshot;
+}
+
+function readExactDenseArray(value: unknown): readonly unknown[] | null {
+  if (
+    !Array.isArray(value) ||
+    Reflect.getPrototypeOf(value) !== Array.prototype
+  ) {
+    return null;
+  }
+  const lengthDescriptor = Reflect.getOwnPropertyDescriptor(value, "length");
+  if (
+    lengthDescriptor === undefined ||
+    !("value" in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== "number" ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0
+  ) {
+    return null;
+  }
+  const length = lengthDescriptor.value;
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.length !== length + 1) {
+    return null;
+  }
+  const snapshot: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, String(index));
+    if (
+      descriptor === undefined ||
+      !descriptor.enumerable ||
+      !("value" in descriptor)
+    ) {
+      return null;
+    }
+    snapshot.push(descriptor.value);
+  }
+  return snapshot;
 }
 
 function isNonblank(value: unknown): value is string {
-  return typeof value === "string" && /[^\p{White_Space}]/u.test(value);
+  return typeof value === "string" && normalizeCandidateName(value).length > 0;
 }
 
 function isOneOf<T extends string>(
@@ -369,7 +445,12 @@ function isCalendarDate(value: unknown): value is string {
 }
 
 function isHttpsUrl(value: unknown): value is string {
-  if (typeof value !== "string") {
+  if (
+    typeof value !== "string" ||
+    !/^https:\/\/[^/?#\\]+(?:[/?#]|$)/i.test(value) ||
+    value.includes("\\") ||
+    /[\p{White_Space}\p{Cc}\uFEFF]/u.test(value)
+  ) {
     return false;
   }
   try {
@@ -398,7 +479,7 @@ function isRfc3339(value: unknown): value is string {
   return (
     hour <= 23 &&
     minute <= 59 &&
-    second <= 60 &&
+    second <= 59 &&
     offsetHour <= 23 &&
     offsetMinute <= 59
   );
