@@ -107,6 +107,8 @@ const sourceKeys = [
 ] as const;
 const officialIdKeys = ["issuer", "namespace", "value"] as const;
 const aliasKeys = ["name", "source_url", "locator"] as const;
+// RFC 3986 unreserved and reserved ASCII punctuation; percent triplets are checked separately.
+const rfc3986UriPunctuation = "-._~:/?#[]@!$&'()*+,;=%";
 
 export function normalizeCandidateName(value: string): string {
   return value
@@ -120,7 +122,11 @@ export function validateCandidateParticipation(
   value: unknown,
 ): value is CandidateParticipation {
   try {
-    return validateCandidateParticipationValue(value);
+    if (!validateCandidateParticipationValue(value)) {
+      return false;
+    }
+    structuredClone(value);
+    return true;
   } catch {
     return false;
   }
@@ -448,8 +454,8 @@ function isHttpsUrl(value: unknown): value is string {
   if (
     typeof value !== "string" ||
     !/^https:\/\/[^/?#\\]+(?:[/?#]|$)/i.test(value) ||
-    value.includes("\\") ||
-    /[\p{White_Space}\p{Cc}\uFEFF]/u.test(value)
+    !hasOnlyRfc3986AsciiCharacters(value) ||
+    /%(?![0-9A-Fa-f]{2})/.test(value)
   ) {
     return false;
   }
@@ -458,6 +464,20 @@ function isHttpsUrl(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+function hasOnlyRfc3986AsciiCharacters(value: string): boolean {
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    const isAsciiAlphaNumeric =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122);
+    if (!isAsciiAlphaNumeric && !rfc3986UriPunctuation.includes(character)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isRfc3339(value: unknown): value is string {

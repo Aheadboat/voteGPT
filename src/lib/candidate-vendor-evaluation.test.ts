@@ -496,6 +496,37 @@ describe("validateCandidateParticipation", () => {
   });
 
   it.each([
+    [
+      "top-level candidate value",
+      () =>
+        new Proxy(validCandidateParticipation(), {
+          get(target, key, receiver) {
+            if (key === "candidate_name") {
+              return "\uFEFF";
+            }
+            return Reflect.get(target, key, receiver);
+          },
+        }),
+    ],
+    [
+      "nested source value",
+      () => {
+        const source = new Proxy(validSource(), {
+          get(target, key, receiver) {
+            if (key === "url") {
+              return "http://untrusted.example/source";
+            }
+            return Reflect.get(target, key, receiver);
+          },
+        });
+        return candidateParticipationWith({ sources: [source] });
+      },
+    ],
+  ])("rejects a deceptive %s proxy", (_label, makeValue) => {
+    expect(validateCandidateParticipation(makeValue())).toBe(false);
+  });
+
+  it.each([
     "record_key",
     "contest_key",
     "candidate_name",
@@ -612,6 +643,20 @@ describe("validateCandidateParticipation", () => {
       "a repaired backslash source URL",
       [sourceWith({ url: "https://elections.example.gov\\official/list" })],
     ],
+    ["a bare percent escape", [sourceWith({ url: "https://example.gov/%" })]],
+    [
+      "an incomplete percent escape",
+      [sourceWith({ url: "https://example.gov/%2" })],
+    ],
+    [
+      "a non-hex percent escape",
+      [sourceWith({ url: "https://example.gov/%zz" })],
+    ],
+    ["a raw angle tag", [sourceWith({ url: "https://example.gov/<tag>" })]],
+    ["raw double quotes", [sourceWith({ url: 'https://example.gov/"quote"' })]],
+    ["raw braces", [sourceWith({ url: "https://example.gov/{x}" })]],
+    ["a raw vertical bar", [sourceWith({ url: "https://example.gov/|x" })]],
+    ["a raw caret", [sourceWith({ url: "https://example.gov/^x" })]],
     [
       "source URL whitespace",
       [sourceWith({ url: " https://elections.example.gov/list " })],
@@ -632,6 +677,17 @@ describe("validateCandidateParticipation", () => {
     expect(
       validateCandidateParticipation(candidateParticipationWith({ sources })),
     ).toBe(false);
+  });
+
+  it.each([
+    "https://example.gov/%25/%7Btag%7D?q=%22quote%22#encoded",
+    "https://example.gov/candidates?office=mayor&name=avery#ballot",
+  ])("accepts an RFC 3986-compatible source URL %s", (url) => {
+    expect(
+      validateCandidateParticipation(
+        candidateParticipationWith({ sources: [sourceWith({ url })] }),
+      ),
+    ).toBe(true);
   });
 
   it.each([
