@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type CandidateLevel = "federal" | "state" | "local";
 export type ElectionStage = "primary" | "general";
 export type SampleStratum =
@@ -61,6 +63,99 @@ export type CandidateParticipation = Readonly<{
   sources: readonly CandidateSource[];
 }>;
 
+const censusRegions = [
+  {
+    name: "northeast",
+    states: ["CT", "ME", "MA", "NH", "RI", "VT", "NJ", "NY", "PA"],
+  },
+  {
+    name: "midwest",
+    states: [
+      "IN",
+      "IL",
+      "MI",
+      "OH",
+      "WI",
+      "IA",
+      "KS",
+      "MN",
+      "MO",
+      "NE",
+      "ND",
+      "SD",
+    ],
+  },
+  {
+    name: "south",
+    states: [
+      "DE",
+      "FL",
+      "GA",
+      "MD",
+      "NC",
+      "SC",
+      "VA",
+      "WV",
+      "AL",
+      "KY",
+      "MS",
+      "TN",
+      "AR",
+      "LA",
+      "OK",
+      "TX",
+    ],
+  },
+  {
+    name: "west",
+    states: [
+      "AK",
+      "AZ",
+      "CA",
+      "CO",
+      "HI",
+      "ID",
+      "MT",
+      "NV",
+      "NM",
+      "OR",
+      "UT",
+      "WA",
+      "WY",
+    ],
+  },
+] as const;
+
+export type UsStateCode = (typeof censusRegions)[number]["states"][number];
+
+export type CandidateAuthority = Readonly<{
+  authority_id: string;
+  authority_name: string;
+  authority_level: CandidateLevel;
+  state_code: UsStateCode;
+}>;
+
+export type CandidateAuthorityAssignment = Readonly<{
+  record_key: string;
+  authority_id: string;
+  source_url: string;
+  locator: string;
+}>;
+
+export type OrdinaryControlManifestCell = Readonly<{
+  level: CandidateLevel;
+  stage: ElectionStage;
+  eligible_record_keys: readonly string[];
+}>;
+
+export type CandidateComparisonSet = Readonly<{
+  as_of: string;
+  records: readonly CandidateParticipation[];
+  authorities: readonly CandidateAuthority[];
+  authority_assignments: readonly CandidateAuthorityAssignment[];
+  ordinary_control_manifest: readonly OrdinaryControlManifestCell[];
+}>;
+
 const participationKeys = [
   "record_key",
   "contest_key",
@@ -107,6 +202,88 @@ const sourceKeys = [
 ] as const;
 const officialIdKeys = ["issuer", "namespace", "value"] as const;
 const aliasKeys = ["name", "source_url", "locator"] as const;
+const comparisonSetKeys = [
+  "as_of",
+  "records",
+  "authorities",
+  "authority_assignments",
+  "ordinary_control_manifest",
+] as const;
+const authorityKeys = [
+  "authority_id",
+  "authority_name",
+  "authority_level",
+  "state_code",
+] as const;
+const authorityAssignmentKeys = [
+  "record_key",
+  "authority_id",
+  "source_url",
+  "locator",
+] as const;
+const manifestCellKeys = ["level", "stage", "eligible_record_keys"] as const;
+const comparisonCellQuotas = [
+  {
+    level: "federal",
+    stage: "primary",
+    ordinary: 8,
+    nonpartisan: 1,
+    write_in: 2,
+    cross_filed: 2,
+    withdrawn: 2,
+    disqualified: 2,
+  },
+  {
+    level: "federal",
+    stage: "general",
+    ordinary: 9,
+    nonpartisan: 1,
+    write_in: 2,
+    cross_filed: 2,
+    withdrawn: 2,
+    disqualified: 1,
+  },
+  {
+    level: "state",
+    stage: "primary",
+    ordinary: 9,
+    nonpartisan: 2,
+    write_in: 1,
+    cross_filed: 2,
+    withdrawn: 2,
+    disqualified: 1,
+  },
+  {
+    level: "state",
+    stage: "general",
+    ordinary: 8,
+    nonpartisan: 2,
+    write_in: 1,
+    cross_filed: 2,
+    withdrawn: 1,
+    disqualified: 2,
+  },
+  {
+    level: "local",
+    stage: "primary",
+    ordinary: 8,
+    nonpartisan: 2,
+    write_in: 2,
+    cross_filed: 1,
+    withdrawn: 1,
+    disqualified: 2,
+  },
+  {
+    level: "local",
+    stage: "general",
+    ordinary: 8,
+    nonpartisan: 2,
+    write_in: 2,
+    cross_filed: 1,
+    withdrawn: 2,
+    disqualified: 2,
+  },
+] as const;
 const rfc3986UnreservedAndSubDelimiterPunctuation = "-._~!$&'()*+,;=";
 const rfc3986RegNamePunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}%`;
 const rfc3986IpLiteralPunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}:`;
@@ -133,6 +310,506 @@ export function validateCandidateParticipation(
   } catch {
     return false;
   }
+}
+
+export function validateCandidateComparisonSet(
+  value: unknown,
+): value is CandidateComparisonSet {
+  try {
+    if (!validateCandidateComparisonSetValue(value)) {
+      return false;
+    }
+    structuredClone(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateCandidateComparisonSetValue(value: unknown): boolean {
+  const comparisonSet = readExactDataRecord(value, comparisonSetKeys);
+  if (comparisonSet === null || !isRfc3339(comparisonSet.as_of)) {
+    return false;
+  }
+  const recordValues = readExactDenseArray(comparisonSet.records);
+  const authorityValues = readExactDenseArray(comparisonSet.authorities);
+  const assignmentValues = readExactDenseArray(
+    comparisonSet.authority_assignments,
+  );
+  const manifestValues = readExactDenseArray(
+    comparisonSet.ordinary_control_manifest,
+  );
+  if (
+    recordValues === null ||
+    recordValues.length !== 100 ||
+    authorityValues === null ||
+    assignmentValues === null ||
+    assignmentValues.length !== 100 ||
+    manifestValues === null
+  ) {
+    return false;
+  }
+
+  const records = readComparisonRecords(recordValues, comparisonSet.as_of);
+  const authorities = readCandidateAuthorities(authorityValues);
+  const assignments = readAuthorityAssignments(assignmentValues);
+  const manifest = readOrdinaryControlManifest(manifestValues);
+  return (
+    records !== null &&
+    authorities !== null &&
+    assignments !== null &&
+    manifest !== null &&
+    hasExactComparisonCounts(records) &&
+    hasConsistentCandidateIdentities(records) &&
+    hasValidAuthorityCoverage(records, authorities, assignments) &&
+    hasValidOrdinaryControls(records, manifest)
+  );
+}
+
+function readComparisonRecords(
+  values: readonly unknown[],
+  asOf: string,
+): readonly CandidateParticipation[] | null {
+  const records: CandidateParticipation[] = [];
+  const recordKeys = new Set<string>();
+  const asOfInstant = Date.parse(asOf);
+  for (const value of values) {
+    if (!validateCandidateParticipationValue(value)) {
+      return null;
+    }
+    const row = readExactDataRecord(value, participationKeys);
+    if (row === null) {
+      return null;
+    }
+    const record = row as unknown as CandidateParticipation;
+    if (recordKeys.has(record.record_key)) {
+      return null;
+    }
+    recordKeys.add(record.record_key);
+
+    const sourceValues = readExactDenseArray(record.sources);
+    const sources =
+      sourceValues === null ? null : readCandidateSources(sourceValues);
+    if (sources === null) {
+      return null;
+    }
+    for (const source of sources) {
+      if (
+        Date.parse(source.retrieved_at) > asOfInstant ||
+        isFecHostname(new URL(source.url).hostname)
+      ) {
+        return null;
+      }
+    }
+    records.push(record);
+  }
+  return records;
+}
+
+function readCandidateAuthorities(
+  values: readonly unknown[],
+): readonly CandidateAuthority[] | null {
+  const authorities: CandidateAuthority[] = [];
+  for (const value of values) {
+    const authority = readExactDataRecord(value, authorityKeys);
+    if (
+      authority === null ||
+      !isNonblank(authority.authority_id) ||
+      !isNonblank(authority.authority_name) ||
+      !isOneOf(authority.authority_level, levels) ||
+      !isUsStateCode(authority.state_code)
+    ) {
+      return null;
+    }
+    authorities.push(authority as unknown as CandidateAuthority);
+  }
+  return authorities;
+}
+
+function readAuthorityAssignments(
+  values: readonly unknown[],
+): readonly CandidateAuthorityAssignment[] | null {
+  const assignments: CandidateAuthorityAssignment[] = [];
+  for (const value of values) {
+    const assignment = readExactDataRecord(value, authorityAssignmentKeys);
+    if (
+      assignment === null ||
+      !isNonblank(assignment.record_key) ||
+      !isNonblank(assignment.authority_id) ||
+      !isNonblank(assignment.source_url) ||
+      !isNonblank(assignment.locator)
+    ) {
+      return null;
+    }
+    assignments.push(assignment as unknown as CandidateAuthorityAssignment);
+  }
+  return assignments;
+}
+
+function readOrdinaryControlManifest(
+  values: readonly unknown[],
+): readonly OrdinaryControlManifestCell[] | null {
+  const cells: OrdinaryControlManifestCell[] = [];
+  const eligibleKeys = new Set<string>();
+  for (const value of values) {
+    const cell = readExactDataRecord(value, manifestCellKeys);
+    if (
+      cell === null ||
+      !isOneOf(cell.level, levels) ||
+      !isOneOf(cell.stage, stages)
+    ) {
+      return null;
+    }
+    const keys = readExactDenseArray(cell.eligible_record_keys);
+    if (keys === null) {
+      return null;
+    }
+    for (const key of keys) {
+      if (!isNonblank(key) || eligibleKeys.has(key)) {
+        return null;
+      }
+      eligibleKeys.add(key);
+    }
+    cells.push(cell as unknown as OrdinaryControlManifestCell);
+  }
+  return cells;
+}
+
+function hasExactComparisonCounts(
+  records: readonly CandidateParticipation[],
+): boolean {
+  const counts = new Map<string, number>();
+  let withdrawnPrinted = 0;
+  let withdrawnNotOnBallot = 0;
+  for (const record of records) {
+    const key = comparisonCountKey(
+      record.level,
+      record.stage,
+      record.sample_stratum,
+    );
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (record.sample_stratum === "withdrawn") {
+      if (record.ballot_appearance === "printed") {
+        withdrawnPrinted += 1;
+      } else if (record.ballot_appearance === "not_on_ballot") {
+        withdrawnNotOnBallot += 1;
+      }
+    }
+  }
+  if (withdrawnPrinted !== 5 || withdrawnNotOnBallot !== 5) {
+    return false;
+  }
+  for (const quota of comparisonCellQuotas) {
+    for (const stratum of strata) {
+      if (
+        (counts.get(comparisonCountKey(quota.level, quota.stage, stratum)) ??
+          0) !== quota[stratum]
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function hasConsistentCandidateIdentities(
+  records: readonly CandidateParticipation[],
+): boolean {
+  const contestTupleByKey = new Map<string, string>();
+  const contestKeyByTuple = new Map<string, string>();
+  const nameOwner = new Map<string, string>();
+  const officialIdOwner = new Map<string, string>();
+
+  for (const record of records) {
+    const tuple = JSON.stringify([
+      record.jurisdiction,
+      record.election_date,
+      record.office,
+      record.district,
+      record.level,
+      record.stage,
+    ]);
+    const priorTuple = contestTupleByKey.get(record.contest_key);
+    const priorKey = contestKeyByTuple.get(tuple);
+    if (
+      (priorTuple !== undefined && priorTuple !== tuple) ||
+      (priorKey !== undefined && priorKey !== record.contest_key)
+    ) {
+      return false;
+    }
+    contestTupleByKey.set(record.contest_key, tuple);
+    contestKeyByTuple.set(tuple, record.contest_key);
+
+    const normalizedNames = [normalizeCandidateName(record.candidate_name)];
+    const aliasValues = readExactDenseArray(record.reviewed_aliases);
+    if (aliasValues === null) {
+      return false;
+    }
+    for (const value of aliasValues) {
+      const alias = readExactDataRecord(value, aliasKeys);
+      if (alias === null || typeof alias.name !== "string") {
+        return false;
+      }
+      normalizedNames.push(normalizeCandidateName(alias.name));
+    }
+    for (const normalizedName of normalizedNames) {
+      const scopedName = JSON.stringify([record.contest_key, normalizedName]);
+      const owner = nameOwner.get(scopedName);
+      if (owner !== undefined && owner !== record.record_key) {
+        return false;
+      }
+      nameOwner.set(scopedName, record.record_key);
+    }
+
+    const officialIdValues = readExactDenseArray(record.official_ids);
+    if (officialIdValues === null) {
+      return false;
+    }
+    for (const value of officialIdValues) {
+      const officialId = readExactDataRecord(value, officialIdKeys);
+      if (officialId === null) {
+        return false;
+      }
+      const scopedId = JSON.stringify([
+        record.contest_key,
+        officialId.issuer,
+        officialId.namespace,
+        officialId.value,
+      ]);
+      const owner = officialIdOwner.get(scopedId);
+      if (owner !== undefined && owner !== record.record_key) {
+        return false;
+      }
+      officialIdOwner.set(scopedId, record.record_key);
+    }
+  }
+  return true;
+}
+
+function hasValidAuthorityCoverage(
+  records: readonly CandidateParticipation[],
+  authorities: readonly CandidateAuthority[],
+  assignments: readonly CandidateAuthorityAssignment[],
+): boolean {
+  const recordsByKey = new Map(
+    records.map((record) => [record.record_key, record] as const),
+  );
+  const authoritiesById = new Map<string, CandidateAuthority>();
+  const authorityIdentities = new Set<string>();
+  for (const authority of authorities) {
+    const identity = JSON.stringify([
+      normalizeCandidateName(authority.authority_name),
+      authority.authority_level,
+      authority.state_code,
+    ]);
+    if (
+      authoritiesById.has(authority.authority_id) ||
+      authorityIdentities.has(identity)
+    ) {
+      return false;
+    }
+    authoritiesById.set(authority.authority_id, authority);
+    authorityIdentities.add(identity);
+  }
+
+  const assignedRecords = new Set<string>();
+  const assignmentCountByAuthority = new Map<string, number>();
+  for (const assignment of assignments) {
+    const record = recordsByKey.get(assignment.record_key);
+    if (
+      record === undefined ||
+      assignedRecords.has(assignment.record_key) ||
+      !authoritiesById.has(assignment.authority_id)
+    ) {
+      return false;
+    }
+    const sourceValues = readExactDenseArray(record.sources);
+    const sources =
+      sourceValues === null ? null : readCandidateSources(sourceValues);
+    if (sources === null) {
+      return false;
+    }
+    let matchingSources = 0;
+    for (const source of sources) {
+      if (
+        source.url === assignment.source_url &&
+        source.locator === assignment.locator
+      ) {
+        matchingSources += 1;
+      }
+    }
+    if (matchingSources !== 1) {
+      return false;
+    }
+    assignedRecords.add(assignment.record_key);
+    assignmentCountByAuthority.set(
+      assignment.authority_id,
+      (assignmentCountByAuthority.get(assignment.authority_id) ?? 0) + 1,
+    );
+  }
+  if (assignedRecords.size !== records.length) {
+    return false;
+  }
+
+  const stateCodes = new Set<UsStateCode>();
+  const regions = new Set<string>();
+  let localAuthorityCount = 0;
+  for (const authority of authorities) {
+    const assignmentCount =
+      assignmentCountByAuthority.get(authority.authority_id) ?? 0;
+    if (assignmentCount === 0 || assignmentCount > 10) {
+      return false;
+    }
+    stateCodes.add(authority.state_code);
+    regions.add(censusRegionForState(authority.state_code));
+    if (authority.authority_level === "local") {
+      localAuthorityCount += 1;
+    }
+  }
+  return (
+    stateCodes.size >= 10 &&
+    regions.size === censusRegions.length &&
+    localAuthorityCount >= 10
+  );
+}
+
+function hasValidOrdinaryControls(
+  records: readonly CandidateParticipation[],
+  manifest: readonly OrdinaryControlManifestCell[],
+): boolean {
+  if (manifest.length !== comparisonCellQuotas.length) {
+    return false;
+  }
+  const manifestByCell = new Map<string, OrdinaryControlManifestCell>();
+  const eligibleCellByKey = new Map<string, string>();
+  for (const cell of manifest) {
+    const key = comparisonCellKey(cell.level, cell.stage);
+    if (manifestByCell.has(key)) {
+      return false;
+    }
+    manifestByCell.set(key, cell);
+    for (const eligibleKey of cell.eligible_record_keys) {
+      eligibleCellByKey.set(eligibleKey, key);
+    }
+  }
+
+  for (const record of records) {
+    if (record.sample_stratum === "ordinary") {
+      if (
+        eligibleCellByKey.get(record.record_key) !==
+        comparisonCellKey(record.level, record.stage)
+      ) {
+        return false;
+      }
+    } else if (eligibleCellByKey.has(record.record_key)) {
+      return false;
+    }
+  }
+
+  for (const quota of comparisonCellQuotas) {
+    const key = comparisonCellKey(quota.level, quota.stage);
+    const cell = manifestByCell.get(key);
+    if (
+      cell === undefined ||
+      cell.eligible_record_keys.length < quota.ordinary + 1
+    ) {
+      return false;
+    }
+    const selected = new Set<string>();
+    for (const record of records) {
+      if (
+        record.level === quota.level &&
+        record.stage === quota.stage &&
+        record.sample_stratum === "ordinary"
+      ) {
+        selected.add(record.record_key);
+      }
+    }
+    const expected = rankOrdinaryControlKeys(
+      cell.eligible_record_keys,
+      quota.level,
+      quota.stage,
+    ).slice(0, quota.ordinary);
+    if (
+      selected.size !== expected.length ||
+      expected.some((recordKey) => !selected.has(recordKey))
+    ) {
+      return false;
+    }
+  }
+  return manifestByCell.size === comparisonCellQuotas.length;
+}
+
+function rankOrdinaryControlKeys(
+  recordKeys: readonly string[],
+  level: CandidateLevel,
+  stage: ElectionStage,
+): string[] {
+  return recordKeys
+    .map((recordKey) => ({
+      recordKey,
+      digest: createHash("sha256")
+        .update(
+          JSON.stringify(["g1-ordinary-control-v1", level, stage, recordKey]),
+          "utf8",
+        )
+        .digest("hex"),
+    }))
+    .sort((left, right) => {
+      if (left.digest !== right.digest) {
+        return left.digest < right.digest ? -1 : 1;
+      }
+      if (left.recordKey === right.recordKey) {
+        return 0;
+      }
+      return left.recordKey < right.recordKey ? -1 : 1;
+    })
+    .map(({ recordKey }) => recordKey);
+}
+
+function comparisonCellKey(
+  level: CandidateLevel,
+  stage: ElectionStage,
+): string {
+  return JSON.stringify([level, stage]);
+}
+
+function comparisonCountKey(
+  level: CandidateLevel,
+  stage: ElectionStage,
+  stratum: SampleStratum,
+): string {
+  return JSON.stringify([level, stage, stratum]);
+}
+
+function isUsStateCode(value: unknown): value is UsStateCode {
+  if (typeof value !== "string") {
+    return false;
+  }
+  for (const region of censusRegions) {
+    for (const stateCode of region.states) {
+      if (stateCode === value) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function censusRegionForState(stateCode: UsStateCode): string {
+  for (const region of censusRegions) {
+    for (const candidate of region.states) {
+      if (candidate === stateCode) {
+        return region.name;
+      }
+    }
+  }
+  throw new Error("validated state has no Census region");
+}
+
+function isFecHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.+$/, "");
+  return normalized === "fec.gov" || normalized.endsWith(".fec.gov");
 }
 
 function validateCandidateParticipationValue(

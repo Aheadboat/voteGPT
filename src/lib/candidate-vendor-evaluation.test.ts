@@ -96,7 +96,10 @@ function arrayWithExtraKey<T>(values: T[], key: string | symbol) {
   return values;
 }
 
-function arrayWithOwnIterator<T>(stored: unknown[], yielded: readonly T[]) {
+function arrayWithOwnIterator<TStored, TYielded>(
+  stored: TStored[],
+  yielded: readonly TYielded[],
+) {
   Object.defineProperty(stored, Symbol.iterator, {
     configurable: true,
     value: function* () {
@@ -135,9 +138,12 @@ type TestStratum =
   | "cross_filed"
   | "withdrawn"
   | "disqualified";
-type TestCandidateParticipation = ReturnType<
-  typeof validCandidateParticipation
->;
+type TestCandidateParticipation = Omit<
+  ReturnType<typeof validCandidateParticipation>,
+  "reviewed_aliases"
+> & {
+  reviewed_aliases: ReturnType<typeof validAlias>[];
+};
 type TestAuthority = {
   authority_id: string;
   authority_name: string;
@@ -1691,7 +1697,8 @@ describe("validateCandidateComparisonSet", () => {
     [
       "a missing top-level key",
       () => {
-        const { as_of: _asOf, ...value } = validCandidateComparisonSet();
+        const value: Record<string, unknown> = validCandidateComparisonSet();
+        Reflect.deleteProperty(value, "as_of");
         return value;
       },
     ],
@@ -1936,8 +1943,8 @@ describe("validateCandidateComparisonSet", () => {
       "a missing assignment key",
       () => {
         const value = validCandidateComparisonSet();
-        const { locator: _locator, ...assignment } =
-          value.authority_assignments[0]!;
+        const assignment = { ...value.authority_assignments[0]! };
+        Reflect.deleteProperty(assignment, "locator");
         value.authority_assignments[0] = assignment as TestAuthorityAssignment;
         return value;
       },
