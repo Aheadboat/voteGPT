@@ -641,6 +641,17 @@ function diagnosticCodes(result: ReturnType<typeof evaluateCandidateVendor>) {
   return result.diagnostics.map((diagnostic) => diagnostic.code);
 }
 
+function evaluateCandidateVendorWithoutThrow(truth: unknown, vendor: unknown) {
+  let result: ReturnType<typeof evaluateCandidateVendor> | undefined;
+  expect(() => {
+    result = evaluateCandidateVendor(truth, vendor);
+  }).not.toThrow();
+  if (result === undefined) {
+    throw new Error("candidate vendor evaluation did not return");
+  }
+  return result;
+}
+
 describe("normalizeCandidateName", () => {
   it.each([
     ["  JOSÉ\u00a0O’Neil, JR.  ", "josé o’neil, jr."],
@@ -2714,6 +2725,114 @@ describe("evaluateCandidateVendor", () => {
     );
     expect(vendorResult.provenance.vendor_complete).toBe(false);
     expect(vendorResult.technical_result).toBe("fail");
+  });
+
+  it("returns a stable invalid-truth failure for a throwing truth Proxy", () => {
+    const truth = validCandidateComparisonSet();
+    const hostileTruth = new Proxy(truth, {
+      ownKeys() {
+        throw new Error("hostile truth ownKeys");
+      },
+    });
+
+    const result = evaluateCandidateVendorWithoutThrow(
+      hostileTruth,
+      validVendorRecords(truth),
+    );
+
+    expect(result.technical_result).toBe("fail");
+    expect(result.diagnostics).toContainEqual({
+      code: "invalid_truth_set",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: null,
+      field: null,
+      expected: null,
+      actual: null,
+    });
+  });
+
+  it("returns a stable invalid-vendor failure for a throwing vendor-array Proxy", () => {
+    const truth = validCandidateComparisonSet();
+    const hostileVendor = new Proxy(validVendorRecords(truth), {
+      ownKeys() {
+        throw new Error("hostile vendor ownKeys");
+      },
+    });
+
+    const result = evaluateCandidateVendorWithoutThrow(truth, hostileVendor);
+
+    expect(result.technical_result).toBe("fail");
+    expect(result.diagnostics).toContainEqual({
+      code: "invalid_vendor_record",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: null,
+      field: null,
+      expected: null,
+      actual: null,
+    });
+  });
+
+  it("rejects a transparent Proxy-wrapped vendor record and its provenance", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = new Proxy(vendor[0]!, {});
+
+    const result = evaluateCandidateVendorWithoutThrow(truth, vendor);
+
+    expect(result.technical_result).toBe("fail");
+    expect(result.provenance.vendor_complete).toBe(false);
+    expect(result.diagnostics).toContainEqual({
+      code: "invalid_vendor_record",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: "vendor-001",
+      field: null,
+      expected: null,
+      actual: null,
+    });
+    expect(result.diagnostics).toContainEqual({
+      code: "vendor_provenance_missing",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: "vendor-001",
+      field: null,
+      expected: null,
+      actual: null,
+    });
+  });
+
+  it("rejects a transparent Proxy-wrapped vendor source and its provenance", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = {
+      ...vendor[0]!,
+      sources: [new Proxy(vendor[0]!.sources[0]!, {})],
+    };
+
+    const result = evaluateCandidateVendorWithoutThrow(truth, vendor);
+
+    expect(result.technical_result).toBe("fail");
+    expect(result.provenance.vendor_complete).toBe(false);
+    expect(result.diagnostics).toContainEqual({
+      code: "invalid_vendor_record",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: "vendor-001",
+      field: null,
+      expected: null,
+      actual: null,
+    });
+    expect(result.diagnostics).toContainEqual({
+      code: "vendor_provenance_missing",
+      fatal: true,
+      truth_record_key: null,
+      vendor_record_id: "vendor-001",
+      field: null,
+      expected: null,
+      actual: null,
+    });
   });
 
   it("rejects malformed vendor rows instead of scoring them", () => {
