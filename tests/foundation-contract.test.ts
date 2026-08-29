@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "f504d8c70c9df0e64b6b39cc8feb22728a967d36cc14c49e615cb0ed5bb5bcbb",
+  "ROADMAP.md": "61fe563690d4794860b6f82a82183c33db4b50da8ea7cbd810d4cfd92910e4f7",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1231,6 +1231,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No evaluator production code, legal/SLA gate, vendor adapter, official truth fixture, external/vendor action, or F7 surface exists before this recorded RED.",
+    )
+    expect(g1).toContain(
+      "Candidate implementation commit `877ccc9529a534b933a5372cc975077b549fbc5c` made the initial evaluator suite pass 273/273",
+    )
+    expect(g1).toContain(
+      "no-fuzzy matching, foreign-ID conflict, qualified-write-in edge-threshold, and binary diagnostic-order regressions were added or materially changed after the original 28-case RED",
+    )
+    expect(g1).toContain(
+      "RED-only commit `86c3606357e1bdff2b91215040dd56945a1d29f3` then kept all 273 existing cases green and failed exactly four new cases",
+    )
+    expect(g1).toContain(
+      "No proxy fix, T3 legal/SLA gate, vendor adapter, external/vendor action, or F7 surface exists before this recorded regression RED.",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
