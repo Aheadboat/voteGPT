@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import syntheticVendorFixture from "../../tests/fixtures/g1-candidate-vendor-synthetic.json";
+
 import {
+  type CandidateVendorRecord,
+  evaluateCandidateVendor,
   normalizeCandidateName,
+  serializeCandidateVendorEvaluation,
   validateCandidateComparisonSet,
   validateCandidateParticipation,
 } from "./candidate-vendor-evaluation";
@@ -598,6 +603,42 @@ function copyContest(
   target.district = source.district;
   target.level = source.level;
   target.stage = source.stage;
+}
+
+const syntheticVendorTemplate = syntheticVendorFixture.records[0]!;
+
+function vendorRecordFor(
+  truth: TestCandidateParticipation,
+  index: number,
+  overrides: Partial<CandidateVendorRecord> = {},
+): CandidateVendorRecord {
+  return {
+    vendor_record_id: `vendor-${String(index + 1).padStart(3, "0")}`,
+    contest_key: truth.contest_key,
+    candidate_name: truth.candidate_name,
+    official_ids: truth.official_ids.map((value) => ({ ...value })),
+    jurisdiction: truth.jurisdiction,
+    election_date: truth.election_date,
+    office: truth.office,
+    district: truth.district,
+    level: truth.level,
+    stage: truth.stage,
+    lifecycle_status: truth.lifecycle_status,
+    ballot_appearance: truth.ballot_appearance,
+    party_lines: [...truth.party_lines],
+    sources: syntheticVendorTemplate.sources.map((source) => ({ ...source })),
+    ...overrides,
+  };
+}
+
+function validVendorRecords(truth = validCandidateComparisonSet()) {
+  return truth.records.map((record, index) => vendorRecordFor(record, index));
+}
+
+function diagnosticCodes(
+  result: ReturnType<typeof evaluateCandidateVendor>,
+) {
+  return result.diagnostics.map((diagnostic) => diagnostic.code);
 }
 
 describe("normalizeCandidateName", () => {
@@ -2267,5 +2308,500 @@ describe("validateCandidateComparisonSet", () => {
     ],
   ])("rejects an ordinary manifest with %s", (_label, makeValue) => {
     expect(validateCandidateComparisonSet(makeValue())).toBe(false);
+  });
+});
+
+describe("evaluateCandidateVendor", () => {
+  it("passes the exact synthetic 100-record comparison at every threshold", () => {
+    const truth = validCandidateComparisonSet();
+
+    const result = evaluateCandidateVendor(truth, validVendorRecords(truth));
+
+    expect(result).toEqual({
+      technical_result: "pass",
+      truth_record_count: 100,
+      vendor_record_count: 100,
+      matched_record_count: 100,
+      overall_recall: {
+        matched: 100,
+        total: 100,
+        required: 95,
+        passed: true,
+      },
+      positive_recall: {
+        matched: 85,
+        total: 85,
+        required: 81,
+        passed: true,
+      },
+      strata: [
+        {
+          sample_stratum: "ordinary",
+          matched: 50,
+          total: 50,
+          required: null,
+          passed: true,
+        },
+        {
+          sample_stratum: "nonpartisan",
+          matched: 10,
+          total: 10,
+          required: 9,
+          passed: true,
+        },
+        {
+          sample_stratum: "write_in",
+          matched: 10,
+          total: 10,
+          required: 9,
+          passed: true,
+        },
+        {
+          sample_stratum: "cross_filed",
+          matched: 10,
+          total: 10,
+          required: 9,
+          passed: true,
+        },
+        {
+          sample_stratum: "withdrawn",
+          matched: 10,
+          total: 10,
+          required: 9,
+          passed: true,
+        },
+        {
+          sample_stratum: "disqualified",
+          matched: 10,
+          total: 10,
+          required: 9,
+          passed: true,
+        },
+      ],
+      provenance: {
+        truth_records_complete: 100,
+        vendor_records_complete: 100,
+        truth_complete: true,
+        vendor_complete: true,
+      },
+      diagnostics: [],
+    });
+  });
+
+  it("matches an exact normalized, officially reviewed alias", () => {
+    const truth = validCandidateComparisonSet();
+    const row = truth.records[0]!;
+    const source = row.sources[0]!;
+    row.reviewed_aliases = [
+      {
+        name: "Candidate One Alias",
+        source_url: source.url,
+        locator: source.locator,
+      },
+    ];
+    const vendor = validVendorRecords(truth);
+    vendor[0] = vendorRecordFor(row, 0, {
+      candidate_name: "  CANDIDATE\u2003ONE ALIAS  ",
+      official_ids: [],
+    });
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.technical_result).toBe("pass");
+    expect(result.matched_record_count).toBe(100);
+  });
+
+  it("uses an exact candidate-scoped official ID but rejects an invented name", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = { ...vendor[0]!, candidate_name: "Invented Candidate Name" };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.matched_record_count).toBe(100);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        fatal: true,
+        truth_record_key: truth.records[0]!.record_key,
+        vendor_record_id: vendor[0]!.vendor_record_id,
+        field: "candidate_name",
+      }),
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("never lets an official ID bypass exact contest scope", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = {
+      ...vendor[0]!,
+      jurisdiction: `${vendor[0]!.jurisdiction}/precinct:other`,
+    };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.matched_record_count).toBe(99);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        field: "jurisdiction",
+        truth_record_key: truth.records[0]!.record_key,
+        vendor_record_id: vendor[0]!.vendor_record_id,
+      }),
+    );
+    expect(diagnosticCodes(result)).toContain("unmatched_vendor_record");
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails closed when name and official ID resolve to different truth candidates", () => {
+    const truth = validCandidateComparisonSet();
+    copyContest(truth.records[1]!, truth.records[0]!);
+    const vendor = validVendorRecords(truth);
+    vendor[0] = {
+      ...vendor[0]!,
+      official_ids: truth.records[1]!.official_ids.map((value) => ({
+        ...value,
+      })),
+    };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "ambiguous_match",
+        fatal: true,
+        vendor_record_id: vendor[0]!.vendor_record_id,
+      }),
+    );
+    expect(result.matched_record_count).toBe(98);
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails closed when canonical and alias rows target one truth candidate", () => {
+    const truth = validCandidateComparisonSet();
+    const row = truth.records[0]!;
+    const source = row.sources[0]!;
+    row.reviewed_aliases = [
+      {
+        name: "Candidate One Alias",
+        source_url: source.url,
+        locator: source.locator,
+      },
+    ];
+    const vendor = validVendorRecords(truth);
+    vendor.push(
+      vendorRecordFor(row, vendor.length, {
+        candidate_name: "Candidate One Alias",
+        official_ids: [],
+      }),
+    );
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(
+      result.diagnostics.filter(
+        (diagnostic) => diagnostic.code === "ambiguous_match",
+      ),
+    ).toHaveLength(2);
+    expect(result.matched_record_count).toBe(99);
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("rejects duplicate truth record keys explicitly", () => {
+    const truth = validCandidateComparisonSet();
+    truth.records[1] = {
+      ...truth.records[1]!,
+      record_key: truth.records[0]!.record_key,
+    };
+
+    const result = evaluateCandidateVendor(truth, validVendorRecords(truth));
+
+    expect(diagnosticCodes(result)).toContain("duplicate_truth_record_key");
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("rejects duplicate vendor record IDs explicitly", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[1] = {
+      ...vendor[1]!,
+      vendor_record_id: vendor[0]!.vendor_record_id,
+    };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(diagnosticCodes(result)).toContain("duplicate_vendor_record_id");
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("rejects an unmatched Confirmed claim inside a sampled contest", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor.push(
+      vendorRecordFor(truth.records[0]!, vendor.length, {
+        candidate_name: "Unknown Sampled Candidate",
+        official_ids: [],
+      }),
+    );
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(diagnosticCodes(result)).toContain("unmatched_confirmed_on_ballot");
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("never converts an official qualified write-in into Confirmed on ballot", () => {
+    const truth = validCandidateComparisonSet();
+    const index = truth.records.findIndex(
+      (record) => record.sample_stratum === "write_in",
+    );
+    const vendor = validVendorRecords(truth);
+    vendor[index] = { ...vendor[index]!, ballot_appearance: "printed" };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(diagnosticCodes(result)).toContain("false_confirmed_on_ballot");
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        field: "ballot_appearance",
+        expected: "write_in",
+        actual: "printed",
+      }),
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it.each([
+    ["contest_key", "other-contest"],
+    ["candidate_name", "Other Candidate"],
+    ["jurisdiction", "ocd-division/country:us/state:ct/place:other"],
+    ["election_date", "2024-12-01"],
+    ["office", "Other Office"],
+    ["district", "other"],
+    ["level", "state"],
+    ["stage", "general"],
+    ["lifecycle_status", "withdrawn"],
+    ["ballot_appearance", "not_on_ballot"],
+  ] as const)("reports a fatal %s conflict", (field, actual) => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    const row = truth.records[0]!;
+    const replacement = { ...vendor[0]!, [field]: actual };
+    if (field === "candidate_name") {
+      replacement.official_ids = row.official_ids.map((value) => ({ ...value }));
+    }
+    vendor[0] = replacement;
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        fatal: true,
+        truth_record_key: row.record_key,
+        vendor_record_id: vendor[0]!.vendor_record_id,
+        field,
+        actual,
+      }),
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("compares party lines as one exact, order-independent set", () => {
+    const truth = validCandidateComparisonSet();
+    const crossFiledIndex = truth.records.findIndex(
+      (record) => record.sample_stratum === "cross_filed",
+    );
+    const reordered = validVendorRecords(truth);
+    reordered[crossFiledIndex] = {
+      ...reordered[crossFiledIndex]!,
+      party_lines: ["Party B", "Party A"],
+    };
+
+    expect(evaluateCandidateVendor(truth, reordered).technical_result).toBe(
+      "pass",
+    );
+
+    const conflicting = validVendorRecords(truth);
+    conflicting[crossFiledIndex] = {
+      ...conflicting[crossFiledIndex]!,
+      party_lines: ["Party A", "Party C"],
+    };
+    const result = evaluateCandidateVendor(truth, conflicting);
+
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        fatal: true,
+        field: "party_lines",
+      }),
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails truth and vendor record-level provenance gaps", () => {
+    const truth = validCandidateComparisonSet();
+    truth.records[0] = { ...truth.records[0]!, sources: [] };
+    const truthResult = evaluateCandidateVendor(
+      truth,
+      validVendorRecords(truth),
+    );
+
+    expect(diagnosticCodes(truthResult)).toContain("truth_provenance_missing");
+    expect(truthResult.provenance.truth_complete).toBe(false);
+    expect(truthResult.technical_result).toBe("fail");
+
+    const validTruth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(validTruth);
+    vendor[0] = { ...vendor[0]!, sources: [] };
+    const vendorResult = evaluateCandidateVendor(validTruth, vendor);
+
+    expect(diagnosticCodes(vendorResult)).toContain(
+      "vendor_provenance_missing",
+    );
+    expect(vendorResult.provenance.vendor_complete).toBe(false);
+    expect(vendorResult.technical_result).toBe("fail");
+  });
+
+  it("rejects malformed vendor rows instead of scoring them", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor: unknown[] = validVendorRecords(truth);
+    vendor[0] = { ...vendor[0], level: "county" };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(diagnosticCodes(result)).toContain("invalid_vendor_record");
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails aggregate presence below 95 of 100", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth).filter((_, index) => index >= 6);
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.overall_recall).toEqual({
+      matched: 94,
+      total: 100,
+      required: 95,
+      passed: false,
+    });
+    expect(diagnosticCodes(result)).toContain(
+      "overall_recall_below_threshold",
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails positive recall below 95 percent while aggregate recall passes", () => {
+    const truth = validCandidateComparisonSet();
+    const ordinaryIndexes = truth.records
+      .map((record, index) => ({ record, index }))
+      .filter(({ record }) => record.sample_stratum === "ordinary")
+      .slice(0, 5)
+      .map(({ index }) => index);
+    const vendor = validVendorRecords(truth).filter(
+      (_, index) => !ordinaryIndexes.includes(index),
+    );
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.overall_recall.passed).toBe(true);
+    expect(result.positive_recall).toEqual({
+      matched: 80,
+      total: 85,
+      required: 81,
+      passed: false,
+    });
+    expect(diagnosticCodes(result)).toContain(
+      "positive_recall_below_threshold",
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("fails an edge stratum below 9 of 10 while aggregate gates pass", () => {
+    const truth = validCandidateComparisonSet();
+    const nonpartisanIndexes = truth.records
+      .map((record, index) => ({ record, index }))
+      .filter(({ record }) => record.sample_stratum === "nonpartisan")
+      .slice(0, 2)
+      .map(({ index }) => index);
+    const vendor = validVendorRecords(truth).filter(
+      (_, index) => !nonpartisanIndexes.includes(index),
+    );
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.overall_recall.passed).toBe(true);
+    expect(result.positive_recall.passed).toBe(true);
+    expect(
+      result.strata.find(
+        (stratum) => stratum.sample_stratum === "nonpartisan",
+      ),
+    ).toEqual({
+      sample_stratum: "nonpartisan",
+      matched: 8,
+      total: 10,
+      required: 9,
+      passed: false,
+    });
+    expect(diagnosticCodes(result)).toContain(
+      "edge_stratum_recall_below_threshold",
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
+  it("passes the exact aggregate, positive, and edge threshold boundaries", () => {
+    const truth = validCandidateComparisonSet();
+    const ordinaryIndexes = truth.records
+      .map((record, index) => ({ record, index }))
+      .filter(({ record }) => record.sample_stratum === "ordinary")
+      .slice(0, 4)
+      .map(({ index }) => index);
+    const disqualifiedIndex = truth.records.findIndex(
+      (record) => record.sample_stratum === "disqualified",
+    );
+    const removed = new Set([...ordinaryIndexes, disqualifiedIndex]);
+    const vendor = validVendorRecords(truth).filter(
+      (_, index) => !removed.has(index),
+    );
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.overall_recall).toEqual({
+      matched: 95,
+      total: 100,
+      required: 95,
+      passed: true,
+    });
+    expect(result.positive_recall).toEqual({
+      matched: 81,
+      total: 85,
+      required: 81,
+      passed: true,
+    });
+    expect(result.technical_result).toBe("pass");
+  });
+
+  it("serializes one stable report shape independent of vendor input order", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = { ...vendor[0]!, lifecycle_status: "withdrawn" };
+    vendor[1] = { ...vendor[1]!, party_lines: ["Other Party"] };
+    const forward = evaluateCandidateVendor(truth, vendor);
+    const reverse = evaluateCandidateVendor(truth, [...vendor].reverse());
+
+    expect(serializeCandidateVendorEvaluation(forward)).toBe(
+      serializeCandidateVendorEvaluation(reverse),
+    );
+    expect(serializeCandidateVendorEvaluation(forward)).toBe(
+      JSON.stringify(forward),
+    );
+    expect(forward.diagnostics).toEqual(
+      [...forward.diagnostics].sort((left, right) =>
+        JSON.stringify(left).localeCompare(JSON.stringify(right)),
+      ),
+    );
   });
 });
