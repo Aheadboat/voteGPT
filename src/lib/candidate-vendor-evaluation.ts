@@ -1041,7 +1041,7 @@ function evaluateCandidateVendorValue(
     rawTruthRecords !== null && truthRecordsComplete === truthValues.length;
   const vendorComplete =
     rawVendorRecords !== null && vendorRecordsComplete === vendorValues.length;
-  diagnostics.sort(compareCandidateVendorDiagnostics);
+  diagnostics.sort(compareStableJson);
 
   return {
     technical_result:
@@ -1327,7 +1327,7 @@ function candidateVendorDecision(
   quoteApproved: boolean,
   diagnostics: CandidateVendorDecisionDiagnostic[],
 ): CandidateVendorDecision {
-  diagnostics.sort(compareCandidateVendorDecisionDiagnostics);
+  diagnostics.sort(compareStableJson);
   const rightsAndOperationsPassed = diagnostics.every(
     ({ evidence_kind: evidenceKind }) =>
       evidenceKind === "quote" || evidenceKind === "technical",
@@ -1380,10 +1380,7 @@ function candidateVendorDecisionActual(value: unknown): string | null {
   return JSON.stringify(value) ?? String(value);
 }
 
-function compareCandidateVendorDecisionDiagnostics(
-  left: CandidateVendorDecisionDiagnostic,
-  right: CandidateVendorDecisionDiagnostic,
-): number {
+function compareStableJson<T>(left: T, right: T): number {
   const serializedLeft = JSON.stringify(left);
   const serializedRight = JSON.stringify(right);
   return serializedLeft < serializedRight
@@ -1480,7 +1477,7 @@ function preflightCandidateVendorInput(
 function rejectedCandidateVendorInputReport(
   diagnostics: CandidateVendorDiagnostic[],
 ): CandidateVendorEvaluationReport {
-  diagnostics.sort(compareCandidateVendorDiagnostics);
+  diagnostics.sort(compareStableJson);
   return {
     technical_result: "fail",
     truth_record_count: 0,
@@ -1513,19 +1510,6 @@ function rejectedCandidateVendorInputReport(
     },
     diagnostics,
   };
-}
-
-function compareCandidateVendorDiagnostics(
-  left: CandidateVendorDiagnostic,
-  right: CandidateVendorDiagnostic,
-): number {
-  const serializedLeft = JSON.stringify(left);
-  const serializedRight = JSON.stringify(right);
-  return serializedLeft < serializedRight
-    ? -1
-    : serializedLeft > serializedRight
-      ? 1
-      : 0;
 }
 
 function candidateVendorDiagnostic(
