@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "9aa0ac1ebe4e1fb8a21583971df4dddf92db825fd83c75bcee5780c928a74035",
+  "ROADMAP.md": "5a340ad9dd9e5c6693e986c8f58a5f34057467a121f23b8d78bb2d9604116ecd",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1210,6 +1210,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No set implementation, fixture, source data, vendor/external action, or F7 surface exists before this recorded RED.",
+    )
+    expect(g1).toContain(
+      "Feature-lead commit `45aaf3b876e5fe6717e7286b18bb7a3eeb2d75ed` implemented the provider-neutral exact-100 set boundary",
+    )
+    expect(g1).toContain(
+      "Review-fix commit `17d81c2fdbce2c254b3a5d2fc5fa991915cd971a` compares full-precision instants without narrowing the accepted timestamp contract",
+    )
+    expect(g1).toContain(
+      "Exact-head verification passed 243/243 focused cases, 36 files/1,188 full tests",
+    )
+    expect(g1).toContain(
+      "The official 100-record fixture and its independent fact/source audit remain RED and pending, so G1 stays in `RED`",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
