@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
 
 export type CandidateLevel = "federal" | "state" | "local";
 export type ElectionStage = "primary" | "general";
@@ -405,10 +406,12 @@ export function validateCandidateParticipation(
   value: unknown,
 ): value is CandidateParticipation {
   try {
-    if (!validateCandidateParticipationValue(value)) {
+    if (
+      !canStructuredCloneCandidateInput(value) ||
+      !validateCandidateParticipationValue(value)
+    ) {
       return false;
     }
-    structuredClone(value);
     return true;
   } catch {
     return false;
@@ -419,10 +422,12 @@ export function validateCandidateComparisonSet(
   value: unknown,
 ): value is CandidateComparisonSet {
   try {
-    if (!validateCandidateComparisonSetValue(value)) {
+    if (
+      !canStructuredCloneCandidateInput(value) ||
+      !validateCandidateComparisonSetValue(value)
+    ) {
       return false;
     }
-    structuredClone(value);
     return true;
   } catch {
     return false;
@@ -438,10 +443,9 @@ export function evaluateCandidateVendor(
       candidateVendorDiagnostic("invalid_truth_set", true),
     ]);
   }
-  if (!canStructuredCloneCandidateInput(vendorValue)) {
-    return rejectedCandidateVendorInputReport(
-      rejectedCandidateVendorDiagnostics(vendorValue),
-    );
+  const rejectedVendorDiagnostics = preflightCandidateVendorInput(vendorValue);
+  if (rejectedVendorDiagnostics !== null) {
+    return rejectedCandidateVendorInputReport(rejectedVendorDiagnostics);
   }
   try {
     return evaluateCandidateVendorValue(truthValue, vendorValue);
@@ -754,6 +758,9 @@ export function serializeCandidateVendorEvaluation(
 
 function canStructuredCloneCandidateInput(value: unknown): boolean {
   try {
+    if (!hasOnlyTrapFreeCandidateData(value, new WeakSet<object>())) {
+      return false;
+    }
     structuredClone(value);
     return true;
   } catch {
@@ -761,43 +768,74 @@ function canStructuredCloneCandidateInput(value: unknown): boolean {
   }
 }
 
-function rejectedCandidateVendorDiagnostics(
-  vendorValue: unknown,
-): CandidateVendorDiagnostic[] {
-  const rejectedRecord = findUncloneableVendorRecord(vendorValue);
-  const vendorRecordId = rejectedRecord?.vendorRecordId ?? null;
-  const diagnostics = [
-    candidateVendorDiagnostic("invalid_vendor_record", true, {
-      vendor_record_id: vendorRecordId,
-    }),
-  ];
-  if (rejectedRecord !== null) {
-    diagnostics.push(
-      candidateVendorDiagnostic("vendor_provenance_missing", true, {
-        vendor_record_id: vendorRecordId,
-      }),
-    );
+function hasOnlyTrapFreeCandidateData(
+  value: unknown,
+  visited: WeakSet<object>,
+): boolean {
+  if (
+    value === null ||
+    (typeof value !== "object" && typeof value !== "function")
+  ) {
+    return true;
   }
-  return diagnostics;
+  if (nodeTypes.isProxy(value) || typeof value === "function") {
+    return false;
+  }
+
+  const candidate = value as object;
+  if (visited.has(candidate)) {
+    return true;
+  }
+  const prototype = Reflect.getPrototypeOf(candidate);
+  if (
+    Array.isArray(candidate)
+      ? prototype !== Array.prototype
+      : prototype !== Object.prototype && prototype !== null
+  ) {
+    return false;
+  }
+
+  visited.add(candidate);
+  for (const key of Reflect.ownKeys(candidate)) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(candidate, key);
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      !hasOnlyTrapFreeCandidateData(descriptor.value, visited)
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
-function findUncloneableVendorRecord(
+function preflightCandidateVendorInput(
   vendorValue: unknown,
-): { vendorRecordId: string | null } | null {
-  try {
-    const vendorRecords = readExactDenseArray(vendorValue);
-    if (vendorRecords === null) {
-      return null;
+): CandidateVendorDiagnostic[] | null {
+  if (nodeTypes.isProxy(vendorValue)) {
+    return [candidateVendorDiagnostic("invalid_vendor_record", true)];
+  }
+
+  const vendorRecords = readExactDenseArray(vendorValue);
+  if (vendorRecords === null) {
+    return canStructuredCloneCandidateInput(vendorValue)
+      ? null
+      : [candidateVendorDiagnostic("invalid_vendor_record", true)];
+  }
+  for (const vendorRecord of vendorRecords) {
+    if (!canStructuredCloneCandidateInput(vendorRecord)) {
+      const vendorRecordId = nodeTypes.isProxy(vendorRecord)
+        ? null
+        : candidateVendorRecordId(vendorRecord);
+      return [
+        candidateVendorDiagnostic("invalid_vendor_record", true, {
+          vendor_record_id: vendorRecordId,
+        }),
+        candidateVendorDiagnostic("vendor_provenance_missing", true, {
+          vendor_record_id: vendorRecordId,
+        }),
+      ];
     }
-    for (const vendorRecord of vendorRecords) {
-      if (!canStructuredCloneCandidateInput(vendorRecord)) {
-        return {
-          vendorRecordId: candidateVendorRecordId(vendorRecord),
-        };
-      }
-    }
-  } catch {
-    return null;
   }
   return null;
 }
@@ -815,20 +853,20 @@ function rejectedCandidateVendorInputReport(
       matched: 0,
       total: 0,
       required: 0,
-      passed: true,
+      passed: false,
     },
     positive_recall: {
       matched: 0,
       total: 0,
       required: 0,
-      passed: true,
+      passed: false,
     },
     strata: strata.map((sampleStratum) => ({
       sample_stratum: sampleStratum,
       matched: 0,
       total: 0,
       required: sampleStratum === "ordinary" ? null : 0,
-      passed: true,
+      passed: false,
     })),
     provenance: {
       truth_records_complete: 0,
