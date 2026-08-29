@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "e34d60a14be523f35580d955d2607ec263965a499260b660ee3857978db1b794",
+  "ROADMAP.md": "3efc8cc902655401c498d2110b36a4be841262f9bb1bc343577530acd453b494",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1279,6 +1279,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No T3 production implementation, vendor adapter, official fixture, external/vendor action, or F7 surface exists before this recorded RED.",
+    )
+    expect(g1).toContain(
+      "production commit `7f79f11ab620f785fc3fc927cba3c40bb73e5d65` implements the structured decision gate by reusing T2's trap-free preflight",
+    )
+    expect(g1).toContain(
+      "test-only commit `cf15dee3f65520a16d5383bb3a0ffa7793f7b72b` added those passing regressions",
+    )
+    expect(g1).toContain(
+      "coordinator verification passed 356/356 focused evaluator cases, 36 files/1,301 full tests",
+    )
+    expect(g1).toContain(
+      "G1-T3 is GREEN, but G1 remains in `RED` until the official 100-record fixture and its independent fact/source audit pass",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
