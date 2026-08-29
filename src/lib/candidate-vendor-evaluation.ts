@@ -433,6 +433,30 @@ export function evaluateCandidateVendor(
   truthValue: unknown,
   vendorValue: unknown,
 ): CandidateVendorEvaluationReport {
+  if (!canStructuredCloneCandidateInput(truthValue)) {
+    return rejectedCandidateVendorInputReport([
+      candidateVendorDiagnostic("invalid_truth_set", true),
+    ]);
+  }
+  if (!canStructuredCloneCandidateInput(vendorValue)) {
+    return rejectedCandidateVendorInputReport(
+      rejectedCandidateVendorDiagnostics(vendorValue),
+    );
+  }
+  try {
+    return evaluateCandidateVendorValue(truthValue, vendorValue);
+  } catch {
+    return rejectedCandidateVendorInputReport([
+      candidateVendorDiagnostic("invalid_truth_set", true),
+      candidateVendorDiagnostic("invalid_vendor_record", true),
+    ]);
+  }
+}
+
+function evaluateCandidateVendorValue(
+  truthValue: unknown,
+  vendorValue: unknown,
+): CandidateVendorEvaluationReport {
   const diagnostics: CandidateVendorDiagnostic[] = [];
   const truthSet = readExactDataRecord(truthValue, comparisonSetKeys);
   const rawTruthRecords =
@@ -697,15 +721,7 @@ export function evaluateCandidateVendor(
     rawTruthRecords !== null && truthRecordsComplete === truthValues.length;
   const vendorComplete =
     rawVendorRecords !== null && vendorRecordsComplete === vendorValues.length;
-  diagnostics.sort((left, right) => {
-    const serializedLeft = JSON.stringify(left);
-    const serializedRight = JSON.stringify(right);
-    return serializedLeft < serializedRight
-      ? -1
-      : serializedLeft > serializedRight
-        ? 1
-        : 0;
-  });
+  diagnostics.sort(compareCandidateVendorDiagnostics);
 
   return {
     technical_result:
@@ -734,6 +750,107 @@ export function serializeCandidateVendorEvaluation(
   report: CandidateVendorEvaluationReport,
 ): string {
   return JSON.stringify(report);
+}
+
+function canStructuredCloneCandidateInput(value: unknown): boolean {
+  try {
+    structuredClone(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function rejectedCandidateVendorDiagnostics(
+  vendorValue: unknown,
+): CandidateVendorDiagnostic[] {
+  const rejectedRecord = findUncloneableVendorRecord(vendorValue);
+  const vendorRecordId = rejectedRecord?.vendorRecordId ?? null;
+  const diagnostics = [
+    candidateVendorDiagnostic("invalid_vendor_record", true, {
+      vendor_record_id: vendorRecordId,
+    }),
+  ];
+  if (rejectedRecord !== null) {
+    diagnostics.push(
+      candidateVendorDiagnostic("vendor_provenance_missing", true, {
+        vendor_record_id: vendorRecordId,
+      }),
+    );
+  }
+  return diagnostics;
+}
+
+function findUncloneableVendorRecord(
+  vendorValue: unknown,
+): { vendorRecordId: string | null } | null {
+  try {
+    const vendorRecords = readExactDenseArray(vendorValue);
+    if (vendorRecords === null) {
+      return null;
+    }
+    for (const vendorRecord of vendorRecords) {
+      if (!canStructuredCloneCandidateInput(vendorRecord)) {
+        return {
+          vendorRecordId: candidateVendorRecordId(vendorRecord),
+        };
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function rejectedCandidateVendorInputReport(
+  diagnostics: CandidateVendorDiagnostic[],
+): CandidateVendorEvaluationReport {
+  diagnostics.sort(compareCandidateVendorDiagnostics);
+  return {
+    technical_result: "fail",
+    truth_record_count: 0,
+    vendor_record_count: 0,
+    matched_record_count: 0,
+    overall_recall: {
+      matched: 0,
+      total: 0,
+      required: 0,
+      passed: true,
+    },
+    positive_recall: {
+      matched: 0,
+      total: 0,
+      required: 0,
+      passed: true,
+    },
+    strata: strata.map((sampleStratum) => ({
+      sample_stratum: sampleStratum,
+      matched: 0,
+      total: 0,
+      required: sampleStratum === "ordinary" ? null : 0,
+      passed: true,
+    })),
+    provenance: {
+      truth_records_complete: 0,
+      vendor_records_complete: 0,
+      truth_complete: false,
+      vendor_complete: false,
+    },
+    diagnostics,
+  };
+}
+
+function compareCandidateVendorDiagnostics(
+  left: CandidateVendorDiagnostic,
+  right: CandidateVendorDiagnostic,
+): number {
+  const serializedLeft = JSON.stringify(left);
+  const serializedRight = JSON.stringify(right);
+  return serializedLeft < serializedRight
+    ? -1
+    : serializedLeft > serializedRight
+      ? 1
+      : 0;
 }
 
 function candidateVendorDiagnostic(
