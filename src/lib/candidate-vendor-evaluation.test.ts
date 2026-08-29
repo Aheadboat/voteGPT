@@ -2774,6 +2774,48 @@ describe("evaluateCandidateVendor", () => {
     });
   });
 
+  it("rejects a top-level truth accessor without executing its getter", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    const records = truth.records;
+    let getterCalls = 0;
+    Object.defineProperty(truth, "records", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        return records;
+      },
+    });
+
+    const result = evaluateCandidateVendorWithoutThrow(truth, vendor);
+
+    expect(result.technical_result).toBe("fail");
+    expect(getterCalls).toBe(0);
+  });
+
+  it("rejects a nested vendor source accessor without executing its getter", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    const source = { ...vendor[0]!.sources[0]! };
+    const locator = source.locator;
+    let getterCalls = 0;
+    Object.defineProperty(source, "locator", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        getterCalls += 1;
+        return locator;
+      },
+    });
+    vendor[0] = { ...vendor[0]!, sources: [source] };
+
+    const result = evaluateCandidateVendorWithoutThrow(truth, vendor);
+
+    expect(result.technical_result).toBe("fail");
+    expect(getterCalls).toBe(0);
+  });
+
   it("rejects a transparent Proxy-wrapped vendor record and its provenance", () => {
     const truth = validCandidateComparisonSet();
     const vendor = validVendorRecords(truth);
@@ -2787,7 +2829,7 @@ describe("evaluateCandidateVendor", () => {
       code: "invalid_vendor_record",
       fatal: true,
       truth_record_key: null,
-      vendor_record_id: "vendor-001",
+      vendor_record_id: null,
       field: null,
       expected: null,
       actual: null,
@@ -2796,10 +2838,97 @@ describe("evaluateCandidateVendor", () => {
       code: "vendor_provenance_missing",
       fatal: true,
       truth_record_key: null,
-      vendor_record_id: "vendor-001",
+      vendor_record_id: null,
       field: null,
       expected: null,
       actual: null,
+    });
+  });
+
+  it("rejects a proxy vendor row without reflection or unstable ID recovery", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    const trapCalls = {
+      getPrototypeOf: 0,
+      ownKeys: 0,
+      getOwnPropertyDescriptor: 0,
+    };
+    let spoofedId = 0;
+    vendor[0] = new Proxy(vendor[0]!, {
+      getPrototypeOf(target) {
+        trapCalls.getPrototypeOf += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        trapCalls.ownKeys += 1;
+        return Reflect.ownKeys(target);
+      },
+      getOwnPropertyDescriptor(target, key) {
+        trapCalls.getOwnPropertyDescriptor += 1;
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (
+          key === "vendor_record_id" &&
+          descriptor !== undefined &&
+          "value" in descriptor
+        ) {
+          spoofedId += 1;
+          return { ...descriptor, value: `spoof-${spoofedId}` };
+        }
+        return descriptor;
+      },
+    });
+
+    const first = evaluateCandidateVendorWithoutThrow(truth, vendor);
+    const second = evaluateCandidateVendorWithoutThrow(truth, vendor);
+    const rejectedIds = [first, second].map(
+      (report) =>
+        report.diagnostics.find(
+          (diagnostic) => diagnostic.code === "invalid_vendor_record",
+        )?.vendor_record_id,
+    );
+
+    expect(first.technical_result).toBe("fail");
+    expect(second.technical_result).toBe("fail");
+    expect({
+      trapCalls,
+      rejectedIds,
+      stable:
+        serializeCandidateVendorEvaluation(first) ===
+        serializeCandidateVendorEvaluation(second),
+    }).toEqual({
+      trapCalls: {
+        getPrototypeOf: 0,
+        ownKeys: 0,
+        getOwnPropertyDescriptor: 0,
+      },
+      rejectedIds: [null, null],
+      stable: true,
+    });
+  });
+
+  it("fails every recall gate when invalid input makes recall unavailable", () => {
+    const truth = validCandidateComparisonSet();
+    const hostileTruth = new Proxy(truth, {
+      ownKeys() {
+        throw new Error("hostile truth ownKeys");
+      },
+    });
+
+    const result = evaluateCandidateVendorWithoutThrow(
+      hostileTruth,
+      validVendorRecords(truth),
+    );
+
+    expect({
+      technicalResult: result.technical_result,
+      overallPassed: result.overall_recall.passed,
+      positivePassed: result.positive_recall.passed,
+      strataPassed: result.strata.map((stratum) => stratum.passed),
+    }).toEqual({
+      technicalResult: "fail",
+      overallPassed: false,
+      positivePassed: false,
+      strataPassed: [false, false, false, false, false, false],
     });
   });
 
