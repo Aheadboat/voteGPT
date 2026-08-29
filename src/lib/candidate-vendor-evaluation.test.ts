@@ -483,14 +483,36 @@ function syntheticCandidateParticipation(
 }
 
 function validCandidateComparisonSet(): TestComparisonSet {
-  const authorities = authorityStates.map((stateCode, index) => ({
+  const localAuthorities = authorityStates.map((stateCode, index) => ({
     authority_id: `authority-${index + 1}`,
     authority_name: `Local Election Authority ${index + 1}`,
     authority_level: "local",
     state_code: stateCode,
   }));
+  const sharedAuthorities = (level: "federal" | "state") =>
+    authorityStates.slice(4, 8).map((stateCode, index) => ({
+      authority_id: `${level}-authority-${index + 1}`,
+      authority_name: `${level} Election Authority ${index + 1}`,
+      authority_level: level,
+      state_code: stateCode,
+    }));
+  const authoritiesByLevel = {
+    federal: sharedAuthorities("federal"),
+    state: sharedAuthorities("state"),
+    local: localAuthorities,
+  };
+  const authorities = [
+    ...localAuthorities,
+    ...authoritiesByLevel.federal,
+    ...authoritiesByLevel.state,
+  ];
   const records: TestCandidateParticipation[] = [];
   const authorityAssignments: TestAuthorityAssignment[] = [];
+  const recordCountByLevel: Record<TestLevel, number> = {
+    federal: 0,
+    state: 0,
+    local: 0,
+  };
   let sequence = 0;
   let withdrawnCount = 0;
 
@@ -500,7 +522,16 @@ function validCandidateComparisonSet(): TestComparisonSet {
     stage: TestStage,
     stratum: TestStratum,
   ) => {
-    const authority = authorities[sequence % authorities.length]!;
+    const levelSequence = recordCountByLevel[level];
+    recordCountByLevel[level] += 1;
+    const levelAuthorities = authoritiesByLevel[level];
+    const authorityIndex =
+      level === "local"
+        ? levelSequence < 10
+          ? 0
+          : 1 + ((levelSequence - 10) % (levelAuthorities.length - 1))
+        : levelSequence % levelAuthorities.length;
+    const authority = levelAuthorities[authorityIndex]!;
     const withdrawnAppearance =
       stratum === "withdrawn" && withdrawnCount >= 5
         ? "not_on_ballot"
