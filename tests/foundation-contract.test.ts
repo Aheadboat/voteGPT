@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "5502324309857e422c546d79162b38837e239464b0c32154a104e61be78c560a",
+  "ROADMAP.md": "44fc0e878a7e01c6bea93a0b67d5da16922a8d97aba7f02caa76887acf173e2b",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1255,6 +1255,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No trust-boundary production repair, T3 legal/SLA gate, vendor adapter, official truth fixture, external/vendor action, or F7 surface exists before this recorded regression RED.",
+    )
+    expect(g1).toContain(
+      "Review-fix commit `bd24513dba67c8a02141d9eb6602ffd26772afb0` detects proxies before reflection",
+    )
+    expect(g1).toContain(
+      "formatter-only commit `5c196ca0527ea1e4b428de48ec69ca7434bacf12` then applied the repository-current Prettier 3.9.6 layout",
+    )
+    expect(g1).toContain(
+      "coordinator verification passed 281/281 focused evaluator cases, 36 files/1,226 full tests",
+    )
+    expect(g1).toContain(
+      "G1-T2 is GREEN, but G1 remains in `RED` until the official 100-record fixture and its independent fact/source audit pass",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
