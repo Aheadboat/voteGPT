@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest"
 
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
-  "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "6bbb540e65a3f78edd3bea95768d51ab457a576838c33612667662d1f177fc7e",
+  "README.md": "884a5bf1f35d463f2e96ac91302ef123ff76d9fbb9c451b988d55ffe9ea18e41",
+  "ROADMAP.md": "79a8b3d266ad3d2c678c84ec2918b87a8625663241328388f0f32929a27c1ef2",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1105,7 +1105,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["F5", "DONE"],
       ["R2", "DONE"],
       ["F6", "DONE"],
-      ["G1", "IN PROGRESS (RED)"],
+      ["G1", "VERIFIED"],
       ["F7", "TODO"],
       ["F8", "TODO"],
       ["G2", "TODO"],
@@ -1118,9 +1118,9 @@ describe("concurrent roadmap delivery contract", () => {
     ])
     expect([...statuses]).toEqual([...expectedStatuses])
     expect(activeIds).toEqual(["G1"])
-    expect(g1Status).toBe("IN PROGRESS (RED)")
+    expect(g1Status).toBe("VERIFIED")
     expect(g1.split(/\r?\n/, 1)[0]).toBe(
-      "## G1 — Candidate-Data Vendor Proof of Concept [IN PROGRESS (RED)]",
+      "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
     )
     expect(g1).toContain(
       "**Dependencies:** F6. The official comparison sample set is created and validated as G1-T1 rather than treated as an external prerequisite.",
@@ -1352,7 +1352,22 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "G1-T4 is GREEN; G1-T5/T6 and every external or F7 action remain unauthorized",
     )
-    expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
+    expect(g1).toContain(
+      "Exact independently reviewed implementation head `16fe8597ba4889a62d9b0c5cef0f69c969b10ba3` retains the one durable public-source-fallback `NO-GO (reopenable)` decision",
+    )
+    expect(g1).toContain(
+      "The focused G1 suite passed 363/363 cases; `npm.cmd run check` passed 37 files/1,308 tests",
+    )
+    expect(g1).toContain(
+      "local `npm.cmd run test:e2e` stopped at the required `E2E database requires explicit destructive opt-in.` guard",
+    )
+    expect(g1).toContain(
+      "Independent final branch review reported zero Critical, Important, or Minor correctness, trust-boundary, provenance, authorization-scope, documentation, test, or maintainability finding.",
+    )
+    expect(g1).toContain(
+      "G1-T7 is VERIFIED and ready for the feature PR, hosted CI/mergeability, G1-T8 lifecycle guard, and Human Gate B",
+    )
+    expect(readCoordinationField(g1, "Phase")).toBe("`VERIFIED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
       "`codex/g1-candidate-vendor-poc`",
     )
@@ -1386,6 +1401,9 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(g1, "Blockers")).toContain(
       "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain blocked",
     )
+    expect(readCoordinationField(g1, "Feature PR/CI")).toContain(
+      "G1-T8 must bind the real feature PR/head/run evidence before Human Gate B",
+    )
     expect(readCoordinationField(g1, "Next Human Gate")).toContain(
       "Human Gate B",
     )
@@ -1393,7 +1411,7 @@ describe("concurrent roadmap delivery contract", () => {
       "G1-T5/T6 external vendor actions remain separately unapproved",
     )
     expect(readMarkdownSection(readme, "## Status")).toContain(
-      "G1 — Candidate-Data Vendor Proof of Concept is active in `RED`; Human Gate A approved the offline G1-T1 through G1-T4/G1-T7 tests-first plan, Human Gate B follows `VERIFIED`, successful feature PR CI/mergeability, and independent review, and F7 plus every later item remain `TODO` and inactive. G1-T5/T6 external vendor actions remain unapproved.",
+      "G1 — Candidate-Data Vendor Proof of Concept is active in `VERIFIED`; its offline G1-T1 through G1-T4/G1-T7 scope records a reviewed public-source-fallback `NO-GO (reopenable)`, while successful feature PR CI/mergeability and the G1-T8 lifecycle guard remain before Human Gate B. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
     )
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
