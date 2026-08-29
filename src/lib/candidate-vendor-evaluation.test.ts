@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import officialCandidateComparisonFixture from "../../tests/fixtures/g1-candidate-comparison.json";
 import syntheticVendorFixture from "../../tests/fixtures/g1-candidate-vendor-synthetic.json";
 
 import * as candidateVendorEvaluationModule from "./candidate-vendor-evaluation";
@@ -1732,6 +1733,74 @@ describe("validateCandidateParticipation", () => {
 });
 
 describe("validateCandidateComparisonSet", () => {
+  it("accepts the exact official 100-row comparison set", () => {
+    const candidateSet: unknown = officialCandidateComparisonFixture;
+
+    expect(validateCandidateComparisonSet(candidateSet)).toBe(true);
+    if (!validateCandidateComparisonSet(candidateSet)) {
+      return;
+    }
+
+    expect(candidateSet.records).toHaveLength(100);
+    expect(
+      candidateSet.records.reduce<Record<string, number>>((counts, record) => {
+        const key = `${record.level}/${record.stage}`;
+        counts[key] = (counts[key] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({
+      "federal/primary": 17,
+      "federal/general": 17,
+      "state/primary": 17,
+      "state/general": 16,
+      "local/primary": 16,
+      "local/general": 17,
+    });
+    expect(
+      candidateSet.records.reduce<Record<string, number>>((counts, record) => {
+        counts[record.sample_stratum] =
+          (counts[record.sample_stratum] ?? 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({
+      ordinary: 50,
+      nonpartisan: 10,
+      write_in: 10,
+      cross_filed: 10,
+      withdrawn: 10,
+      disqualified: 10,
+    });
+
+    const stateCodes = new Set(
+      candidateSet.authorities.map((authority) => authority.state_code),
+    );
+    expect(stateCodes.size).toBeGreaterThanOrEqual(10);
+    expect(
+      ["CA", "MI", "PA", "VA"].every((stateCode) => stateCodes.has(stateCode)),
+    ).toBe(true);
+    expect(
+      candidateSet.authorities.filter(
+        (authority) => authority.authority_level === "local",
+      ).length,
+    ).toBeGreaterThanOrEqual(10);
+
+    expect(candidateSet.authority_assignments).toHaveLength(100);
+    expect(
+      candidateSet.records.every(
+        (record) =>
+          record.sources.length > 0 &&
+          record.sources.every(
+            (source) =>
+              source.url.startsWith("https://") &&
+              source.locator.trim().length > 0 &&
+              /^[0-9a-f]{64}$/.test(source.sha256) &&
+              (source.effective_at !== null ||
+                source.effective_time_reason === "not_published"),
+          ),
+      ),
+    ).toBe(true);
+  });
+
   it("accepts the exact synthetic 100-row comparison set", () => {
     expect(validateCandidateComparisonSet(validCandidateComparisonSet())).toBe(
       true,
