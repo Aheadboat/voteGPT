@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "a16feef5c31626ed534a4b8d7019b3a5f76babb568cb4e96a3aa7d093a444852",
+  "ROADMAP.md": "dec46c83fb45b04521585b01a95e801acf2e75e5e277621d4a673b9411d1672e",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1234,6 +1234,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No official candidate record exists before this recorded RED.",
+    )
+    expect(g1).toContain(
+      "fixture-only commit `ddd039dffadebad2f8a22d5d57094f15a4f82db1`",
+    )
+    expect(g1).toContain(
+      "Independent structural review found one Important fail-closed defect: assignments proved record/source/authority existence but not that `authority_level` matched the assigned record level",
+    )
+    expect(g1).toContain(
+      "RED-only commit `dd1d509ecdc026ec4f73452bae9ed649d457c3b6` adds that exact cross-level swap regression.",
+    )
+    expect(g1).toContain(
+      "coordinator independently reproduced 357/358 focused cases passing with the sole expected failure",
     )
     expect(g1).toContain(
       "Feature-lead commit `d5a4da3fafc4b901be10e7791fff171c14d60a72` added only the synthetic vendor fixture and evaluator-focused tests",
