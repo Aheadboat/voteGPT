@@ -6,6 +6,7 @@ import syntheticVendorFixture from "../../tests/fixtures/g1-candidate-vendor-syn
 import * as candidateVendorEvaluationModule from "./candidate-vendor-evaluation";
 import {
   type CandidateVendorRecord,
+  type UsStateCode,
   evaluateCandidateVendor,
   normalizeCandidateName,
   serializeCandidateVendorEvaluation,
@@ -1774,10 +1775,11 @@ describe("validateCandidateComparisonSet", () => {
     const stateCodes = new Set(
       candidateSet.authorities.map((authority) => authority.state_code),
     );
+    const requiredStateCodes: readonly UsStateCode[] = ["CA", "MI", "PA", "VA"];
     expect(stateCodes.size).toBeGreaterThanOrEqual(10);
-    expect(
-      ["CA", "MI", "PA", "VA"].every((stateCode) => stateCodes.has(stateCode)),
-    ).toBe(true);
+    expect(requiredStateCodes.every((stateCode) => stateCodes.has(stateCode))).toBe(
+      true,
+    );
     expect(
       candidateSet.authorities.filter(
         (authority) => authority.authority_level === "local",
