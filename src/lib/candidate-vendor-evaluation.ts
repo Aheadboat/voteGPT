@@ -10,10 +10,14 @@ export type SampleStratum =
   | "withdrawn"
   | "disqualified";
 export type CandidateLifecycleStatus =
-  "qualified" | "withdrawn" | "disqualified";
+  | "qualified"
+  | "withdrawn"
+  | "disqualified";
 export type BallotAppearance = "printed" | "write_in" | "not_on_ballot";
 export type CandidateSourceType =
-  "official_election_authority" | "official_ballot" | "official_court_record";
+  | "official_election_authority"
+  | "official_ballot"
+  | "official_court_record";
 
 export type OfficialCandidateId = Readonly<{
   issuer: string;
@@ -156,6 +160,88 @@ export type CandidateComparisonSet = Readonly<{
   ordinary_control_manifest: readonly OrdinaryControlManifestCell[];
 }>;
 
+export type CandidateVendorSource = Readonly<{
+  url: string;
+  retrieved_at: string;
+  locator: string;
+}>;
+
+export type CandidateVendorRecord = Readonly<{
+  vendor_record_id: string;
+  contest_key: string;
+  candidate_name: string;
+  official_ids: readonly OfficialCandidateId[];
+  jurisdiction: string;
+  election_date: string;
+  office: string;
+  district: string;
+  level: CandidateLevel;
+  stage: ElectionStage;
+  lifecycle_status: CandidateLifecycleStatus;
+  ballot_appearance: BallotAppearance;
+  party_lines: readonly string[];
+  sources: readonly CandidateVendorSource[];
+}>;
+
+export type CandidateVendorDiagnosticCode =
+  | "ambiguous_match"
+  | "duplicate_truth_record_key"
+  | "duplicate_vendor_record_id"
+  | "edge_stratum_recall_below_threshold"
+  | "false_confirmed_on_ballot"
+  | "field_conflict"
+  | "invalid_truth_set"
+  | "invalid_vendor_record"
+  | "missing_truth_record"
+  | "overall_recall_below_threshold"
+  | "positive_recall_below_threshold"
+  | "truth_provenance_missing"
+  | "unmatched_confirmed_on_ballot"
+  | "unmatched_vendor_record"
+  | "vendor_provenance_missing";
+
+export type CandidateVendorDiagnostic = Readonly<{
+  code: CandidateVendorDiagnosticCode;
+  fatal: boolean;
+  truth_record_key: string | null;
+  vendor_record_id: string | null;
+  field: string | null;
+  expected: string | null;
+  actual: string | null;
+}>;
+
+export type CandidateVendorRecall = Readonly<{
+  matched: number;
+  total: number;
+  required: number;
+  passed: boolean;
+}>;
+
+export type CandidateVendorStratumRecall = Readonly<{
+  sample_stratum: SampleStratum;
+  matched: number;
+  total: number;
+  required: number | null;
+  passed: boolean;
+}>;
+
+export type CandidateVendorEvaluationReport = Readonly<{
+  technical_result: "pass" | "fail";
+  truth_record_count: number;
+  vendor_record_count: number;
+  matched_record_count: number;
+  overall_recall: CandidateVendorRecall;
+  positive_recall: CandidateVendorRecall;
+  strata: readonly CandidateVendorStratumRecall[];
+  provenance: Readonly<{
+    truth_records_complete: number;
+    vendor_records_complete: number;
+    truth_complete: boolean;
+    vendor_complete: boolean;
+  }>;
+  diagnostics: readonly CandidateVendorDiagnostic[];
+}>;
+
 const participationKeys = [
   "record_key",
   "contest_key",
@@ -222,6 +308,23 @@ const authorityAssignmentKeys = [
   "locator",
 ] as const;
 const manifestCellKeys = ["level", "stage", "eligible_record_keys"] as const;
+const vendorRecordKeys = [
+  "vendor_record_id",
+  "contest_key",
+  "candidate_name",
+  "official_ids",
+  "jurisdiction",
+  "election_date",
+  "office",
+  "district",
+  "level",
+  "stage",
+  "lifecycle_status",
+  "ballot_appearance",
+  "party_lines",
+  "sources",
+] as const;
+const vendorSourceKeys = ["url", "retrieved_at", "locator"] as const;
 const comparisonCellQuotas = [
   {
     level: "federal",
@@ -324,6 +427,595 @@ export function validateCandidateComparisonSet(
   } catch {
     return false;
   }
+}
+
+export function evaluateCandidateVendor(
+  truthValue: unknown,
+  vendorValue: unknown,
+): CandidateVendorEvaluationReport {
+  const diagnostics: CandidateVendorDiagnostic[] = [];
+  const truthSet = readExactDataRecord(truthValue, comparisonSetKeys);
+  const rawTruthRecords =
+    truthSet === null ? null : readExactDenseArray(truthSet.records);
+  const truthValues = rawTruthRecords ?? [];
+  const truthRecords: CandidateParticipation[] = [];
+
+  if (!validateCandidateComparisonSet(truthValue)) {
+    diagnostics.push(candidateVendorDiagnostic("invalid_truth_set", true));
+  }
+
+  const truthKeys = new Set<string>();
+  for (let index = 0; index < truthValues.length; index += 1) {
+    const value = truthValues[index];
+    const recordKey = candidateRecordKey(value);
+    if (recordKey !== null) {
+      if (truthKeys.has(recordKey)) {
+        diagnostics.push(
+          candidateVendorDiagnostic("duplicate_truth_record_key", true, {
+            truth_record_key: recordKey,
+          }),
+        );
+      }
+      truthKeys.add(recordKey);
+    }
+    if (validateCandidateParticipation(value)) {
+      truthRecords.push(value);
+    }
+  }
+
+  const truthRecordsComplete = truthValues.filter(
+    hasCompleteTruthProvenance,
+  ).length;
+  for (const value of truthValues) {
+    if (!hasCompleteTruthProvenance(value)) {
+      diagnostics.push(
+        candidateVendorDiagnostic("truth_provenance_missing", true, {
+          truth_record_key: candidateRecordKey(value),
+        }),
+      );
+    }
+  }
+
+  const rawVendorRecords = readExactDenseArray(vendorValue);
+  const vendorValues = rawVendorRecords ?? [];
+  if (rawVendorRecords === null) {
+    diagnostics.push(candidateVendorDiagnostic("invalid_vendor_record", true));
+  }
+
+  const vendorRecords: CandidateVendorRecord[] = [];
+  const vendorIds = new Set<string>();
+  for (const value of vendorValues) {
+    const vendorRecordId = candidateVendorRecordId(value);
+    const record = readCandidateVendorRecord(value);
+    if (record === null) {
+      diagnostics.push(
+        candidateVendorDiagnostic("invalid_vendor_record", true, {
+          vendor_record_id: vendorRecordId,
+        }),
+      );
+      continue;
+    }
+    if (vendorIds.has(record.vendor_record_id)) {
+      diagnostics.push(
+        candidateVendorDiagnostic("duplicate_vendor_record_id", true, {
+          vendor_record_id: record.vendor_record_id,
+        }),
+      );
+    }
+    vendorIds.add(record.vendor_record_id);
+    vendorRecords.push(record);
+  }
+
+  const vendorRecordsComplete = vendorValues.filter(
+    hasCompleteVendorProvenance,
+  ).length;
+  for (const value of vendorValues) {
+    if (!hasCompleteVendorProvenance(value)) {
+      diagnostics.push(
+        candidateVendorDiagnostic("vendor_provenance_missing", true, {
+          vendor_record_id: candidateVendorRecordId(value),
+        }),
+      );
+    }
+  }
+
+  const truthByContest = new Map<string, CandidateParticipation[]>();
+  for (const truth of truthRecords) {
+    const key = candidateContestIdentity(truth);
+    const candidates = truthByContest.get(key) ?? [];
+    candidates.push(truth);
+    truthByContest.set(key, candidates);
+  }
+
+  const proposals = new Map<CandidateParticipation, CandidateVendorRecord[]>();
+  const unavailableVendorRecords = new Set<CandidateVendorRecord>();
+
+  for (const vendor of vendorRecords) {
+    const contestCandidates =
+      truthByContest.get(candidateContestIdentity(vendor)) ?? [];
+    const candidates = contestCandidates.filter((truth) =>
+      candidateIdentityOverlaps(truth, vendor),
+    );
+    if (candidates.length === 1) {
+      const rows = proposals.get(candidates[0]!) ?? [];
+      rows.push(vendor);
+      proposals.set(candidates[0]!, rows);
+      continue;
+    }
+
+    unavailableVendorRecords.add(vendor);
+    if (candidates.length > 1) {
+      diagnostics.push(
+        candidateVendorDiagnostic("ambiguous_match", true, {
+          vendor_record_id: vendor.vendor_record_id,
+        }),
+      );
+      continue;
+    }
+
+    diagnostics.push(
+      candidateVendorDiagnostic("unmatched_vendor_record", false, {
+        vendor_record_id: vendor.vendor_record_id,
+      }),
+    );
+    const identityHints = truthRecords.filter((truth) =>
+      candidateIdentityOverlaps(truth, vendor),
+    );
+    if (identityHints.length === 1) {
+      addCandidateVendorConflicts(diagnostics, identityHints[0]!, vendor);
+    }
+  }
+
+  const matches: Array<
+    readonly [CandidateParticipation, CandidateVendorRecord]
+  > = [];
+  for (const [truth, vendors] of proposals) {
+    if (vendors.length === 1) {
+      matches.push([truth, vendors[0]!] as const);
+      continue;
+    }
+    for (const vendor of vendors) {
+      unavailableVendorRecords.add(vendor);
+      diagnostics.push(
+        candidateVendorDiagnostic("ambiguous_match", true, {
+          truth_record_key: truth.record_key,
+          vendor_record_id: vendor.vendor_record_id,
+        }),
+      );
+    }
+  }
+
+  for (const vendor of unavailableVendorRecords) {
+    if (
+      vendor.ballot_appearance === "printed" &&
+      truthByContest.has(candidateContestIdentity(vendor))
+    ) {
+      diagnostics.push(
+        candidateVendorDiagnostic("unmatched_confirmed_on_ballot", true, {
+          vendor_record_id: vendor.vendor_record_id,
+          field: "ballot_appearance",
+          expected: "matched official printed record",
+          actual: "printed",
+        }),
+      );
+    }
+  }
+
+  const matchedTruth = new Set<CandidateParticipation>();
+  for (const [truth, vendor] of matches) {
+    matchedTruth.add(truth);
+    addCandidateVendorConflicts(diagnostics, truth, vendor);
+    if (
+      vendor.ballot_appearance === "printed" &&
+      truth.ballot_appearance !== "printed"
+    ) {
+      diagnostics.push(
+        candidateVendorDiagnostic("false_confirmed_on_ballot", true, {
+          truth_record_key: truth.record_key,
+          vendor_record_id: vendor.vendor_record_id,
+          field: "ballot_appearance",
+          expected: truth.ballot_appearance,
+          actual: vendor.ballot_appearance,
+        }),
+      );
+    }
+  }
+
+  for (const truth of truthRecords) {
+    if (!matchedTruth.has(truth)) {
+      diagnostics.push(
+        candidateVendorDiagnostic("missing_truth_record", false, {
+          truth_record_key: truth.record_key,
+        }),
+      );
+    }
+  }
+
+  const overallRecall = candidateVendorRecall(
+    matchedTruth.size,
+    truthValues.length,
+    0.95,
+  );
+  if (!overallRecall.passed) {
+    diagnostics.push(
+      candidateVendorDiagnostic("overall_recall_below_threshold", true, {
+        expected: String(overallRecall.required),
+        actual: String(overallRecall.matched),
+      }),
+    );
+  }
+
+  const positiveTruth = truthRecords.filter(isPositiveCandidateTruth);
+  const matchedPositive = positiveTruth.filter((truth) =>
+    matchedTruth.has(truth),
+  ).length;
+  const positiveRecall = candidateVendorRecall(
+    matchedPositive,
+    positiveTruth.length,
+    0.95,
+  );
+  if (!positiveRecall.passed) {
+    diagnostics.push(
+      candidateVendorDiagnostic("positive_recall_below_threshold", true, {
+        expected: String(positiveRecall.required),
+        actual: String(positiveRecall.matched),
+      }),
+    );
+  }
+
+  const stratumRecall = strata.map((sampleStratum) => {
+    const stratumTruth = truthRecords.filter(
+      (truth) => truth.sample_stratum === sampleStratum,
+    );
+    const matched = stratumTruth.filter((truth) =>
+      matchedTruth.has(truth),
+    ).length;
+    const required =
+      sampleStratum === "ordinary"
+        ? null
+        : Math.ceil(stratumTruth.length * 0.9);
+    const passed = required === null || matched >= required;
+    if (!passed) {
+      diagnostics.push(
+        candidateVendorDiagnostic("edge_stratum_recall_below_threshold", true, {
+          field: sampleStratum,
+          expected: String(required),
+          actual: String(matched),
+        }),
+      );
+    }
+    return {
+      sample_stratum: sampleStratum,
+      matched,
+      total: stratumTruth.length,
+      required,
+      passed,
+    };
+  });
+
+  const truthComplete =
+    rawTruthRecords !== null && truthRecordsComplete === truthValues.length;
+  const vendorComplete =
+    rawVendorRecords !== null && vendorRecordsComplete === vendorValues.length;
+  diagnostics.sort((left, right) => {
+    const serializedLeft = JSON.stringify(left);
+    const serializedRight = JSON.stringify(right);
+    return serializedLeft < serializedRight
+      ? -1
+      : serializedLeft > serializedRight
+        ? 1
+        : 0;
+  });
+
+  return {
+    technical_result:
+      diagnostics.some((diagnostic) => diagnostic.fatal) ||
+      !truthComplete ||
+      !vendorComplete
+        ? "fail"
+        : "pass",
+    truth_record_count: truthValues.length,
+    vendor_record_count: vendorValues.length,
+    matched_record_count: matchedTruth.size,
+    overall_recall: overallRecall,
+    positive_recall: positiveRecall,
+    strata: stratumRecall,
+    provenance: {
+      truth_records_complete: truthRecordsComplete,
+      vendor_records_complete: vendorRecordsComplete,
+      truth_complete: truthComplete,
+      vendor_complete: vendorComplete,
+    },
+    diagnostics,
+  };
+}
+
+export function serializeCandidateVendorEvaluation(
+  report: CandidateVendorEvaluationReport,
+): string {
+  return JSON.stringify(report);
+}
+
+function candidateVendorDiagnostic(
+  code: CandidateVendorDiagnosticCode,
+  fatal: boolean,
+  values: Partial<Omit<CandidateVendorDiagnostic, "code" | "fatal">> = {},
+): CandidateVendorDiagnostic {
+  return {
+    code,
+    fatal,
+    truth_record_key: values.truth_record_key ?? null,
+    vendor_record_id: values.vendor_record_id ?? null,
+    field: values.field ?? null,
+    expected: values.expected ?? null,
+    actual: values.actual ?? null,
+  };
+}
+
+function candidateRecordKey(value: unknown): string | null {
+  const record = readExactDataRecord(value, participationKeys);
+  return record !== null && typeof record.record_key === "string"
+    ? record.record_key
+    : null;
+}
+
+function candidateVendorRecordId(value: unknown): string | null {
+  const record = readExactDataRecord(value, vendorRecordKeys);
+  return record !== null && typeof record.vendor_record_id === "string"
+    ? record.vendor_record_id
+    : null;
+}
+
+function hasCompleteTruthProvenance(value: unknown): boolean {
+  const record = readExactDataRecord(value, participationKeys);
+  if (record === null) {
+    return false;
+  }
+  const sourceValues = readExactDenseArray(record.sources);
+  return (
+    sourceValues !== null &&
+    sourceValues.length > 0 &&
+    readCandidateSources(sourceValues) !== null
+  );
+}
+
+function hasCompleteVendorProvenance(value: unknown): boolean {
+  const record = readExactDataRecord(value, vendorRecordKeys);
+  if (record === null) {
+    return false;
+  }
+  const sourceValues = readExactDenseArray(record.sources);
+  return (
+    sourceValues !== null &&
+    sourceValues.length > 0 &&
+    readCandidateVendorSources(sourceValues) !== null
+  );
+}
+
+function readCandidateVendorRecord(
+  value: unknown,
+): CandidateVendorRecord | null {
+  const record = readExactDataRecord(value, vendorRecordKeys);
+  if (record === null) {
+    return null;
+  }
+  const officialIds = readExactDenseArray(record.official_ids);
+  const partyLines = readExactDenseArray(record.party_lines);
+  const sourceValues = readExactDenseArray(record.sources);
+  if (
+    !isNonblank(record.vendor_record_id) ||
+    !isNonblank(record.contest_key) ||
+    !isNonblank(record.candidate_name) ||
+    !isNonblank(record.jurisdiction) ||
+    !isCalendarDate(record.election_date) ||
+    !isNonblank(record.office) ||
+    !isNonblank(record.district) ||
+    !isOneOf(record.level, levels) ||
+    !isOneOf(record.stage, stages) ||
+    !isOneOf(record.lifecycle_status, lifecycleStatuses) ||
+    !isOneOf(record.ballot_appearance, ballotAppearances) ||
+    officialIds === null ||
+    !areOfficialCandidateIds(officialIds) ||
+    partyLines === null ||
+    !areUniqueNonblankStrings(partyLines) ||
+    sourceValues === null ||
+    sourceValues.length === 0
+  ) {
+    return null;
+  }
+  const sources = readCandidateVendorSources(sourceValues);
+  if (sources === null) {
+    return null;
+  }
+  return {
+    vendor_record_id: record.vendor_record_id,
+    contest_key: record.contest_key,
+    candidate_name: record.candidate_name,
+    official_ids: officialIds,
+    jurisdiction: record.jurisdiction,
+    election_date: record.election_date,
+    office: record.office,
+    district: record.district,
+    level: record.level,
+    stage: record.stage,
+    lifecycle_status: record.lifecycle_status,
+    ballot_appearance: record.ballot_appearance,
+    party_lines: partyLines,
+    sources,
+  };
+}
+
+function readCandidateVendorSources(
+  values: readonly unknown[],
+): readonly CandidateVendorSource[] | null {
+  const sources: CandidateVendorSource[] = [];
+  for (const value of values) {
+    const source = readExactDataRecord(value, vendorSourceKeys);
+    if (
+      source === null ||
+      !isHttpsUrl(source.url) ||
+      !isRfc3339(source.retrieved_at) ||
+      !isNonblank(source.locator)
+    ) {
+      return null;
+    }
+    sources.push({
+      url: source.url,
+      retrieved_at: source.retrieved_at,
+      locator: source.locator,
+    });
+  }
+  return sources;
+}
+
+type CandidateContestIdentity = Pick<
+  CandidateParticipation,
+  "jurisdiction" | "election_date" | "stage" | "office" | "district"
+>;
+
+function candidateContestIdentity(value: CandidateContestIdentity): string {
+  return JSON.stringify([
+    value.jurisdiction,
+    value.election_date,
+    value.stage,
+    value.office,
+    value.district,
+  ]);
+}
+
+function officialCandidateIdKey(value: OfficialCandidateId): string {
+  return JSON.stringify([value.issuer, value.namespace, value.value]);
+}
+
+function candidateIdentityOverlaps(
+  truth: CandidateParticipation,
+  vendor: CandidateVendorRecord,
+): boolean {
+  const vendorName = normalizeCandidateName(vendor.candidate_name);
+  const truthNames = new Set([
+    normalizeCandidateName(truth.candidate_name),
+    ...truth.reviewed_aliases.map((alias) =>
+      normalizeCandidateName(alias.name),
+    ),
+  ]);
+  if (truthNames.has(vendorName)) {
+    return true;
+  }
+  const truthIds = new Set(truth.official_ids.map(officialCandidateIdKey));
+  return vendor.official_ids.some((value) =>
+    truthIds.has(officialCandidateIdKey(value)),
+  );
+}
+
+function addCandidateVendorConflicts(
+  diagnostics: CandidateVendorDiagnostic[],
+  truth: CandidateParticipation,
+  vendor: CandidateVendorRecord,
+): void {
+  const acceptedNames = new Set([
+    normalizeCandidateName(truth.candidate_name),
+    ...truth.reviewed_aliases.map((alias) =>
+      normalizeCandidateName(alias.name),
+    ),
+  ]);
+  if (!acceptedNames.has(normalizeCandidateName(vendor.candidate_name))) {
+    addCandidateVendorFieldConflict(
+      diagnostics,
+      truth,
+      vendor,
+      "candidate_name",
+      truth.candidate_name,
+      vendor.candidate_name,
+    );
+  }
+
+  for (const field of [
+    "contest_key",
+    "jurisdiction",
+    "election_date",
+    "office",
+    "district",
+    "level",
+    "stage",
+    "lifecycle_status",
+    "ballot_appearance",
+  ] as const) {
+    if (truth[field] !== vendor[field]) {
+      addCandidateVendorFieldConflict(
+        diagnostics,
+        truth,
+        vendor,
+        field,
+        truth[field],
+        vendor[field],
+      );
+    }
+  }
+
+  const expectedPartyLines = [...truth.party_lines].sort();
+  const actualPartyLines = [...vendor.party_lines].sort();
+  if (JSON.stringify(expectedPartyLines) !== JSON.stringify(actualPartyLines)) {
+    addCandidateVendorFieldConflict(
+      diagnostics,
+      truth,
+      vendor,
+      "party_lines",
+      JSON.stringify(expectedPartyLines),
+      JSON.stringify(actualPartyLines),
+    );
+  }
+
+  const truthIds = new Set(truth.official_ids.map(officialCandidateIdKey));
+  if (
+    vendor.official_ids.some(
+      (officialId) => !truthIds.has(officialCandidateIdKey(officialId)),
+    )
+  ) {
+    addCandidateVendorFieldConflict(
+      diagnostics,
+      truth,
+      vendor,
+      "official_ids",
+      JSON.stringify(truth.official_ids.map(officialCandidateIdKey).sort()),
+      JSON.stringify(vendor.official_ids.map(officialCandidateIdKey).sort()),
+    );
+  }
+}
+
+function addCandidateVendorFieldConflict(
+  diagnostics: CandidateVendorDiagnostic[],
+  truth: CandidateParticipation,
+  vendor: CandidateVendorRecord,
+  field: string,
+  expected: string,
+  actual: string,
+): void {
+  diagnostics.push(
+    candidateVendorDiagnostic("field_conflict", true, {
+      truth_record_key: truth.record_key,
+      vendor_record_id: vendor.vendor_record_id,
+      field,
+      expected,
+      actual,
+    }),
+  );
+}
+
+function candidateVendorRecall(
+  matched: number,
+  total: number,
+  fraction: number,
+): CandidateVendorRecall {
+  const required = Math.ceil(total * fraction);
+  return { matched, total, required, passed: matched >= required };
+}
+
+function isPositiveCandidateTruth(truth: CandidateParticipation): boolean {
+  return (
+    truth.ballot_appearance === "printed" ||
+    (truth.lifecycle_status === "qualified" &&
+      truth.ballot_appearance === "write_in")
+  );
 }
 
 function validateCandidateComparisonSetValue(value: unknown): boolean {

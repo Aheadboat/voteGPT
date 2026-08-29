@@ -621,10 +621,12 @@ function vendorRecordFor(
     election_date: truth.election_date,
     office: truth.office,
     district: truth.district,
-    level: truth.level,
-    stage: truth.stage,
-    lifecycle_status: truth.lifecycle_status,
-    ballot_appearance: truth.ballot_appearance,
+    level: truth.level as CandidateVendorRecord["level"],
+    stage: truth.stage as CandidateVendorRecord["stage"],
+    lifecycle_status:
+      truth.lifecycle_status as CandidateVendorRecord["lifecycle_status"],
+    ballot_appearance:
+      truth.ballot_appearance as CandidateVendorRecord["ballot_appearance"],
     party_lines: [...truth.party_lines],
     sources: syntheticVendorTemplate.sources.map((source) => ({ ...source })),
     ...overrides,
@@ -635,9 +637,7 @@ function validVendorRecords(truth = validCandidateComparisonSet()) {
   return truth.records.map((record, index) => vendorRecordFor(record, index));
 }
 
-function diagnosticCodes(
-  result: ReturnType<typeof evaluateCandidateVendor>,
-) {
+function diagnosticCodes(result: ReturnType<typeof evaluateCandidateVendor>) {
   return result.diagnostics.map((diagnostic) => diagnostic.code);
 }
 
@@ -2454,6 +2454,27 @@ describe("evaluateCandidateVendor", () => {
     expect(result.technical_result).toBe("fail");
   });
 
+  it("never uses fuzzy or substring candidate-name matching", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = {
+      ...vendor[0]!,
+      candidate_name: "Candidate",
+      official_ids: [],
+      ballot_appearance: "not_on_ballot",
+    };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.matched_record_count).toBe(99);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "unmatched_vendor_record",
+        vendor_record_id: vendor[0]!.vendor_record_id,
+      }),
+    );
+  });
+
   it("fails closed when name and official ID resolve to different truth candidates", () => {
     const truth = validCandidateComparisonSet();
     copyContest(truth.records[1]!, truth.records[0]!);
@@ -2474,7 +2495,7 @@ describe("evaluateCandidateVendor", () => {
         vendor_record_id: vendor[0]!.vendor_record_id,
       }),
     );
-    expect(result.matched_record_count).toBe(98);
+    expect(result.matched_record_count).toBe(99);
     expect(result.technical_result).toBe("fail");
   });
 
@@ -2573,6 +2594,34 @@ describe("evaluateCandidateVendor", () => {
     expect(result.technical_result).toBe("fail");
   });
 
+  it("rejects an asserted official ID outside the matched truth identity", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = {
+      ...vendor[0]!,
+      official_ids: [
+        {
+          issuer: "Other Election Authority",
+          namespace: "candidate",
+          value: "other-candidate",
+        },
+      ],
+    };
+
+    const result = evaluateCandidateVendor(truth, vendor);
+
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "field_conflict",
+        fatal: true,
+        field: "official_ids",
+        truth_record_key: truth.records[0]!.record_key,
+        vendor_record_id: vendor[0]!.vendor_record_id,
+      }),
+    );
+    expect(result.technical_result).toBe("fail");
+  });
+
   it.each([
     ["contest_key", "other-contest"],
     ["candidate_name", "Other Candidate"],
@@ -2590,7 +2639,9 @@ describe("evaluateCandidateVendor", () => {
     const row = truth.records[0]!;
     const replacement = { ...vendor[0]!, [field]: actual };
     if (field === "candidate_name") {
-      replacement.official_ids = row.official_ids.map((value) => ({ ...value }));
+      replacement.official_ids = row.official_ids.map((value) => ({
+        ...value,
+      }));
     }
     vendor[0] = replacement;
 
@@ -2668,7 +2719,10 @@ describe("evaluateCandidateVendor", () => {
   it("rejects malformed vendor rows instead of scoring them", () => {
     const truth = validCandidateComparisonSet();
     const vendor: unknown[] = validVendorRecords(truth);
-    vendor[0] = { ...vendor[0], level: "county" };
+    vendor[0] = {
+      ...(vendor[0] as CandidateVendorRecord),
+      level: "county",
+    };
 
     const result = evaluateCandidateVendor(truth, vendor);
 
@@ -2688,9 +2742,7 @@ describe("evaluateCandidateVendor", () => {
       required: 95,
       passed: false,
     });
-    expect(diagnosticCodes(result)).toContain(
-      "overall_recall_below_threshold",
-    );
+    expect(diagnosticCodes(result)).toContain("overall_recall_below_threshold");
     expect(result.technical_result).toBe("fail");
   });
 
@@ -2720,15 +2772,15 @@ describe("evaluateCandidateVendor", () => {
     expect(result.technical_result).toBe("fail");
   });
 
-  it("fails an edge stratum below 9 of 10 while aggregate gates pass", () => {
+  it("fails missing qualified write-ins below 9 of 10 while aggregate gates pass", () => {
     const truth = validCandidateComparisonSet();
-    const nonpartisanIndexes = truth.records
+    const writeInIndexes = truth.records
       .map((record, index) => ({ record, index }))
-      .filter(({ record }) => record.sample_stratum === "nonpartisan")
+      .filter(({ record }) => record.sample_stratum === "write_in")
       .slice(0, 2)
       .map(({ index }) => index);
     const vendor = validVendorRecords(truth).filter(
-      (_, index) => !nonpartisanIndexes.includes(index),
+      (_, index) => !writeInIndexes.includes(index),
     );
 
     const result = evaluateCandidateVendor(truth, vendor);
@@ -2736,11 +2788,9 @@ describe("evaluateCandidateVendor", () => {
     expect(result.overall_recall.passed).toBe(true);
     expect(result.positive_recall.passed).toBe(true);
     expect(
-      result.strata.find(
-        (stratum) => stratum.sample_stratum === "nonpartisan",
-      ),
+      result.strata.find((stratum) => stratum.sample_stratum === "write_in"),
     ).toEqual({
-      sample_stratum: "nonpartisan",
+      sample_stratum: "write_in",
       matched: 8,
       total: 10,
       required: 9,
@@ -2799,9 +2849,15 @@ describe("evaluateCandidateVendor", () => {
       JSON.stringify(forward),
     );
     expect(forward.diagnostics).toEqual(
-      [...forward.diagnostics].sort((left, right) =>
-        JSON.stringify(left).localeCompare(JSON.stringify(right)),
-      ),
+      [...forward.diagnostics].sort((left, right) => {
+        const serializedLeft = JSON.stringify(left);
+        const serializedRight = JSON.stringify(right);
+        return serializedLeft < serializedRight
+          ? -1
+          : serializedLeft > serializedRight
+            ? 1
+            : 0;
+      }),
     );
   });
 });
