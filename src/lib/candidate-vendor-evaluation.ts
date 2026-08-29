@@ -2083,10 +2083,12 @@ function hasValidAuthorityCoverage(
   const assignmentCountByAuthority = new Map<string, number>();
   for (const assignment of assignments) {
     const record = recordsByKey.get(assignment.record_key);
+    const authority = authoritiesById.get(assignment.authority_id);
     if (
       record === undefined ||
-      assignedRecords.has(assignment.record_key) ||
-      !authoritiesById.has(assignment.authority_id)
+      authority === undefined ||
+      authority.authority_level !== record.level ||
+      assignedRecords.has(assignment.record_key)
     ) {
       return false;
     }
