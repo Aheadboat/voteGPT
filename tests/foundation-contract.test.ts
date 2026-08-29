@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "5a340ad9dd9e5c6693e986c8f58a5f34057467a121f23b8d78bb2d9604116ecd",
+  "ROADMAP.md": "f504d8c70c9df0e64b6b39cc8feb22728a967d36cc14c49e615cb0ed5bb5bcbb",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1222,6 +1222,15 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "The official 100-record fixture and its independent fact/source audit remain RED and pending, so G1 stays in `RED`",
+    )
+    expect(g1).toContain(
+      "Feature-lead commit `d5a4da3fafc4b901be10e7791fff171c14d60a72` added only the synthetic vendor fixture and evaluator-focused tests",
+    )
+    expect(g1).toContain(
+      "kept all 243 existing G1-T1 cases green and failed exactly 28 new cases at the intentionally absent `evaluateCandidateVendor` boundary",
+    )
+    expect(g1).toContain(
+      "No evaluator production code, legal/SLA gate, vendor adapter, official truth fixture, external/vendor action, or F7 surface exists before this recorded RED.",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
