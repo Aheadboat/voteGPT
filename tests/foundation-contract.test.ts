@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "025d5c4c6629e22220e90f5f99061786cd56bbdd858ec83fdfdcd01aa83eb81f",
+  "ROADMAP.md": "cc5e177f3fd0a29fb4c53752983d770159261fa6716684f5167ffcd5c0723a1c",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1327,6 +1327,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "G1-T3 is GREEN, but G1 remains in `RED` until the official 100-record fixture and its independent fact/source audit pass",
+    )
+    expect(g1).toContain(
+      "Test-only commits `5b0cee3c01e58ffa5026898785b829433b5231c3`, `f261df910e2df8d0d780c72c50a951523b2a7cf9`, and `74c5590ecda39572eac79de69f1df46b44fa658b` freeze the durable decision-document and PROJECT-MAP route contract",
+    )
+    expect(g1).toContain(
+      "Three parser self-checks prove fenced/commented evidence, appended contradictory state/score text, and all-allowed or cross-provider matrix states cannot satisfy the contract.",
+    )
+    expect(g1).toContain(
+      "coordinator independently reproduced those three passes plus exactly two expected failures for the absent unique project-map route and absent `G1-VENDOR-DECISION.md`",
+    )
+    expect(g1).toContain(
+      "Public evidence refreshed on 2026-08-28 PT still supports `NO-GO (reopenable)`",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
