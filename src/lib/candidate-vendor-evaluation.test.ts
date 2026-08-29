@@ -1803,6 +1803,31 @@ describe("validateCandidateComparisonSet", () => {
     ).toBe(true);
   });
 
+  it("rejects authority assignments whose authority level differs from the record", () => {
+    expect(
+      validateCandidateComparisonSet(officialCandidateComparisonFixture),
+    ).toBe(true);
+    const candidateSet = structuredClone(officialCandidateComparisonFixture);
+    const federalAssignment = candidateSet.authority_assignments.find(
+      ({ record_key }) =>
+        record_key ===
+        "federal:us:hi:2024-08-10:primary:us-senate:john-raghu-giuffre",
+    );
+    const localAssignment = candidateSet.authority_assignments.find(
+      ({ record_key }) =>
+        record_key ===
+        "local-primary-nyc-2021-06-22-city-council-34-scott-murphy",
+    );
+    if (federalAssignment === undefined || localAssignment === undefined) {
+      throw new Error("official fixture authority assignment missing");
+    }
+    const federalAuthorityId = federalAssignment.authority_id;
+    federalAssignment.authority_id = localAssignment.authority_id;
+    localAssignment.authority_id = federalAuthorityId;
+
+    expect(validateCandidateComparisonSet(candidateSet)).toBe(false);
+  });
+
   it("accepts the exact synthetic 100-row comparison set", () => {
     expect(validateCandidateComparisonSet(validCandidateComparisonSet())).toBe(
       true,
