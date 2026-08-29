@@ -189,22 +189,27 @@ const providerSuitability = [
   {
     provider: "Ballotpedia",
     suitability: /first.{0,100}(?:later )?diligence/i,
+    evidenceStates: ["unknown", "unknown", "unknown", "unknown"],
   },
   {
     provider: "BallotReady/CivicEngine",
     suitability: /second.{0,100}(?:later )?diligence/i,
+    evidenceStates: ["unknown", "unknown", "unknown", "unknown"],
   },
   {
     provider: "Google Civic",
     suitability: /rejected.{0,120}primary candidate-source/i,
+    evidenceStates: ["denied", "unknown", "denied", "unknown"],
   },
   {
     provider: "AP Elections",
     suitability: /rejected.{0,120}results-first/i,
+    evidenceStates: ["unknown", "unknown", "unknown", "unknown"],
   },
   {
     provider: "Decision Desk HQ",
     suitability: /rejected.{0,120}results-first/i,
+    evidenceStates: ["unknown", "unknown", "unknown", "unknown"],
   },
 ] as const;
 
@@ -227,6 +232,41 @@ type MarkdownTable = Readonly<{
 
 function normalizeCell(value: string): string {
   return value.replace(/[*`]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function renderedEvidence(markdown: string): string {
+  const withoutComments = markdown.replace(
+    /<!--[\s\S]*?(?:-->|$)/g,
+    (comment) => comment.replace(/[^\r\n]/g, " "),
+  );
+  const rendered: string[] = [];
+  let fence: { marker: string; minimumLength: number } | null = null;
+
+  for (const line of withoutComments.split(/\r?\n/)) {
+    if (fence === null) {
+      const opening = /^\s{0,3}(`{3,}|~{3,})/.exec(line);
+      if (opening === null) {
+        rendered.push(line);
+        continue;
+      }
+      fence = {
+        marker: opening[1]![0]!,
+        minimumLength: opening[1]!.length,
+      };
+      rendered.push("");
+      continue;
+    }
+
+    const closing = new RegExp(
+      `^\\s{0,3}${fence.marker}{${fence.minimumLength},}\\s*$`,
+    );
+    if (closing.test(line)) {
+      fence = null;
+    }
+    rendered.push("");
+  }
+
+  return rendered.join("\n");
 }
 
 function markdownHeadings(markdown: string): string[] {
@@ -266,13 +306,89 @@ function normalizedHeader(table: MarkdownTable): string[] {
   return table.header.map((cell) => cell.toLowerCase());
 }
 
+function decisionStateFields(
+  markdown: string,
+): ReadonlyArray<Readonly<{ label: string; value: string }>> {
+  const stateField = (labelValue: string, fieldValue: string) => {
+    const label = normalizeCell(labelValue);
+    const value = normalizeCell(fieldValue);
+    const canonicalLabel = /^(?:decision state|current state|state)$/i.test(
+      label,
+    );
+    const alternateDecisionLabel =
+      /\b(?:state|decision|status|recommendation)\b/i.test(label) &&
+      /\b(?:GO|HOLD)\b/i.test(value);
+    if (!canonicalLabel && !alternateDecisionLabel) {
+      return [];
+    }
+    return [{ label: label.toLowerCase(), value }];
+  };
+  const lineFields = markdown.split(/\r?\n/).flatMap((line) => {
+    const plain = normalizeCell(line.replace(/^\s*[-*]\s+/, ""));
+    const match = /^([^:]+):\s*(.+)$/.exec(plain);
+    return match === null ? [] : stateField(match[1]!, match[2]!);
+  });
+  const tableFields = markdownTables(markdown).flatMap((table) =>
+    table.rows.flatMap((row) =>
+      row.length < 2 ? [] : stateField(row[0]!, row[1]!),
+    ),
+  );
+  return [...lineFields, ...tableFields];
+}
+
+function prohibitedVendorDecisionSurfaces(
+  markdown: string,
+): ReadonlyArray<
+  Readonly<{ kind: "heading" | "field" | "table"; value: string }>
+> {
+  const scoreLanguage = /\b(?:scores?|scoring|rankings?|rank)\b/i;
+  const headings = markdownHeadings(markdown)
+    .filter((heading) => scoreLanguage.test(heading))
+    .map((value) => ({ kind: "heading" as const, value }));
+  const fields = markdown.split(/\r?\n/).flatMap((line) => {
+    const plain = normalizeCell(line.replace(/^\s*[-*]\s+/, ""));
+    const match = /^([^:]+):\s*(.+)$/.exec(plain);
+    return match !== null && scoreLanguage.test(match[1]!)
+      ? [{ kind: "field" as const, value: plain }]
+      : [];
+  });
+  const tables = markdownTables(markdown)
+    .filter((table) =>
+      [table.header, ...table.rows].some((row) =>
+        row.some((cell) => scoreLanguage.test(cell)),
+      ),
+    )
+    .map((table) => ({
+      kind: "table" as const,
+      value: table.header.join(" | "),
+    }));
+  return [...headings, ...fields, ...tables];
+}
+
+function providerStateMismatches(
+  rows: ReadonlyArray<readonly string[]>,
+): string[] {
+  const rowsByProvider = new Map(rows.map((row) => [row[0], row] as const));
+  return providerSuitability.flatMap(({ provider, evidenceStates }) => {
+    const row = rowsByProvider.get(provider);
+    if (row === undefined) {
+      return [`${provider}:missing`];
+    }
+    return evidenceStates.flatMap((expected, index) =>
+      new RegExp(`^${expected}\\b`, "i").test(row[index + 2] ?? "")
+        ? []
+        : [`${provider}:${providerMatrixHeader[index + 2]!}`],
+    );
+  });
+}
+
 function countOccurrences(value: string, needle: string): number {
   return value.split(needle).length - 1;
 }
 
 describe("G1 public-evidence vendor decision", () => {
   it("routes the durable decision from the project map", () => {
-    const projectMap = readFileSync(projectMapPath, "utf8");
+    const projectMap = renderedEvidence(readFileSync(projectMapPath, "utf8"));
     const routeHeadings = [
       ...projectMap.matchAll(
         /^### [^\r\n]*candidate(?:-data| data)?[^\r\n]*vendor[^\r\n]*decision\s*$/gim,
@@ -312,7 +428,7 @@ describe("G1 public-evidence vendor decision", () => {
       return;
     }
 
-    const decision = readFileSync(decisionPath, "utf8");
+    const decision = renderedEvidence(readFileSync(decisionPath, "utf8"));
     const normalizedDecision = decision.replace(/\s+/g, " ");
     for (const [label, pattern] of requiredDecisionFacts) {
       expect(normalizedDecision, label).toMatch(pattern);
@@ -331,26 +447,11 @@ describe("G1 public-evidence vendor decision", () => {
       ).toHaveLength(1);
     }
     expect(
-      headings.filter((heading) =>
-        /\b(?:vendor scores?|scoring|rankings?)\b/i.test(heading),
-      ),
-      "no vendor score, scoring, or ranking section",
+      prohibitedVendorDecisionSurfaces(decision),
+      "no vendor score, scoring, or ranking heading, field, or table",
     ).toEqual([]);
 
-    const stateFields = lines.flatMap((line) => {
-      const plain = normalizeCell(line.replace(/^\s*[-*]\s+/, ""));
-      const match = /^(Decision state|Current state|State):\s*(.+)$/i.exec(
-        plain,
-      );
-      return match === null
-        ? []
-        : [
-            {
-              label: match[1]!.toLowerCase(),
-              value: match[2]!.trim(),
-            },
-          ];
-    });
+    const stateFields = decisionStateFields(decision);
     expect(stateFields, "one exact fail-closed decision state").toEqual([
       { label: "decision state", value: "NO-GO (reopenable)" },
     ]);
@@ -412,12 +513,11 @@ describe("G1 public-evidence vendor decision", () => {
         expect(row?.[1], `${provider.provider} suitability`).toMatch(
           provider.suitability,
         );
-        for (const field of row?.slice(2) ?? []) {
-          expect(field, `${provider.provider} evidence state`).toMatch(
-            /^(?:allowed|unknown|denied)\b/i,
-          );
-        }
       }
+      expect(
+        providerStateMismatches(providerTable.rows),
+        "reviewed provider-specific evidence states",
+      ).toEqual([]);
     }
 
     const evidenceTables = tables.filter((table) => {
@@ -454,5 +554,109 @@ describe("G1 public-evidence vendor decision", () => {
         expect(sourceLine, "no invented Google digest").not.toMatch(sha256);
       }
     }
+  });
+});
+
+describe("G1 vendor decision parser self-checks", () => {
+  it("ignores semantic evidence hidden in comments and fenced code", () => {
+    const markdown = [
+      "Visible context only.",
+      "<!--",
+      "### G1 candidate-data vendor decision",
+      "Decision state: GO",
+      "official-source fallback",
+      "| Provider | Score |",
+      "| --- | --- |",
+      "| Ballotpedia | 100 |",
+      "-->",
+      "```markdown",
+      "### Vendor ranking",
+      "Decision: HOLD",
+      "official-source fallback",
+      "| Provider | Score |",
+      "| --- | --- |",
+      "| BallotReady/CivicEngine | 100 |",
+      "```",
+    ].join("\n");
+
+    const rendered = renderedEvidence(markdown);
+
+    expect(rendered).toContain("Visible context only.");
+    expect(rendered).not.toContain("official-source fallback");
+    expect(markdownHeadings(rendered)).toEqual([]);
+    expect(markdownTables(rendered)).toEqual([]);
+    expect(decisionStateFields(rendered)).toEqual([]);
+    expect(prohibitedVendorDecisionSurfaces(rendered)).toEqual([]);
+  });
+
+  it("detects alternate decision states and score surfaces", () => {
+    const approved = renderedEvidence("Decision state: NO-GO (reopenable)");
+    expect(decisionStateFields(approved)).toEqual([
+      { label: "decision state", value: "NO-GO (reopenable)" },
+    ]);
+    expect(prohibitedVendorDecisionSurfaces(approved)).toEqual([]);
+
+    const bypass = renderedEvidence(
+      [
+        "Decision state: NO-GO (reopenable)",
+        "Current state: GO",
+        "Decision: HOLD",
+        "### Vendor ranking",
+        "Vendor score: 100",
+        "| Attribute | Value |",
+        "| --- | --- |",
+        "| Launch status | GO |",
+        "| Vendor scoring | 100 |",
+      ].join("\n"),
+    );
+
+    expect(decisionStateFields(bypass)).toEqual([
+      { label: "decision state", value: "NO-GO (reopenable)" },
+      { label: "current state", value: "GO" },
+      { label: "decision", value: "HOLD" },
+      { label: "launch status", value: "GO" },
+    ]);
+    expect(
+      prohibitedVendorDecisionSurfaces(bypass).map(({ kind }) => kind),
+    ).toEqual(["heading", "field", "table"]);
+  });
+
+  it("binds provider evidence states to the reviewed provider row", () => {
+    const validRows = markdownTables(`
+| Provider | Current suitability | Rights | Operations | Package | Price |
+| --- | --- | --- | --- | --- | --- |
+| Ballotpedia | first later diligence | unknown - bounded allowance | unknown - partial allowances | unknown - not established | unknown - not published |
+| BallotReady/CivicEngine | second later diligence | unknown - not established | unknown - partial allowance | unknown - not established | unknown - not published |
+| Google Civic | rejected as primary candidate-source | denied - incompatible minima | unknown - not established | denied - incompatible coverage | unknown - not established |
+| AP Elections | rejected as results-first | unknown - not established | unknown - not established | unknown - not established | unknown - not established |
+| Decision Desk HQ | rejected as results-first | unknown - not established | unknown - not established | unknown - not established | unknown - not established |
+`)[0]!.rows;
+    expect(providerStateMismatches(validRows)).toEqual([]);
+
+    const allAllowed = validRows.map((row) => [
+      row[0]!,
+      row[1]!,
+      "allowed",
+      "allowed",
+      "allowed",
+      "allowed",
+    ]);
+    expect(providerStateMismatches(allAllowed)).toHaveLength(20);
+
+    const crossProvider = validRows.map((row) => {
+      if (row[0] === "Ballotpedia") {
+        return [row[0], row[1], ...validRows[2]!.slice(2)];
+      }
+      if (row[0] === "Google Civic") {
+        return [row[0], row[1], ...validRows[0]!.slice(2)];
+      }
+      return row;
+    });
+    expect(providerStateMismatches(crossProvider)).toEqual([
+      "Ballotpedia:rights",
+      "Ballotpedia:package",
+      "Google Civic:rights",
+      "Google Civic:package",
+    ]);
   });
 });
