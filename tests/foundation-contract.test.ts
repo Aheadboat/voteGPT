@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "dec46c83fb45b04521585b01a95e801acf2e75e5e277621d4a673b9411d1672e",
+  "ROADMAP.md": "025d5c4c6629e22220e90f5f99061786cd56bbdd858ec83fdfdcd01aa83eb81f",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1246,6 +1246,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "coordinator independently reproduced 357/358 focused cases passing with the sole expected failure",
+    )
+    expect(g1).toContain(
+      "production fix `4f504e5d0d7aaa722d94cce5844eb5d3fcefb456` rejects an assignment whose resolved authority level differs from its record level",
+    )
+    expect(g1).toContain(
+      "Final fixture SHA-256 is `83194a618952ff8b2f77bf02900e6f292126081bdaeff016135b31da60dc9b3e`.",
+    )
+    expect(g1).toContain(
+      "Independent row-by-row integration audit accepted 100/100 records and all 151 source objects with zero replacement or blocker",
+    )
+    expect(g1).toContain(
+      "coordinator verification passed 358/358 focused evaluator cases, 36 files/1,303 full tests",
     )
     expect(g1).toContain(
       "Feature-lead commit `d5a4da3fafc4b901be10e7791fff171c14d60a72` added only the synthetic vendor fixture and evaluator-focused tests",
