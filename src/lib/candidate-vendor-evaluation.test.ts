@@ -3112,6 +3112,7 @@ describe("evaluateCandidateVendor", () => {
 });
 
 type TestDecisionEvidenceKind =
+  | "evidence"
   | "legal_permission"
   | "operational_commitment"
   | "package_coverage"
@@ -3303,6 +3304,248 @@ function expectedDecisionDiagnostic(
 function passingCandidateVendorTechnicalReport() {
   const truth = validCandidateComparisonSet();
   return evaluateCandidateVendor(truth, validVendorRecords(truth));
+}
+
+const rejectedCandidateVendorDecisionEvidence: TestCandidateVendorDecision = {
+  decision: "no_go",
+  technical_result: "pass",
+  rights_and_operations_result: "fail",
+  quote_approved: false,
+  diagnostics: [
+    expectedDecisionDiagnostic(
+      "evidence_bundle_invalid",
+      "evidence",
+      null,
+      null,
+      "plain trap-free evidence bundle",
+      null,
+    ),
+  ],
+};
+
+function expectRejectedCandidateVendorDecisionEvidence(evidence: unknown) {
+  const technicalReport = passingCandidateVendorTechnicalReport();
+  let first: TestCandidateVendorDecision | undefined;
+  let second: TestCandidateVendorDecision | undefined;
+
+  expect(() => {
+    first = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      technicalReport,
+      evidence,
+    );
+    second = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      technicalReport,
+      evidence,
+    );
+  }).not.toThrow();
+  expect(first).toEqual(rejectedCandidateVendorDecisionEvidence);
+  expect(second).toEqual(rejectedCandidateVendorDecisionEvidence);
+
+  const serializedFirst =
+    candidateVendorDecisionApi.serializeCandidateVendorDecision(first!);
+  const serializedSecond =
+    candidateVendorDecisionApi.serializeCandidateVendorDecision(second!);
+  expect(serializedFirst).toBe(serializedSecond);
+  expect(serializedFirst).toBe(
+    JSON.stringify(rejectedCandidateVendorDecisionEvidence),
+  );
+}
+
+type InvalidCandidateVendorDecisionEvidenceCase = {
+  name: string;
+  makeEvidence: () => unknown;
+};
+
+const invalidCandidateVendorDecisionEvidenceCases: readonly InvalidCandidateVendorDecisionEvidenceCase[] =
+  [
+    { name: "null", makeEvidence: () => null },
+    { name: "undefined", makeEvidence: () => undefined },
+    { name: "a boolean", makeEvidence: () => false },
+    { name: "a number", makeEvidence: () => 1 },
+    { name: "a string", makeEvidence: () => "invalid" },
+    { name: "a top-level array", makeEvidence: () => [] },
+    { name: "an empty top-level object", makeEvidence: () => ({}) },
+    {
+      name: "a malformed legal-permissions container",
+      makeEvidence: () => ({
+        ...validCandidateVendorDecisionEvidence(),
+        legal_permissions: {},
+      }),
+    },
+    {
+      name: "a malformed operational-commitments container",
+      makeEvidence: () => ({
+        ...validCandidateVendorDecisionEvidence(),
+        operational_commitments: "invalid",
+      }),
+    },
+    {
+      name: "a malformed package-coverage record",
+      makeEvidence: () => ({
+        ...validCandidateVendorDecisionEvidence(),
+        package_coverage: [],
+      }),
+    },
+    {
+      name: "a sparse legal-permissions array",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        Reflect.deleteProperty(evidence.legal_permissions, "0");
+        return evidence;
+      },
+    },
+    {
+      name: "a sparse operational-commitments array",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        Reflect.deleteProperty(evidence.operational_commitments, "0");
+        return evidence;
+      },
+    },
+    {
+      name: "a malformed legal-permission record",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        return {
+          ...evidence,
+          legal_permissions: [null, ...evidence.legal_permissions.slice(1)],
+        };
+      },
+    },
+    {
+      name: "a malformed operational-commitment record",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        return {
+          ...evidence,
+          operational_commitments: [
+            1,
+            ...evidence.operational_commitments.slice(1),
+          ],
+        };
+      },
+    },
+  ];
+
+type CandidateVendorDecisionAccessorCase = {
+  name: string;
+  makeEvidence: () => {
+    evidence: unknown;
+    getterCalls: () => number;
+  };
+};
+
+const candidateVendorDecisionAccessorCases: readonly CandidateVendorDecisionAccessorCase[] =
+  [
+    {
+      name: "a top-level accessor",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        const legalPermissions = evidence.legal_permissions;
+        let calls = 0;
+        Object.defineProperty(evidence, "legal_permissions", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            calls += 1;
+            return legalPermissions;
+          },
+        });
+        return { evidence, getterCalls: () => calls };
+      },
+    },
+    {
+      name: "a nested record accessor",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        const record = legalDecisionEvidence(evidence, "public_redisplay");
+        const scope = record.scope;
+        let calls = 0;
+        Object.defineProperty(record, "scope", {
+          configurable: true,
+          enumerable: true,
+          get() {
+            calls += 1;
+            return scope;
+          },
+        });
+        return { evidence, getterCalls: () => calls };
+      },
+    },
+  ];
+
+type CandidateVendorDecisionProxyCase = {
+  name: string;
+  placement: "direct" | "nested";
+  revoked: boolean;
+};
+
+const candidateVendorDecisionProxyCases: readonly CandidateVendorDecisionProxyCase[] =
+  [
+    { name: "a direct Proxy", placement: "direct", revoked: false },
+    { name: "a nested record Proxy", placement: "nested", revoked: false },
+    { name: "a direct revoked Proxy", placement: "direct", revoked: true },
+    { name: "a nested revoked Proxy", placement: "nested", revoked: true },
+  ];
+
+function candidateVendorDecisionProxyHandler<T extends object>(trapCalls: {
+  total: number;
+}): ProxyHandler<T> {
+  const called = () => {
+    trapCalls.total += 1;
+  };
+  return {
+    get(target, property, receiver) {
+      called();
+      return Reflect.get(target, property, receiver);
+    },
+    getOwnPropertyDescriptor(target, property) {
+      called();
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    getPrototypeOf(target) {
+      called();
+      return Reflect.getPrototypeOf(target);
+    },
+    has(target, property) {
+      called();
+      return Reflect.has(target, property);
+    },
+    isExtensible(target) {
+      called();
+      return Reflect.isExtensible(target);
+    },
+    ownKeys(target) {
+      called();
+      return Reflect.ownKeys(target);
+    },
+  };
+}
+
+function hostileCandidateVendorDecisionEvidence(
+  placement: CandidateVendorDecisionProxyCase["placement"],
+  revoked: boolean,
+) {
+  const evidence = validCandidateVendorDecisionEvidence();
+  const trapCalls = { total: 0 };
+  const target =
+    placement === "direct"
+      ? evidence
+      : legalDecisionEvidence(evidence, "public_redisplay");
+  const revocable = Proxy.revocable(
+    target,
+    candidateVendorDecisionProxyHandler(trapCalls),
+  );
+  if (placement === "nested") {
+    evidence.legal_permissions[0] = revocable.proxy;
+  }
+  if (revoked) {
+    revocable.revoke();
+  }
+  return {
+    evidence: placement === "direct" ? revocable.proxy : evidence,
+    trapCalls,
+  };
 }
 
 type CandidateVendorDecisionFailureCase = {
@@ -4036,6 +4279,23 @@ const candidateVendorDecisionFailureCases: readonly CandidateVendorDecisionFailu
         "duplicate",
       ),
     },
+    {
+      name: "rejects duplicate operational requirements",
+      mutate: (evidence) => {
+        evidence.operational_commitments.push({
+          ...operationalDecisionEvidence(evidence, "content_refresh"),
+          status: "denied",
+        });
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "duplicate_evidence_requirement",
+        "operational_commitment",
+        "content_refresh",
+        "requirement",
+        "unique",
+        "duplicate",
+      ),
+    },
   ];
 
 describe("evaluateCandidateVendorDecision", () => {
@@ -4073,6 +4333,38 @@ describe("evaluateCandidateVendorDecision", () => {
         quote_approved: true,
         diagnostics: [diagnostic],
       });
+    },
+  );
+
+  it.each(invalidCandidateVendorDecisionEvidenceCases)(
+    "fails closed for $name decision evidence",
+    ({ makeEvidence }) => {
+      expectRejectedCandidateVendorDecisionEvidence(makeEvidence());
+    },
+  );
+
+  it.each(candidateVendorDecisionAccessorCases)(
+    "rejects $name without executing its getter",
+    ({ makeEvidence }) => {
+      const { evidence, getterCalls } = makeEvidence();
+
+      expectRejectedCandidateVendorDecisionEvidence(evidence);
+
+      expect(getterCalls()).toBe(0);
+    },
+  );
+
+  it.each(candidateVendorDecisionProxyCases)(
+    "rejects $name without executing user traps",
+    ({ placement, revoked }) => {
+      const { evidence, trapCalls } = hostileCandidateVendorDecisionEvidence(
+        placement,
+        revoked,
+      );
+
+      expectRejectedCandidateVendorDecisionEvidence(evidence);
+
+      expect(trapCalls.total).toBe(0);
     },
   );
 
