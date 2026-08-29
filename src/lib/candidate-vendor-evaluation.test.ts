@@ -3537,7 +3537,8 @@ function hostileCandidateVendorDecisionEvidence(
     candidateVendorDecisionProxyHandler(trapCalls),
   );
   if (placement === "nested") {
-    evidence.legal_permissions[0] = revocable.proxy;
+    evidence.legal_permissions[0] =
+      revocable.proxy as TestDecisionEvidenceRecord;
   }
   if (revoked) {
     revocable.revoke();
