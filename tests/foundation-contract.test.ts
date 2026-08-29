@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "61fe563690d4794860b6f82a82183c33db4b50da8ea7cbd810d4cfd92910e4f7",
+  "ROADMAP.md": "5502324309857e422c546d79162b38837e239464b0c32154a104e61be78c560a",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1243,6 +1243,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "No proxy fix, T3 legal/SLA gate, vendor adapter, external/vendor action, or F7 surface exists before this recorded regression RED.",
+    )
+    expect(g1).toContain(
+      "Candidate proxy-fix commit `fa99baa5e3cf8a217d649a0f73366abaeb774ad3` closed the first four regressions at 277/277 focused cases",
+    )
+    expect(g1).toContain(
+      "RED-only commit `8b4b6376d31b19d6ab5556752daf1d0f9503b474` changed only the colocated evaluator test",
+    )
+    expect(g1).toContain(
+      "coordinator independently reproduced 276/281 focused cases passing and exactly five expected failures",
+    )
+    expect(g1).toContain(
+      "No trust-boundary production repair, T3 legal/SLA gate, vendor adapter, official truth fixture, external/vendor action, or F7 surface exists before this recorded regression RED.",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
