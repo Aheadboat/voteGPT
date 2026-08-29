@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import syntheticVendorFixture from "../../tests/fixtures/g1-candidate-vendor-synthetic.json";
 
+import * as candidateVendorEvaluationModule from "./candidate-vendor-evaluation";
 import {
   type CandidateVendorRecord,
   evaluateCandidateVendor,
@@ -3096,6 +3097,1089 @@ describe("evaluateCandidateVendor", () => {
     expect(serializeCandidateVendorEvaluation(forward)).toBe(
       JSON.stringify(forward),
     );
+    expect(forward.diagnostics).toEqual(
+      [...forward.diagnostics].sort((left, right) => {
+        const serializedLeft = JSON.stringify(left);
+        const serializedRight = JSON.stringify(right);
+        return serializedLeft < serializedRight
+          ? -1
+          : serializedLeft > serializedRight
+            ? 1
+            : 0;
+      }),
+    );
+  });
+});
+
+type TestDecisionEvidenceKind =
+  | "legal_permission"
+  | "operational_commitment"
+  | "package_coverage"
+  | "quote"
+  | "technical";
+
+type TestDecisionEvidenceRecord = {
+  requirement: string;
+  status: string;
+  scope: string;
+  limits: string;
+  evidence_url: string;
+  document_title: string;
+  document_version: string;
+  effective_date: string;
+  retrieved_at: string;
+  raw_content_sha256: string;
+  [key: string]: unknown;
+};
+
+type TestCandidateVendorDecisionEvidence = {
+  legal_permissions: TestDecisionEvidenceRecord[];
+  operational_commitments: TestDecisionEvidenceRecord[];
+  package_coverage: TestDecisionEvidenceRecord;
+  quote_approved?: boolean;
+};
+
+type TestCandidateVendorDecisionDiagnostic = {
+  code: string;
+  evidence_kind: TestDecisionEvidenceKind;
+  requirement: string | null;
+  field: string | null;
+  expected: string | null;
+  actual: string | null;
+};
+
+type TestCandidateVendorDecision = {
+  decision: "go" | "no_go";
+  technical_result: "pass" | "fail";
+  rights_and_operations_result: "pass" | "fail";
+  quote_approved: boolean;
+  diagnostics: readonly TestCandidateVendorDecisionDiagnostic[];
+};
+
+const candidateVendorDecisionApi =
+  candidateVendorEvaluationModule as typeof candidateVendorEvaluationModule & {
+    evaluateCandidateVendorDecision: (
+      technicalReport: ReturnType<typeof evaluateCandidateVendor>,
+      evidence: unknown,
+    ) => TestCandidateVendorDecision;
+    serializeCandidateVendorDecision: (
+      decision: TestCandidateVendorDecision,
+    ) => string;
+  };
+
+function candidateDecisionEvidenceRecord(
+  requirement: string,
+  values: Record<string, unknown>,
+): TestDecisionEvidenceRecord {
+  return {
+    requirement,
+    status: "allowed",
+    scope: `Synthetic scope for ${requirement}.`,
+    limits: `Synthetic limits for ${requirement}.`,
+    evidence_url: `https://vendor.example.test/evidence/${requirement}`,
+    document_title: "Synthetic written rights and operations terms",
+    document_version: "v1",
+    effective_date: "2026-08-15",
+    retrieved_at: "2026-08-15T12:00:00Z",
+    raw_content_sha256:
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ...values,
+  };
+}
+
+function validCandidateVendorDecisionEvidence(): TestCandidateVendorDecisionEvidence {
+  return {
+    legal_permissions: [
+      candidateDecisionEvidenceRecord("public_redisplay", {
+        public_use: true,
+        normalized_facts: ["candidate", "contest", "status", "source"],
+        bulk_raw_extraction: false,
+      }),
+      candidateDecisionEvidenceRecord("current_response_cache", {
+        minimum_days: 30,
+      }),
+      candidateDecisionEvidenceRecord("normalized_history_and_audit", {
+        minimum_months_after_certification: 24,
+      }),
+      candidateDecisionEvidenceRecord("derived_use", {
+        normalized_records: true,
+        non_reconstructive_metrics: true,
+      }),
+      candidateDecisionEvidenceRecord("correction_and_tombstone", {
+        correction_processing: true,
+        tombstone_processing: true,
+        audit_trail: true,
+      }),
+      candidateDecisionEvidenceRecord("termination", {
+        maximum_raw_purge_days: 30,
+        maximum_backup_purge_days: 90,
+        retains_only_separately_permitted_normalized_audit_facts: true,
+      }),
+    ],
+    operational_commitments: [
+      candidateDecisionEvidenceRecord("content_refresh", {
+        maximum_interval_hours: 24,
+      }),
+      candidateDecisionEvidenceRecord("status_alert_and_tombstone", {
+        maximum_status_alert_hours_after_ingestion: 24,
+        maximum_tombstone_hours_after_ingestion: 24,
+      }),
+      candidateDecisionEvidenceRecord("correction_acknowledgement", {
+        maximum_business_days: 1,
+      }),
+      candidateDecisionEvidenceRecord("correction_or_disposition", {
+        maximum_business_days: 2,
+      }),
+      candidateDecisionEvidenceRecord("nonbreaking_schema_notice", {
+        minimum_notice_days: 30,
+      }),
+      candidateDecisionEvidenceRecord("breaking_schema_notice", {
+        minimum_notice_days: 90,
+      }),
+    ],
+    package_coverage: candidateDecisionEvidenceRecord(
+      "purchased_package_coverage",
+      {
+        covers_every_sampled_jurisdiction: true,
+        covers_every_sampled_stage: true,
+        covers_every_sampled_stratum: true,
+      },
+    ),
+    quote_approved: true,
+  };
+}
+
+function legalDecisionEvidence(
+  evidence: TestCandidateVendorDecisionEvidence,
+  requirement: string,
+) {
+  const record = evidence.legal_permissions.find(
+    (candidate) => candidate.requirement === requirement,
+  );
+  if (record === undefined) {
+    throw new Error(`missing legal evidence ${requirement}`);
+  }
+  return record;
+}
+
+function operationalDecisionEvidence(
+  evidence: TestCandidateVendorDecisionEvidence,
+  requirement: string,
+) {
+  const record = evidence.operational_commitments.find(
+    (candidate) => candidate.requirement === requirement,
+  );
+  if (record === undefined) {
+    throw new Error(`missing operational evidence ${requirement}`);
+  }
+  return record;
+}
+
+function removeDecisionEvidenceField(
+  record: Record<string, unknown>,
+  field: string,
+) {
+  delete record[field];
+}
+
+function expectedDecisionDiagnostic(
+  code: string,
+  evidenceKind: TestDecisionEvidenceKind,
+  requirement: string | null,
+  field: string | null,
+  expected: string | null,
+  actual: string | null,
+): TestCandidateVendorDecisionDiagnostic {
+  return {
+    code,
+    evidence_kind: evidenceKind,
+    requirement,
+    field,
+    expected,
+    actual,
+  };
+}
+
+function passingCandidateVendorTechnicalReport() {
+  const truth = validCandidateComparisonSet();
+  return evaluateCandidateVendor(truth, validVendorRecords(truth));
+}
+
+type CandidateVendorDecisionFailureCase = {
+  name: string;
+  mutate: (evidence: TestCandidateVendorDecisionEvidence) => void;
+  diagnostic: TestCandidateVendorDecisionDiagnostic;
+};
+
+const candidateVendorDecisionFailureCases: readonly CandidateVendorDecisionFailureCase[] =
+  [
+    {
+      name: "rejects internal-only redisplay scope",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").public_use = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "public_use",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects redisplay missing normalized source facts",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").normalized_facts = [
+          "candidate",
+          "contest",
+          "status",
+        ];
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "normalized_facts",
+        '["candidate","contest","status","source"]',
+        '["candidate","contest","status"]',
+      ),
+    },
+    {
+      name: "rejects permission for bulk raw extraction",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "public_redisplay",
+        ).bulk_raw_extraction = true;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "bulk_raw_extraction",
+        "false",
+        "true",
+      ),
+    },
+    {
+      name: "rejects current-response cache shorter than 30 days",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "current_response_cache").minimum_days =
+          29;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "current_response_cache",
+        "minimum_days",
+        ">=30",
+        "29",
+      ),
+    },
+    {
+      name: "rejects normalized audit retention shorter than 24 months",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "normalized_history_and_audit",
+        ).minimum_months_after_certification = 23;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "normalized_history_and_audit",
+        "minimum_months_after_certification",
+        ">=24",
+        "23",
+      ),
+    },
+    {
+      name: "rejects derived use without normalized records",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "derived_use").normalized_records =
+          false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "derived_use",
+        "normalized_records",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects reconstructive derived metrics",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "derived_use",
+        ).non_reconstructive_metrics = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "derived_use",
+        "non_reconstructive_metrics",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects missing correction processing",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "correction_and_tombstone",
+        ).correction_processing = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "correction_and_tombstone",
+        "correction_processing",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects missing tombstone processing",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "correction_and_tombstone",
+        ).tombstone_processing = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "correction_and_tombstone",
+        "tombstone_processing",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects corrections without an audit trail",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "correction_and_tombstone",
+        ).audit_trail = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "correction_and_tombstone",
+        "audit_trail",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects termination raw purge longer than 30 days",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "termination").maximum_raw_purge_days =
+          31;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "termination",
+        "maximum_raw_purge_days",
+        "<=30",
+        "31",
+      ),
+    },
+    {
+      name: "rejects termination backup purge longer than 90 days",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "termination",
+        ).maximum_backup_purge_days = 91;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "termination",
+        "maximum_backup_purge_days",
+        "<=90",
+        "91",
+      ),
+    },
+    {
+      name: "rejects termination retention beyond separately permitted audit facts",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "termination",
+        ).retains_only_separately_permitted_normalized_audit_facts = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "termination",
+        "retains_only_separately_permitted_normalized_audit_facts",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects refresh slower than daily",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "content_refresh",
+        ).maximum_interval_hours = 25;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "content_refresh",
+        "maximum_interval_hours",
+        "<=24",
+        "25",
+      ),
+    },
+    {
+      name: "rejects status alerts later than 24 hours after ingestion",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "status_alert_and_tombstone",
+        ).maximum_status_alert_hours_after_ingestion = 25;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "status_alert_and_tombstone",
+        "maximum_status_alert_hours_after_ingestion",
+        "<=24",
+        "25",
+      ),
+    },
+    {
+      name: "rejects tombstones later than 24 hours after ingestion",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "status_alert_and_tombstone",
+        ).maximum_tombstone_hours_after_ingestion = 25;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "status_alert_and_tombstone",
+        "maximum_tombstone_hours_after_ingestion",
+        "<=24",
+        "25",
+      ),
+    },
+    {
+      name: "rejects correction acknowledgement after one business day",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "correction_acknowledgement",
+        ).maximum_business_days = 2;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "correction_acknowledgement",
+        "maximum_business_days",
+        "<=1",
+        "2",
+      ),
+    },
+    {
+      name: "rejects correction or disposition after two business days",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "correction_or_disposition",
+        ).maximum_business_days = 3;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "correction_or_disposition",
+        "maximum_business_days",
+        "<=2",
+        "3",
+      ),
+    },
+    {
+      name: "rejects nonbreaking schema notice shorter than 30 days",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "nonbreaking_schema_notice",
+        ).minimum_notice_days = 29;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "nonbreaking_schema_notice",
+        "minimum_notice_days",
+        ">=30",
+        "29",
+      ),
+    },
+    {
+      name: "rejects breaking schema notice shorter than 90 days",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "breaking_schema_notice",
+        ).minimum_notice_days = 89;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "breaking_schema_notice",
+        "minimum_notice_days",
+        ">=90",
+        "89",
+      ),
+    },
+    {
+      name: "rejects package gaps in sampled jurisdictions",
+      mutate: (evidence) => {
+        evidence.package_coverage.covers_every_sampled_jurisdiction = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "package_coverage_incomplete",
+        "package_coverage",
+        "purchased_package_coverage",
+        "covers_every_sampled_jurisdiction",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects package gaps in sampled stages",
+      mutate: (evidence) => {
+        evidence.package_coverage.covers_every_sampled_stage = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "package_coverage_incomplete",
+        "package_coverage",
+        "purchased_package_coverage",
+        "covers_every_sampled_stage",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects package gaps in sampled strata",
+      mutate: (evidence) => {
+        evidence.package_coverage.covers_every_sampled_stratum = false;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "package_coverage_incomplete",
+        "package_coverage",
+        "purchased_package_coverage",
+        "covers_every_sampled_stratum",
+        "true",
+        "false",
+      ),
+    },
+    {
+      name: "rejects unknown legal permission",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").status = "unknown";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "legal_permission",
+        "public_redisplay",
+        "status",
+        "allowed",
+        "unknown",
+      ),
+    },
+    {
+      name: "rejects denied legal permission",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").status = "denied";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "legal_permission",
+        "public_redisplay",
+        "status",
+        "allowed",
+        "denied",
+      ),
+    },
+    {
+      name: "rejects unknown operational commitment",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(evidence, "content_refresh").status =
+          "unknown";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "operational_commitment",
+        "content_refresh",
+        "status",
+        "allowed",
+        "unknown",
+      ),
+    },
+    {
+      name: "rejects denied operational commitment",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(evidence, "content_refresh").status =
+          "denied";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "operational_commitment",
+        "content_refresh",
+        "status",
+        "allowed",
+        "denied",
+      ),
+    },
+    {
+      name: "rejects unknown package coverage",
+      mutate: (evidence) => {
+        evidence.package_coverage.status = "unknown";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "package_coverage",
+        "purchased_package_coverage",
+        "status",
+        "allowed",
+        "unknown",
+      ),
+    },
+    {
+      name: "rejects denied package coverage",
+      mutate: (evidence) => {
+        evidence.package_coverage.status = "denied";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "package_coverage",
+        "purchased_package_coverage",
+        "status",
+        "allowed",
+        "denied",
+      ),
+    },
+    {
+      name: "rejects a missing legal permission record",
+      mutate: (evidence) => {
+        evidence.legal_permissions = evidence.legal_permissions.filter(
+          (record) => record.requirement !== "current_response_cache",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_missing",
+        "legal_permission",
+        "current_response_cache",
+        "requirement",
+        "present",
+        null,
+      ),
+    },
+    {
+      name: "rejects a missing operational commitment record",
+      mutate: (evidence) => {
+        evidence.operational_commitments =
+          evidence.operational_commitments.filter(
+            (record) => record.requirement !== "content_refresh",
+          );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_missing",
+        "operational_commitment",
+        "content_refresh",
+        "requirement",
+        "present",
+        null,
+      ),
+    },
+    {
+      name: "rejects missing purchased package coverage",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          evidence as unknown as Record<string, unknown>,
+          "package_coverage",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_missing",
+        "package_coverage",
+        "purchased_package_coverage",
+        "requirement",
+        "present",
+        null,
+      ),
+    },
+    {
+      name: "rejects a missing legal minimum field",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          legalDecisionEvidence(evidence, "public_redisplay"),
+          "public_use",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "public_use",
+        "true",
+        null,
+      ),
+    },
+    {
+      name: "rejects a missing operational minimum field",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          operationalDecisionEvidence(evidence, "content_refresh"),
+          "maximum_interval_hours",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "operational_minimum_not_met",
+        "operational_commitment",
+        "content_refresh",
+        "maximum_interval_hours",
+        "<=24",
+        null,
+      ),
+    },
+    {
+      name: "rejects a missing package coverage field",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          evidence.package_coverage,
+          "covers_every_sampled_jurisdiction",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "package_coverage_incomplete",
+        "package_coverage",
+        "purchased_package_coverage",
+        "covers_every_sampled_jurisdiction",
+        "true",
+        null,
+      ),
+    },
+    {
+      name: "rejects evidence missing its status",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          legalDecisionEvidence(evidence, "public_redisplay"),
+          "status",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        "legal_permission",
+        "public_redisplay",
+        "status",
+        "allowed",
+        null,
+      ),
+    },
+    {
+      name: "rejects evidence missing exact scope",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          legalDecisionEvidence(evidence, "current_response_cache"),
+          "scope",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "legal_permission",
+        "current_response_cache",
+        "scope",
+        "nonblank string",
+        null,
+      ),
+    },
+    {
+      name: "rejects evidence missing exact limits",
+      mutate: (evidence) => {
+        removeDecisionEvidenceField(
+          operationalDecisionEvidence(evidence, "content_refresh"),
+          "limits",
+        );
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "operational_commitment",
+        "content_refresh",
+        "limits",
+        "nonblank string",
+        null,
+      ),
+    },
+    {
+      name: "rejects non-HTTPS evidence URL",
+      mutate: (evidence) => {
+        evidence.package_coverage.evidence_url =
+          "http://vendor.example.test/evidence/package";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "package_coverage",
+        "purchased_package_coverage",
+        "evidence_url",
+        "HTTPS URL",
+        "http://vendor.example.test/evidence/package",
+      ),
+    },
+    {
+      name: "rejects evidence missing document title",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "derived_use").document_title = "";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "legal_permission",
+        "derived_use",
+        "document_title",
+        "nonblank string",
+        '""',
+      ),
+    },
+    {
+      name: "rejects evidence missing document version",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "correction_acknowledgement",
+        ).document_version = "";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "operational_commitment",
+        "correction_acknowledgement",
+        "document_version",
+        "nonblank string",
+        '""',
+      ),
+    },
+    {
+      name: "rejects invalid document effective date",
+      mutate: (evidence) => {
+        evidence.package_coverage.effective_date = "not-a-date";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "package_coverage",
+        "purchased_package_coverage",
+        "effective_date",
+        "calendar date",
+        "not-a-date",
+      ),
+    },
+    {
+      name: "rejects invalid evidence retrieval time",
+      mutate: (evidence) => {
+        legalDecisionEvidence(
+          evidence,
+          "normalized_history_and_audit",
+        ).retrieved_at = "not-rfc3339";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "legal_permission",
+        "normalized_history_and_audit",
+        "retrieved_at",
+        "RFC 3339 timestamp",
+        "not-rfc3339",
+      ),
+    },
+    {
+      name: "rejects invalid raw-content SHA-256",
+      mutate: (evidence) => {
+        operationalDecisionEvidence(
+          evidence,
+          "breaking_schema_notice",
+        ).raw_content_sha256 = "bad";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "evidence_metadata_invalid",
+        "operational_commitment",
+        "breaking_schema_notice",
+        "raw_content_sha256",
+        "lowercase 64-hex SHA-256",
+        "bad",
+      ),
+    },
+    {
+      name: "rejects duplicate evidence requirements",
+      mutate: (evidence) => {
+        evidence.legal_permissions.push({
+          ...legalDecisionEvidence(evidence, "public_redisplay"),
+          status: "denied",
+        });
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "duplicate_evidence_requirement",
+        "legal_permission",
+        "public_redisplay",
+        "requirement",
+        "unique",
+        "duplicate",
+      ),
+    },
+  ];
+
+describe("evaluateCandidateVendorDecision", () => {
+  it("returns GO only when technical, rights, operations, package, provenance, and quote minima pass", () => {
+    const decision = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      passingCandidateVendorTechnicalReport(),
+      validCandidateVendorDecisionEvidence(),
+    );
+
+    expect(decision).toEqual({
+      decision: "go",
+      technical_result: "pass",
+      rights_and_operations_result: "pass",
+      quote_approved: true,
+      diagnostics: [],
+    });
+  });
+
+  it.each(candidateVendorDecisionFailureCases)(
+    "$name",
+    ({ mutate, diagnostic }) => {
+      const evidence = validCandidateVendorDecisionEvidence();
+      mutate(evidence);
+
+      const decision =
+        candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+          passingCandidateVendorTechnicalReport(),
+          evidence,
+        );
+
+      expect(decision).toEqual({
+        decision: "no_go",
+        technical_result: "pass",
+        rights_and_operations_result: "fail",
+        quote_approved: true,
+        diagnostics: [diagnostic],
+      });
+    },
+  );
+
+  it.each([
+    ["an explicitly unapproved quote", false, "false"],
+    ["missing quote approval", undefined, null],
+  ])("returns NO-GO for %s", (_label, quoteApproved, actual) => {
+    const evidence = validCandidateVendorDecisionEvidence();
+    if (quoteApproved === undefined) {
+      delete evidence.quote_approved;
+    } else {
+      evidence.quote_approved = quoteApproved;
+    }
+
+    const decision = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      passingCandidateVendorTechnicalReport(),
+      evidence,
+    );
+
+    expect(decision).toEqual({
+      decision: "no_go",
+      technical_result: "pass",
+      rights_and_operations_result: "pass",
+      quote_approved: false,
+      diagnostics: [
+        expectedDecisionDiagnostic(
+          "quote_not_approved",
+          "quote",
+          null,
+          "quote_approved",
+          "true",
+          actual,
+        ),
+      ],
+    });
+  });
+
+  it("preserves a technical failure as NO-GO despite passing rights and operations", () => {
+    const truth = validCandidateComparisonSet();
+    const vendor = validVendorRecords(truth);
+    vendor[0] = { ...vendor[0]!, lifecycle_status: "withdrawn" };
+    const technicalReport = evaluateCandidateVendor(truth, vendor);
+    expect(technicalReport.technical_result).toBe("fail");
+
+    const decision = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      technicalReport,
+      validCandidateVendorDecisionEvidence(),
+    );
+
+    expect(decision).toEqual({
+      decision: "no_go",
+      technical_result: "fail",
+      rights_and_operations_result: "pass",
+      quote_approved: true,
+      diagnostics: [
+        expectedDecisionDiagnostic(
+          "technical_evaluation_failed",
+          "technical",
+          null,
+          "technical_result",
+          "pass",
+          "fail",
+        ),
+      ],
+    });
+  });
+
+  it("serializes stable audit output independent of evidence order", () => {
+    const forwardEvidence = validCandidateVendorDecisionEvidence();
+    legalDecisionEvidence(
+      forwardEvidence,
+      "current_response_cache",
+    ).minimum_days = 29;
+    operationalDecisionEvidence(
+      forwardEvidence,
+      "content_refresh",
+    ).maximum_interval_hours = 25;
+    forwardEvidence.quote_approved = false;
+    const reverseEvidence = validCandidateVendorDecisionEvidence();
+    legalDecisionEvidence(
+      reverseEvidence,
+      "current_response_cache",
+    ).minimum_days = 29;
+    operationalDecisionEvidence(
+      reverseEvidence,
+      "content_refresh",
+    ).maximum_interval_hours = 25;
+    reverseEvidence.quote_approved = false;
+    reverseEvidence.legal_permissions.reverse();
+    reverseEvidence.operational_commitments.reverse();
+    const technicalReport = passingCandidateVendorTechnicalReport();
+
+    const forward = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      technicalReport,
+      forwardEvidence,
+    );
+    const reverse = candidateVendorDecisionApi.evaluateCandidateVendorDecision(
+      technicalReport,
+      reverseEvidence,
+    );
+    const serialized =
+      candidateVendorDecisionApi.serializeCandidateVendorDecision(forward);
+
+    expect(serialized).toBe(
+      candidateVendorDecisionApi.serializeCandidateVendorDecision(reverse),
+    );
+    expect(serialized).toBe(JSON.stringify(forward));
     expect(forward.diagnostics).toEqual(
       [...forward.diagnostics].sort((left, right) => {
         const serializedLeft = JSON.stringify(left);
