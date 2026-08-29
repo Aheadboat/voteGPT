@@ -11,14 +11,10 @@ export type SampleStratum =
   | "withdrawn"
   | "disqualified";
 export type CandidateLifecycleStatus =
-  | "qualified"
-  | "withdrawn"
-  | "disqualified";
+  "qualified" | "withdrawn" | "disqualified";
 export type BallotAppearance = "printed" | "write_in" | "not_on_ballot";
 export type CandidateSourceType =
-  | "official_election_authority"
-  | "official_ballot"
-  | "official_court_record";
+  "official_election_authority" | "official_ballot" | "official_court_record";
 
 export type OfficialCandidateId = Readonly<{
   issuer: string;
