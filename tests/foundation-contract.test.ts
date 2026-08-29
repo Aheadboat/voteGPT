@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "44fc0e878a7e01c6bea93a0b67d5da16922a8d97aba7f02caa76887acf173e2b",
+  "ROADMAP.md": "e34d60a14be523f35580d955d2607ec263965a499260b660ee3857978db1b794",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1267,6 +1267,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "G1-T2 is GREEN, but G1 remains in `RED` until the official 100-record fixture and its independent fact/source audit pass",
+    )
+    expect(g1).toContain(
+      "Test-only commits `c99e7d5435ad9a6121e6a6c186b78ddbdbccd714` and `e1d761e65956c4a7c487648b38b0e62f2b637b76` freeze the smallest provider-neutral decision boundary after T2",
+    )
+    expect(g1).toContain(
+      "coordinator independently reproduced 281/352 existing evaluator cases passing and exactly 71 T3 cases failing only because `evaluateCandidateVendorDecision` is absent",
+    )
+    expect(g1).toContain(
+      "Independent re-review approved the explicit minima, one-variable mutations, compact rejection shape, trust-boundary assertions, and duplicate coverage with no remaining finding.",
+    )
+    expect(g1).toContain(
+      "No T3 production implementation, vendor adapter, official fixture, external/vendor action, or F7 surface exists before this recorded RED.",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
