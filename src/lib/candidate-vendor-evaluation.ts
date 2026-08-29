@@ -239,6 +239,67 @@ export type CandidateVendorEvaluationReport = Readonly<{
   diagnostics: readonly CandidateVendorDiagnostic[];
 }>;
 
+export type CandidateVendorDecisionEvidenceStatus =
+  "allowed" | "unknown" | "denied";
+
+export type CandidateVendorDecisionEvidenceRecord = Readonly<{
+  requirement: string;
+  status: CandidateVendorDecisionEvidenceStatus;
+  scope: string;
+  limits: string;
+  evidence_url: string;
+  document_title: string;
+  document_version: string;
+  effective_date: string;
+  retrieved_at: string;
+  raw_content_sha256: string;
+  [key: string]: unknown;
+}>;
+
+export type CandidateVendorDecisionEvidence = Readonly<{
+  legal_permissions: readonly CandidateVendorDecisionEvidenceRecord[];
+  operational_commitments: readonly CandidateVendorDecisionEvidenceRecord[];
+  package_coverage: CandidateVendorDecisionEvidenceRecord;
+  quote_approved?: boolean;
+}>;
+
+export type CandidateVendorDecisionEvidenceKind =
+  | "evidence"
+  | "legal_permission"
+  | "operational_commitment"
+  | "package_coverage"
+  | "quote"
+  | "technical";
+
+export type CandidateVendorDecisionDiagnosticCode =
+  | "duplicate_evidence_requirement"
+  | "evidence_bundle_invalid"
+  | "evidence_metadata_invalid"
+  | "evidence_missing"
+  | "evidence_status_not_allowed"
+  | "legal_minimum_not_met"
+  | "operational_minimum_not_met"
+  | "package_coverage_incomplete"
+  | "quote_not_approved"
+  | "technical_evaluation_failed";
+
+export type CandidateVendorDecisionDiagnostic = Readonly<{
+  code: CandidateVendorDecisionDiagnosticCode;
+  evidence_kind: CandidateVendorDecisionEvidenceKind;
+  requirement: string | null;
+  field: string | null;
+  expected: string | null;
+  actual: string | null;
+}>;
+
+export type CandidateVendorDecision = Readonly<{
+  decision: "go" | "no_go";
+  technical_result: "pass" | "fail";
+  rights_and_operations_result: "pass" | "fail";
+  quote_approved: boolean;
+  diagnostics: readonly CandidateVendorDecisionDiagnostic[];
+}>;
+
 const participationKeys = [
   "record_key",
   "contest_key",
@@ -389,6 +450,265 @@ const rfc3986RegNamePunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation
 const rfc3986IpLiteralPunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}:`;
 const rfc3986PathPunctuation = `${rfc3986UnreservedAndSubDelimiterPunctuation}:@/%`;
 const rfc3986QueryOrFragmentPunctuation = `${rfc3986PathPunctuation}?`;
+const candidateVendorDecisionEvidenceKeys = [
+  "legal_permissions",
+  "operational_commitments",
+  "package_coverage",
+  "quote_approved",
+] as const;
+
+type CandidateVendorDecisionMinimum = Readonly<{
+  field: string;
+  expected: string;
+  passes: (value: unknown) => boolean;
+}>;
+
+type CandidateVendorDecisionRequirement = Readonly<{
+  requirement: string;
+  minima: readonly CandidateVendorDecisionMinimum[];
+}>;
+
+const candidateVendorDecisionMetadata: readonly CandidateVendorDecisionMinimum[] =
+  [
+    {
+      field: "scope",
+      expected: "nonblank string",
+      passes: isNonblank,
+    },
+    {
+      field: "limits",
+      expected: "nonblank string",
+      passes: isNonblank,
+    },
+    {
+      field: "evidence_url",
+      expected: "HTTPS URL",
+      passes: isHttpsUrl,
+    },
+    {
+      field: "document_title",
+      expected: "nonblank string",
+      passes: isNonblank,
+    },
+    {
+      field: "document_version",
+      expected: "nonblank string",
+      passes: isNonblank,
+    },
+    {
+      field: "effective_date",
+      expected: "calendar date",
+      passes: isCalendarDate,
+    },
+    {
+      field: "retrieved_at",
+      expected: "RFC 3339 timestamp",
+      passes: isRfc3339,
+    },
+    {
+      field: "raw_content_sha256",
+      expected: "lowercase 64-hex SHA-256",
+      passes: (value) =>
+        typeof value === "string" && /^[0-9a-f]{64}$/.test(value),
+    },
+  ];
+
+const legalCandidateVendorDecisionRequirements: readonly CandidateVendorDecisionRequirement[] =
+  [
+    {
+      requirement: "public_redisplay",
+      minima: [
+        {
+          field: "public_use",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+        {
+          field: "normalized_facts",
+          expected: '["candidate","contest","status","source"]',
+          passes: (value) => {
+            const values = readExactDenseArray(value);
+            return (
+              values !== null &&
+              JSON.stringify(values) ===
+                '["candidate","contest","status","source"]'
+            );
+          },
+        },
+        {
+          field: "bulk_raw_extraction",
+          expected: "false",
+          passes: (value) => value === false,
+        },
+      ],
+    },
+    {
+      requirement: "current_response_cache",
+      minima: [
+        {
+          field: "minimum_days",
+          expected: ">=30",
+          passes: (value) => isNonnegativeSafeInteger(value) && value >= 30,
+        },
+      ],
+    },
+    {
+      requirement: "normalized_history_and_audit",
+      minima: [
+        {
+          field: "minimum_months_after_certification",
+          expected: ">=24",
+          passes: (value) => isNonnegativeSafeInteger(value) && value >= 24,
+        },
+      ],
+    },
+    {
+      requirement: "derived_use",
+      minima: [
+        {
+          field: "normalized_records",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+        {
+          field: "non_reconstructive_metrics",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+      ],
+    },
+    {
+      requirement: "correction_and_tombstone",
+      minima: [
+        {
+          field: "correction_processing",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+        {
+          field: "tombstone_processing",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+        {
+          field: "audit_trail",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+      ],
+    },
+    {
+      requirement: "termination",
+      minima: [
+        {
+          field: "maximum_raw_purge_days",
+          expected: "<=30",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 30,
+        },
+        {
+          field: "maximum_backup_purge_days",
+          expected: "<=90",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 90,
+        },
+        {
+          field: "retains_only_separately_permitted_normalized_audit_facts",
+          expected: "true",
+          passes: (value) => value === true,
+        },
+      ],
+    },
+  ];
+
+const operationalCandidateVendorDecisionRequirements: readonly CandidateVendorDecisionRequirement[] =
+  [
+    {
+      requirement: "content_refresh",
+      minima: [
+        {
+          field: "maximum_interval_hours",
+          expected: "<=24",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 24,
+        },
+      ],
+    },
+    {
+      requirement: "status_alert_and_tombstone",
+      minima: [
+        {
+          field: "maximum_status_alert_hours_after_ingestion",
+          expected: "<=24",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 24,
+        },
+        {
+          field: "maximum_tombstone_hours_after_ingestion",
+          expected: "<=24",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 24,
+        },
+      ],
+    },
+    {
+      requirement: "correction_acknowledgement",
+      minima: [
+        {
+          field: "maximum_business_days",
+          expected: "<=1",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 1,
+        },
+      ],
+    },
+    {
+      requirement: "correction_or_disposition",
+      minima: [
+        {
+          field: "maximum_business_days",
+          expected: "<=2",
+          passes: (value) => isNonnegativeSafeInteger(value) && value <= 2,
+        },
+      ],
+    },
+    {
+      requirement: "nonbreaking_schema_notice",
+      minima: [
+        {
+          field: "minimum_notice_days",
+          expected: ">=30",
+          passes: (value) => isNonnegativeSafeInteger(value) && value >= 30,
+        },
+      ],
+    },
+    {
+      requirement: "breaking_schema_notice",
+      minima: [
+        {
+          field: "minimum_notice_days",
+          expected: ">=90",
+          passes: (value) => isNonnegativeSafeInteger(value) && value >= 90,
+        },
+      ],
+    },
+  ];
+
+const packageCandidateVendorDecisionRequirement: CandidateVendorDecisionRequirement =
+  {
+    requirement: "purchased_package_coverage",
+    minima: [
+      {
+        field: "covers_every_sampled_jurisdiction",
+        expected: "true",
+        passes: (value) => value === true,
+      },
+      {
+        field: "covers_every_sampled_stage",
+        expected: "true",
+        passes: (value) => value === true,
+      },
+      {
+        field: "covers_every_sampled_stratum",
+        expected: "true",
+        passes: (value) => value === true,
+      },
+    ],
+  };
 
 export function normalizeCandidateName(value: string): string {
   return value
@@ -750,6 +1070,327 @@ export function serializeCandidateVendorEvaluation(
   report: CandidateVendorEvaluationReport,
 ): string {
   return JSON.stringify(report);
+}
+
+export function evaluateCandidateVendorDecision(
+  technicalReport: CandidateVendorEvaluationReport,
+  evidenceValue: unknown,
+): CandidateVendorDecision {
+  const technicalResult = technicalReport.technical_result;
+  if (!canStructuredCloneCandidateInput(evidenceValue)) {
+    return rejectedCandidateVendorDecisionEvidence(technicalResult);
+  }
+
+  try {
+    const evidence = readCandidateVendorDecisionEvidence(evidenceValue);
+    if (evidence === null) {
+      return rejectedCandidateVendorDecisionEvidence(technicalResult);
+    }
+
+    const legalValues = readExactDenseArray(evidence.legal_permissions);
+    const operationalValues = readExactDenseArray(
+      evidence.operational_commitments,
+    );
+    if (legalValues === null || operationalValues === null) {
+      return rejectedCandidateVendorDecisionEvidence(technicalResult);
+    }
+
+    const diagnostics: CandidateVendorDecisionDiagnostic[] = [];
+    if (
+      !validateCandidateVendorDecisionEvidenceRecords(
+        legalValues,
+        legalCandidateVendorDecisionRequirements,
+        "legal_permission",
+        "legal_minimum_not_met",
+        diagnostics,
+      ) ||
+      !validateCandidateVendorDecisionEvidenceRecords(
+        operationalValues,
+        operationalCandidateVendorDecisionRequirements,
+        "operational_commitment",
+        "operational_minimum_not_met",
+        diagnostics,
+      )
+    ) {
+      return rejectedCandidateVendorDecisionEvidence(technicalResult);
+    }
+
+    if (!Object.hasOwn(evidence, "package_coverage")) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic(
+          "evidence_missing",
+          "package_coverage",
+          {
+            requirement: packageCandidateVendorDecisionRequirement.requirement,
+            field: "requirement",
+            expected: "present",
+          },
+        ),
+      );
+    } else {
+      const packageEvidence = readDataRecord(evidence.package_coverage);
+      if (
+        packageEvidence === null ||
+        packageEvidence.requirement !==
+          packageCandidateVendorDecisionRequirement.requirement
+      ) {
+        return rejectedCandidateVendorDecisionEvidence(technicalResult);
+      }
+      validateCandidateVendorDecisionEvidenceRecord(
+        packageEvidence,
+        packageCandidateVendorDecisionRequirement,
+        "package_coverage",
+        "package_coverage_incomplete",
+        diagnostics,
+      );
+    }
+
+    const quoteApproved = evidence.quote_approved === true;
+    if (!quoteApproved) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic("quote_not_approved", "quote", {
+          field: "quote_approved",
+          expected: "true",
+          actual: candidateVendorDecisionActual(evidence.quote_approved),
+        }),
+      );
+    }
+    if (technicalResult === "fail") {
+      diagnostics.push(candidateVendorTechnicalFailureDiagnostic());
+    }
+
+    return candidateVendorDecision(technicalResult, quoteApproved, diagnostics);
+  } catch {
+    return rejectedCandidateVendorDecisionEvidence(technicalResult);
+  }
+}
+
+export function serializeCandidateVendorDecision(
+  decision: CandidateVendorDecision,
+): string {
+  return JSON.stringify(decision);
+}
+
+function readCandidateVendorDecisionEvidence(
+  value: unknown,
+): Record<string, unknown> | null {
+  const evidence = readDataRecord(value);
+  if (
+    evidence === null ||
+    !Object.hasOwn(evidence, "legal_permissions") ||
+    !Object.hasOwn(evidence, "operational_commitments") ||
+    Object.keys(evidence).some(
+      (key) =>
+        !candidateVendorDecisionEvidenceKeys.some(
+          (allowedKey) => allowedKey === key,
+        ),
+    )
+  ) {
+    return null;
+  }
+  return evidence;
+}
+
+function validateCandidateVendorDecisionEvidenceRecords(
+  values: readonly unknown[],
+  requirements: readonly CandidateVendorDecisionRequirement[],
+  evidenceKind: "legal_permission" | "operational_commitment",
+  minimumCode: "legal_minimum_not_met" | "operational_minimum_not_met",
+  diagnostics: CandidateVendorDecisionDiagnostic[],
+): boolean {
+  const records: Record<string, unknown>[] = [];
+  for (const value of values) {
+    const record = readDataRecord(value);
+    if (
+      record === null ||
+      typeof record.requirement !== "string" ||
+      !requirements.some(
+        ({ requirement }) => requirement === record.requirement,
+      )
+    ) {
+      return false;
+    }
+    records.push(record);
+  }
+
+  for (const requirement of requirements) {
+    const matches = records.filter(
+      (record) => record.requirement === requirement.requirement,
+    );
+    if (matches.length === 0) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic("evidence_missing", evidenceKind, {
+          requirement: requirement.requirement,
+          field: "requirement",
+          expected: "present",
+        }),
+      );
+    } else if (matches.length > 1) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic(
+          "duplicate_evidence_requirement",
+          evidenceKind,
+          {
+            requirement: requirement.requirement,
+            field: "requirement",
+            expected: "unique",
+            actual: "duplicate",
+          },
+        ),
+      );
+    } else {
+      validateCandidateVendorDecisionEvidenceRecord(
+        matches[0]!,
+        requirement,
+        evidenceKind,
+        minimumCode,
+        diagnostics,
+      );
+    }
+  }
+  return true;
+}
+
+function validateCandidateVendorDecisionEvidenceRecord(
+  record: Record<string, unknown>,
+  requirement: CandidateVendorDecisionRequirement,
+  evidenceKind:
+    "legal_permission" | "operational_commitment" | "package_coverage",
+  minimumCode:
+    | "legal_minimum_not_met"
+    | "operational_minimum_not_met"
+    | "package_coverage_incomplete",
+  diagnostics: CandidateVendorDecisionDiagnostic[],
+) {
+  if (record.status !== "allowed") {
+    diagnostics.push(
+      candidateVendorDecisionDiagnostic(
+        "evidence_status_not_allowed",
+        evidenceKind,
+        {
+          requirement: requirement.requirement,
+          field: "status",
+          expected: "allowed",
+          actual: candidateVendorDecisionActual(record.status),
+        },
+      ),
+    );
+  }
+
+  for (const metadata of candidateVendorDecisionMetadata) {
+    if (!metadata.passes(record[metadata.field])) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic(
+          "evidence_metadata_invalid",
+          evidenceKind,
+          {
+            requirement: requirement.requirement,
+            field: metadata.field,
+            expected: metadata.expected,
+            actual: candidateVendorDecisionActual(record[metadata.field]),
+          },
+        ),
+      );
+    }
+  }
+
+  for (const minimum of requirement.minima) {
+    if (!minimum.passes(record[minimum.field])) {
+      diagnostics.push(
+        candidateVendorDecisionDiagnostic(minimumCode, evidenceKind, {
+          requirement: requirement.requirement,
+          field: minimum.field,
+          expected: minimum.expected,
+          actual: candidateVendorDecisionActual(record[minimum.field]),
+        }),
+      );
+    }
+  }
+}
+
+function rejectedCandidateVendorDecisionEvidence(
+  technicalResult: "pass" | "fail",
+): CandidateVendorDecision {
+  const diagnostics: CandidateVendorDecisionDiagnostic[] = [
+    candidateVendorDecisionDiagnostic("evidence_bundle_invalid", "evidence", {
+      expected: "plain trap-free evidence bundle",
+    }),
+  ];
+  if (technicalResult === "fail") {
+    diagnostics.push(candidateVendorTechnicalFailureDiagnostic());
+  }
+  return candidateVendorDecision(technicalResult, false, diagnostics);
+}
+
+function candidateVendorDecision(
+  technicalResult: "pass" | "fail",
+  quoteApproved: boolean,
+  diagnostics: CandidateVendorDecisionDiagnostic[],
+): CandidateVendorDecision {
+  diagnostics.sort(compareCandidateVendorDecisionDiagnostics);
+  const rightsAndOperationsPassed = diagnostics.every(
+    ({ evidence_kind: evidenceKind }) =>
+      evidenceKind === "quote" || evidenceKind === "technical",
+  );
+  return {
+    decision: diagnostics.length === 0 ? "go" : "no_go",
+    technical_result: technicalResult,
+    rights_and_operations_result: rightsAndOperationsPassed ? "pass" : "fail",
+    quote_approved: quoteApproved,
+    diagnostics,
+  };
+}
+
+function candidateVendorTechnicalFailureDiagnostic(): CandidateVendorDecisionDiagnostic {
+  return candidateVendorDecisionDiagnostic(
+    "technical_evaluation_failed",
+    "technical",
+    {
+      field: "technical_result",
+      expected: "pass",
+      actual: "fail",
+    },
+  );
+}
+
+function candidateVendorDecisionDiagnostic(
+  code: CandidateVendorDecisionDiagnosticCode,
+  evidenceKind: CandidateVendorDecisionEvidenceKind,
+  values: Partial<
+    Omit<CandidateVendorDecisionDiagnostic, "code" | "evidence_kind">
+  > = {},
+): CandidateVendorDecisionDiagnostic {
+  return {
+    code,
+    evidence_kind: evidenceKind,
+    requirement: values.requirement ?? null,
+    field: values.field ?? null,
+    expected: values.expected ?? null,
+    actual: values.actual ?? null,
+  };
+}
+
+function candidateVendorDecisionActual(value: unknown): string | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value === "" ? '""' : value;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+function compareCandidateVendorDecisionDiagnostics(
+  left: CandidateVendorDecisionDiagnostic,
+  right: CandidateVendorDecisionDiagnostic,
+): number {
+  const serializedLeft = JSON.stringify(left);
+  const serializedRight = JSON.stringify(right);
+  return serializedLeft < serializedRight
+    ? -1
+    : serializedLeft > serializedRight
+      ? 1
+      : 0;
 }
 
 function canStructuredCloneCandidateInput(value: unknown): boolean {
@@ -1864,6 +2505,18 @@ function readExactDataRecord(
   value: unknown,
   keys: readonly string[],
 ): Record<string, unknown> | null {
+  const snapshot = readDataRecord(value);
+  if (
+    snapshot === null ||
+    Object.keys(snapshot).length !== keys.length ||
+    Object.keys(snapshot).some((key) => !keys.includes(key))
+  ) {
+    return null;
+  }
+  return snapshot;
+}
+
+function readDataRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
   }
@@ -1872,14 +2525,11 @@ function readExactDataRecord(
     return null;
   }
   const ownKeys = Reflect.ownKeys(value);
-  if (
-    ownKeys.length !== keys.length ||
-    ownKeys.some((key) => typeof key !== "string" || !keys.includes(key))
-  ) {
+  if (ownKeys.some((key) => typeof key !== "string")) {
     return null;
   }
   const snapshot: Record<string, unknown> = Object.create(null);
-  for (const key of keys) {
+  for (const key of ownKeys as string[]) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (
       descriptor === undefined ||
@@ -1932,6 +2582,10 @@ function readExactDenseArray(value: unknown): readonly unknown[] | null {
 
 function isNonblank(value: unknown): value is string {
   return typeof value === "string" && normalizeCandidateName(value).length > 0;
+}
+
+function isNonnegativeSafeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isOneOf<T extends string>(
