@@ -1,8 +1,4116 @@
 {
   "as_of": "2026-08-29T01:53:03.730Z",
-  "records": [],
-  "authorities": [],
-  "authority_assignments": [],
+  "records": [
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:john-raghu-giuffre",
+      "contest_key": "federal:us:hi:2024-08-10:primary:us-senate",
+      "candidate_name": "John (Raghu) Giuffre",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "John M. Giuffre",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 54, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-08-10",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 54, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ca:2022-06-07:primary:us-house-4:seth-t-newman",
+      "contest_key": "federal:us:ca:2022-06-07:primary:us-house-4",
+      "candidate_name": "Seth T Newman",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2022-06-07",
+      "office": "United States Representative",
+      "district": "4",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": ["No Party Preference"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2022-primary/cert-list-writein.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.845Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 2, “Official Certified List of Write-In Candidates — Amended,” U.S. Representative Districts 4 and 6",
+          "sha256": "d3a4d82291c75a2672b8adf18f5f5ac67aa4256a369cab4ea6152593a00c3174"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ca:2022-06-07:primary:us-house-6:chris-richardson",
+      "contest_key": "federal:us:ca:2022-06-07:primary:us-house-6",
+      "candidate_name": "Chris Richardson",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2022-06-07",
+      "office": "United States Representative",
+      "district": "6",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": ["Green"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2022-primary/cert-list-writein.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.845Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 2, “Official Certified List of Write-In Candidates — Amended,” U.S. Representative Districts 4 and 6",
+          "sha256": "d3a4d82291c75a2672b8adf18f5f5ac67aa4256a369cab4ea6152593a00c3174"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ny:2018-06-26:primary:us-house-23:tracy-mitrano",
+      "contest_key": "federal:us:ny:2018-06-26:primary:us-house-23",
+      "candidate_name": "Tracy Mitrano",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York",
+      "election_date": "2018-06-26",
+      "office": "U.S. Representative",
+      "district": "23",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["DEM", "WE"],
+      "sources": [
+        {
+          "url": "https://www.schuylercountyny.gov/DocumentCenter/View/6763/2018-Federal-PE-Official-Tally",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:53:03.028Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.1: `2018 Federal Primary - Official Results`, election date June 26, 2018, Tracy Mitrano in both U.S. Representative Democratic (`DEM`) and Women's Equality (`WE`) summaries; display p.2 Democratic detail; display p.9 Women's Equality detail.",
+          "sha256": "69a744f4b003f6450620044a567c3ef13942e2b000b90e85bfae9cea219562f1"
+        },
+        {
+          "url": "https://chemungcountyny.gov/DocumentCenter/View/858/Democratic-Federal-Primary-PDF",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:52:52.316Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.1: header and Tracy Mitrano 1A candidate column; display p.3: Grand Totals row reports her contest total.",
+          "sha256": "7a56692a709ad5acf98817459353d521c6b697bd81a420bae4ce49f699c64670"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ny:2016-06-28:primary:us-house-22:claudia-tenney",
+      "contest_key": "federal:us:ny:2016-06-28:primary:us-house-22",
+      "candidate_name": "Claudia Tenney",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York",
+      "election_date": "2016-06-28",
+      "office": "U.S. Representative",
+      "district": "22",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican", "Reform"],
+      "sources": [
+        {
+          "url": "https://tiogacountyny.gov/media/6061/pf16-official-results.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:13:03.952820+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Sole display page: `2016 Tioga County Federal Primary`, June 28, `Official`; U.S. House district 22 Republican table at top and Reform table at bottom, Claudia Tenney in both",
+          "sha256": "04a787999078b1f231f0091e7346c8027ca537f0a0526bccb1f51fdbee0c0d8d"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:pa:2022-05-17:primary:us-house-1:caroline-avery",
+      "contest_key": "federal:us:pa:2022-05-17:primary:us-house-1",
+      "candidate_name": "Caroline Avery",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-05-17",
+      "office": "U.S. Representative",
+      "district": "1",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220808/191349-392md2022-august8%2C2022-obj.petition.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-29T01:19:40.979381+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.24, attached order No. 114 M.D. 2022: withdrawal granted and Secretary directed to remove Avery from May 17 primary ballot; display pp.3-5 bridge candidate, office, district, and Republican filing",
+          "sha256": "acb62f64fe1b906a334278c0917ee160caf344777f6af973db11617d90f7a95c"
+        },
+        {
+          "url": "https://www.pa.gov/content/dam/copapwp-pagov/en/dos/resources/voting-and-elections/bulk-data/ElectionReturns_2022_Primary_ReadMeFile.txt",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:27:53.216059+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines/fields: May 17, 2022 Primary, 353,742 records; ordered CSV schema; `USC=Representative In Congress`, `REP=Republican`",
+          "sha256": "4ebc90ca1cd9609f95c06ac9f7faafb5f8e443759e856a75bce91c00f9ff0d66"
+        },
+        {
+          "url": "https://www.pa.gov/content/dam/copapwp-pagov/en/dos/resources/voting-and-elections/bulk-data/ElectionReturns_2022_Primary_PrecinctReturns.txt",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:20:54.412547+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "All 353,742 CSV records; schema filter office `USC`, party `REP`, candidate district/U.S. congressional district `1`: Alex Entin and Brian Fitzpatrick only; zero rows containing `AVERY`",
+          "sha256": "1086f75db02d6862ef5ed4405c0fe96fe11b1acfceb0234f307d8d65d4b517bb"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:md:2020-06-02:primary:us-house-1:erik-lane",
+      "contest_key": "federal:us:md:2020-06-02:primary:us-house-1",
+      "candidate_name": "Erik Lane",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Maryland",
+      "election_date": "2020-06-02",
+      "office": "U.S. Representative",
+      "district": "1",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.maryland.gov/elections/archive/2020/primary_candidates/gen_cand_lists_2020_3_008X.csv",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:23:03.289483+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "UTF-8 CSV row beginning `Representative in Congress, Congressional District 01, Erik Lane, Democratic, Harford County, Withdrawn - 01/27/2020, Federal - 11/04/2019`",
+          "sha256": "1d5ee859829e64ec4203b4036419e657a858d703692ed58466c5b3aec75a1a13"
+        },
+        {
+          "url": "https://elections.maryland.gov/elections/archive/2020/results/primary/gen_results_p2020_3_008X.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:23:03.797874+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Past election-scoped printer view: `Official 2020 Presidential Primary Election results for Representative in Congress`, last updated July 2, 2020; exhaustive district 1 Republican and Democratic tables; Erik Lane absent",
+          "sha256": "04c3f71ae790be11478b870872f37d74bfcf649753b50fd4df9808148d096a2f"
+        },
+        {
+          "url": "https://elections.maryland.gov/about/meeting_materials/August_5_2020.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:31:49.364106+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.67, `FACT SHEET REGARDING JUNE 2, 2020, PRESIDENTIAL PRIMARY`",
+          "sha256": "afbee91658c3a32cc8b5361dd9ba11dcfa4e56a854ffa5f4c731d3eb680e1792"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:az:2024-07-30:primary:us-house-8:sheila-bilyeu",
+      "contest_key": "federal:us:az:2024-07-30:primary:us-house-8",
+      "candidate_name": "Sheila Bilyeu",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Sheila Bilyieu",
+          "source_url": "https://azsos.gov/elections/candidates/candidate-legal-challenges",
+          "locator": "2024 Candidate Challenges, line 135"
+        }
+      ],
+      "jurisdiction": "Arizona",
+      "election_date": "2024-07-30",
+      "office": "United States Representative",
+      "district": "8",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://azsos.gov/sites/default/files/docs/2024_CadidatesFiled_web_list_20240411.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.480Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 1, federal candidate rows; footer says qualified for July 30, 2024 Primary Ballot pending court removal",
+          "sha256": "4105b1d98f8506f7bb48587d4f3de1128a7c8f2d6280fdc6c9e72b3e77277f41"
+        },
+        {
+          "url": "https://azsos.gov/elections/candidates/candidate-legal-challenges",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.277Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 Withdrawn Candidates lines 101–106; 2024 Candidate Challenges lines 115–138",
+          "sha256": "3ca3055453cd8f74091c2d9940bd33d6b758502e1d9de3973bb09f33635d92a8"
+        },
+        {
+          "url": "https://azsos.gov/elections/election-information/2024-election-info",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.562Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "“2024 Primary Election — July 30, 2024” and “2024 General Election — November 5, 2024” sections",
+          "sha256": "d7cb0ed688fa71e640ee969c53bfe30785782230e41b60fc6d9c71346b467c0b"
+        },
+        {
+          "url": "https://azsos.gov/elections/candidates/candidate-legal-challenges",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.277Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 Candidate Challenges, line 135",
+          "sha256": "3ca3055453cd8f74091c2d9940bd33d6b758502e1d9de3973bb09f33635d92a8"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:pa:2022-05-17:primary:us-house-15:george-rathmell",
+      "contest_key": "federal:us:pa:2022-05-17:primary:us-house-15",
+      "candidate_name": "George Rathmell",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-05-17",
+      "office": "U.S. Representative",
+      "district": "15",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220414/161426-121md2022-april8%2C2022-opinion.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-29T00:34:33.530Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.1: caption and Republican candidate for U.S. House district 15 in May 17, 2022 primary; display p.27: order grants petition and directs removal",
+          "sha256": "b83c283d1d3fe90b3633c9ffe07f3ab960a5a5b9024f5c9771f8d1255937eb9c"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:mi:2010-08-03:primary:us-house-13:john-hauler",
+      "contest_key": "federal:us:mi:2010-08-03:primary:us-house-13",
+      "candidate_name": "John Hauler",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Michigan",
+      "election_date": "2010-08-03",
+      "office": "U.S. Representative",
+      "district": "13",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.michigan.gov/sos/-/media/Project/Websites/sos/Election-Results-and-Statistics/August-Primary-Precinct-Results-Summary/2010-August-Primary-Precinct-Results-Summary_Part3.pdf?hash=733C9A3A6B173249FC4DD8BFEC32C93E&rev=5ded1f777707430d96d462fb1bbb0b31",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:34:34.219Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.189 / printed report p.002, Wayne County, Aug. 3, 2010 Republican, `REP IN CONGRESS 13TH`, John Hauler row",
+          "sha256": "ab0a3a0fc56ea9d0c44dc8f92c250cd1eafdc8b790af63e852f9b5616db05038"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:paul-dolan",
+      "contest_key": "federal:us:hi:2024-08-10:primary:us-senate",
+      "candidate_name": "Paul Dolan",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Paul R. Dolan",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 53, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-08-10",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REPUBLICAN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 53, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:barbara-lee",
+      "contest_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term",
+      "candidate_name": "Barbara Lee",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "U.S. Senator full term",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["DEM"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:34:35.774Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals",
+          "sha256": "a4c67fbcc21a6a0d64bf15427fe2f718ba92a5f4ed5aa2635de3bfff89c56d29"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:clyde-mcclain-lewman",
+      "contest_key": "federal:us:hi:2024-08-10:primary:us-senate",
+      "candidate_name": "Clyde McClain (Mac) Lewman",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Clyde McClain Lewman",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 57, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-08-10",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["DEMOCRATIC"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 57, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:melba-amaral",
+      "contest_key": "federal:us:hi:2024-08-10:primary:us-senate",
+      "candidate_name": "Melba Amaral",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Melba S.S. Amaral",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 50, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-08-10",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REPUBLICAN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 50, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:james-bradley",
+      "contest_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term",
+      "candidate_name": "James Bradley",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "U.S. Senator full term",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REP"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:34:35.774Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals",
+          "sha256": "a4c67fbcc21a6a0d64bf15427fe2f718ba92a5f4ed5aa2635de3bfff89c56d29"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:sepi-gilani",
+      "contest_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term",
+      "candidate_name": "Sepi Gilani",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "U.S. Senator full term",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["DEM"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:34:35.774Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals",
+          "sha256": "a4c67fbcc21a6a0d64bf15427fe2f718ba92a5f4ed5aa2635de3bfff89c56d29"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:adriel-c-lam",
+      "contest_key": "federal:us:hi:2024-08-10:primary:us-senate",
+      "candidate_name": "Adriel C. Lam",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-08-10",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REPUBLICAN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-house-2:randall-kelly-meyer",
+      "contest_key": "federal:us:hi:2024-11-05:general:us-house-2",
+      "candidate_name": "Randall Kelly Meyer",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "2",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:az:2024-11-05:general:us-senate:jannie-prosser",
+      "contest_key": "federal:us:az:2024-11-05:general:us-senate",
+      "candidate_name": "Jannie “Jannie” Prosser",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Arizona",
+      "election_date": "2024-11-05",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": ["REP"],
+      "sources": [
+        {
+          "url": "https://azsos.gov/sites/default/files/docs/2024_General_Candidates-Write-In_and_Withdrawn_Candidates-20240927.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:12.997Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 2, lines 70–77, WRITE-IN CANDIDATES; document date 9/27/2024",
+          "sha256": "b1619bb8cc642ee4ca518ab6b9d59ecdcf8298bff51d51684e55f27c4f0453d2"
+        },
+        {
+          "url": "https://azsos.gov/elections/election-information/2024-election-info",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.562Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "“2024 Primary Election — July 30, 2024” and “2024 General Election — November 5, 2024” sections",
+          "sha256": "d7cb0ed688fa71e640ee969c53bfe30785782230e41b60fc6d9c71346b467c0b"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:az:2024-11-05:general:us-senate:sarah-williams",
+      "contest_key": "federal:us:az:2024-11-05:general:us-senate",
+      "candidate_name": "Sarah Williams",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Arizona",
+      "election_date": "2024-11-05",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": ["LBT"],
+      "sources": [
+        {
+          "url": "https://azsos.gov/sites/default/files/docs/2024_General_Candidates-Write-In_and_Withdrawn_Candidates-20240927.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:12.997Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 2, lines 70–77, WRITE-IN CANDIDATES; document date 9/27/2024",
+          "sha256": "b1619bb8cc642ee4ca518ab6b9d59ecdcf8298bff51d51684e55f27c4f0453d2"
+        },
+        {
+          "url": "https://azsos.gov/elections/election-information/2024-election-info",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.562Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "“2024 Primary Election — July 30, 2024” and “2024 General Election — November 5, 2024” sections",
+          "sha256": "d7cb0ed688fa71e640ee969c53bfe30785782230e41b60fc6d9c71346b467c0b"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ny:2018-11-06:general:us-house-23:tracy-mitrano",
+      "contest_key": "federal:us:ny:2018-11-06:general:us-house-23",
+      "candidate_name": "Tracy Mitrano",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York",
+      "election_date": "2018-11-06",
+      "office": "U.S. Representative",
+      "district": "23",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["DEM", "WOR", "WEP"],
+      "sources": [
+        {
+          "url": "https://chautauquacountyny.gov/sites/default/files/document-files/2019-10/2018%20General%20Election%20LEGAL%20NOTICE.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:13:47.078822+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Sole display page: completed Nov. 6, 2018 canvass and §9-212 certificates; party-abbreviation legend; U.S. House district 23 lines for Mitrano and Reed",
+          "sha256": "f99561a4365a0dd03136455c91db5bbac48903c111f9c8595a8ad175fd363ca1"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ny:2018-11-06:general:us-house-23:thomas-w-reed-ii",
+      "contest_key": "federal:us:ny:2018-11-06:general:us-house-23",
+      "candidate_name": "Thomas W. Reed II",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York",
+      "election_date": "2018-11-06",
+      "office": "U.S. Representative",
+      "district": "23",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REP", "CON", "IND"],
+      "sources": [
+        {
+          "url": "https://chautauquacountyny.gov/sites/default/files/document-files/2019-10/2018%20General%20Election%20LEGAL%20NOTICE.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:13:47.078822+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Sole display page: completed Nov. 6, 2018 canvass and §9-212 certificates; party-abbreviation legend; U.S. House district 23 lines for Mitrano and Reed",
+          "sha256": "f99561a4365a0dd03136455c91db5bbac48903c111f9c8595a8ad175fd363ca1"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:nj:2024-11-05:general:us-senate:robert-menendez",
+      "contest_key": "federal:us:nj:2024-11-05:general:us-senate",
+      "candidate_name": "Robert Menendez",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New Jersey",
+      "election_date": "2024-11-05",
+      "office": "U.S. Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Independent"],
+      "sources": [
+        {
+          "url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-certification-amended-certification-of-nominees-general-us-senate.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:19:35.343724+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.1 withdrawal and shall-not-appear certification dated Aug. 19, 2024; display pp.2-8 amended official Nov. 5 candidate list and six-candidate total",
+          "sha256": "f777a2b1f6d213e7ea5eb2a2b8d37d05fe8d0e15e01d369b063216695f04f3fe"
+        },
+        {
+          "url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-us-senate.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:19:39.236554+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display pp.1-7, Dec. 5, 2024 `Official List`, U.S. Senate, Nov. 5 election; six candidate result sections and total; Menendez absent",
+          "sha256": "c747e835b52131f29b9f31369fa330199496befe80567f745875b4966403f62e"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:nj:2024-11-05:general:us-house-5:richard-siegel",
+      "contest_key": "federal:us:nj:2024-11-05:general:us-house-5",
+      "candidate_name": "Richard Siegel",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New Jersey",
+      "election_date": "2024-11-05",
+      "office": "U.S. Representative",
+      "district": "5",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Independent"],
+      "sources": [
+        {
+          "url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-certification-amended-5th-congressional-district-us-house.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:19:37.395507+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display p.1 withdrawal and shall-not-appear certification dated July 31, 2024; display pp.2-3 amended official Nov. 5 district 5 list and five-candidate total",
+          "sha256": "f4c6362093086c3307e83b61cc9984927b75c75bfa7583739c824817f709c96e"
+        },
+        {
+          "url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-official-general-results-us-house-district5.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T01:19:40.271723+00:00",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Display pp.1-2, Nov. 5, 2024 General Election Results, Congressional District 5; exhaustive five-candidate totals; Siegel absent",
+          "sha256": "21182a655475225aea6081109d6ee97b6b21c8fb869bef8f9db87639a66ff2c0"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:pa:2022-11-08:general:us-house-1:caroline-avery",
+      "contest_key": "federal:us:pa:2022-11-08:general:us-house-1",
+      "candidate_name": "Caroline Avery",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-11-08",
+      "office": "U.S. Representative",
+      "district": "1",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Libertarian"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220823/172331-392md2022-august23%2C2022-opinionandordergrantingobjectionpetition.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-29T00:34:36.677Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF display p.1: caption, Libertarian candidate, U.S. House district 1, petition granted; display p.10: removal order for Nov. 8, 2022 ballot",
+          "sha256": "bb0e70f7157f0ce6466113e8b993525b7cfafb9fe01990bdb8820273cb4ce686"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-12:elizabeth-liz-johnson",
+      "contest_key": "federal:us:ga:2024-11-05:general:us-house-12",
+      "candidate_name": "Elizabeth “Liz” Johnson",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Georgia",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "12",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Dem"],
+      "sources": [
+        {
+          "url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.746Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone",
+          "sha256": "fa50e9e02534de005a3a1c2c87a277993f84100adfe28aa60994de76ae8d58d5"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:shelby-pikachu-billionaire",
+      "contest_key": "federal:us:hi:2024-11-05:general:us-senate",
+      "candidate_name": "Shelby Pikachu Billionaire",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Shelby Billionaire",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 51, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-11-05",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["WE THE PEOPLE"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 51, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ak:2024-11-05:general:us-house-at-large:nick-begich",
+      "contest_key": "federal:us:ak:2024-11-05:general:us-house-at-large",
+      "candidate_name": "Nick Begich",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Alaska",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "at-large",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Registered Republican"],
+      "sources": [
+        {
+          "url": "https://www.elections.alaska.gov/candidates/?election=24genr",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:54.010Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election, Election Date November 5, 2024; U.S. Representative “Candidate Name on Ballot,” Certified and Withdrawn subsections",
+          "sha256": "23c757456774ff68e381c2cc1e30f583d0ddc8f83c2c77ac71ecf6b87cee84a5"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:bob-mcdermott",
+      "contest_key": "federal:us:hi:2024-11-05:general:us-senate",
+      "candidate_name": "Bob McDermott",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Robert C. McDermott",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 58, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-11-05",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["REPUBLICAN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 58, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-10:mike-collins",
+      "contest_key": "federal:us:ga:2024-11-05:general:us-house-10",
+      "candidate_name": "Mike Collins",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Georgia",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "10",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Rep"],
+      "sources": [
+        {
+          "url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.746Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone",
+          "sha256": "fa50e9e02534de005a3a1c2c87a277993f84100adfe28aa60994de76ae8d58d5"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-house-2:aaron-toman",
+      "contest_key": "federal:us:hi:2024-11-05:general:us-house-2",
+      "candidate_name": "Aaron Toman",
+      "official_ids": [],
+      "reviewed_aliases": [
+        {
+          "name": "Aaron M. Toman",
+          "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "locator": "line 69, LEGAL NAME"
+        }
+      ],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "2",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["LIBERTARIAN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        },
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "line 69, LEGAL NAME",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-11:barry-loudermilk",
+      "contest_key": "federal:us:ga:2024-11-05:general:us-house-11",
+      "candidate_name": "Barry Loudermilk",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Georgia",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "11",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Rep"],
+      "sources": [
+        {
+          "url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.746Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone",
+          "sha256": "fa50e9e02534de005a3a1c2c87a277993f84100adfe28aa60994de76ae8d58d5"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-12:rick-w-allen",
+      "contest_key": "federal:us:ga:2024-11-05:general:us-house-12",
+      "candidate_name": "Rick W. Allen",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Georgia",
+      "election_date": "2024-11-05",
+      "office": "United States Representative",
+      "district": "12",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Rep"],
+      "sources": [
+        {
+          "url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:13.746Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone",
+          "sha256": "fa50e9e02534de005a3a1c2c87a277993f84100adfe28aa60994de76ae8d58d5"
+        }
+      ]
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:emma-jane-avila-pohlman",
+      "contest_key": "federal:us:hi:2024-11-05:general:us-senate",
+      "candidate_name": "Emma Jane Avila Pohlman",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Hawaii",
+      "election_date": "2024-11-05",
+      "office": "United States Senator",
+      "district": "statewide",
+      "level": "federal",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["GREEN"],
+      "sources": [
+        {
+          "url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:33:53.619Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69",
+          "sha256": "4a8dfb63fdb1a2b2b7d93b7eea92c292a181e8b4afe731fb57b8263c40d7a7aa"
+        },
+        {
+          "url": "https://elections.hawaii.gov/election-results/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:40:26.218Z",
+          "effective_at": null,
+          "effective_time_reason": "not_published",
+          "locator": "2024 General Election — November 5, 2024; 2024 Primary Election — August 10, 2024",
+          "sha256": "cf84754cce9e00949ccae99da62796e51b0dd9ce498bd74c99304c85dce25d8e"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-22-jessica-self",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-22",
+      "candidate_name": "Jessica Self",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "22",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.34, State Assembly District 22, Jessica Self Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-29-j-w-paine",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-29",
+      "candidate_name": "J.W. Paine",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "29",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.36, State Assembly District 29, J.W. Paine Republican certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-33-hipolito-a-cerros",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-33",
+      "candidate_name": "Hipolito A. Cerros",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "33",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.37, State Assembly District 33, Hipolito A. Cerros Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-25-lan-ngo",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-25",
+      "candidate_name": "Lan Ngo",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "25",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.35, State Assembly District 25, Lan Ngo Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-26-omar-din",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-26",
+      "candidate_name": "Omar Din",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "26",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.35, State Assembly District 26, Omar Din Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-28-liz-lawler",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-28",
+      "candidate_name": "Liz Lawler",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "28",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.36, State Assembly District 28, Liz Lawler Republican certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-34-ricardo-ortega",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-34",
+      "candidate_name": "Ricardo Ortega",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "34",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.37, State Assembly District 34, Ricardo Ortega Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-27-joanna-garcia-rose",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-27",
+      "candidate_name": "Joanna Garcia Rose",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "27",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.35, State Assembly District 27, Joanna Garcia Rose Republican certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-23-lydia-kou",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-23",
+      "candidate_name": "Lydia Kou",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "23",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "9b789450df8014f75db2481138da79afbf3c157176b9ab72cf0500133b0ad8b9",
+          "locator": "Document p.34, State Assembly District 23, Lydia Kou Democratic certified candidate row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ne-2024-05-14-primary-legislature-1-dennis-schaardt",
+      "contest_key": "ne-2024-05-14-primary-legislature-1",
+      "candidate_name": "Dennis Schaardt",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Nebraska",
+      "election_date": "2024-05-14",
+      "office": "Member of the Legislature",
+      "district": "1",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/Primary/English_Legislature.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "1c3a95256ad66f249ea90590d9672aba98a7864ef17b119ffbef6bf6de9aefbd",
+          "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 01, Dennis Schaardt printed row; PRIMARY ELECTION, May 14, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ne-2024-05-14-primary-legislature-1-bob-holman",
+      "contest_key": "ne-2024-05-14-primary-legislature-1",
+      "candidate_name": "Bob Holman",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Nebraska",
+      "election_date": "2024-05-14",
+      "office": "Member of the Legislature",
+      "district": "1",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/Primary/English_Legislature.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "1c3a95256ad66f249ea90590d9672aba98a7864ef17b119ffbef6bf6de9aefbd",
+          "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 01, Bob Holman printed row; PRIMARY ELECTION, May 14, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-4-sherman-m-mcfarland",
+      "contest_key": "ca-2024-03-05-primary-state-assembly-4",
+      "candidate_name": "Sherman M McFarland",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "California",
+      "election_date": "2024-03-05",
+      "office": "State Assembly Member",
+      "district": "4",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/write-in-voter-nominated.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "4caf8f62c7aa0efa951100d115eee1887de7945683b9495c225da7723dcd902e",
+          "locator": "Document p.2 of 3, State Assembly District 4, Sherman M McFarland (W/I) Democratic; March 5, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2015-05-19-primary-common-pleas-allegheny-jennifer-staley-mccrady",
+      "contest_key": "pa-2015-05-19-primary-common-pleas-allegheny",
+      "candidate_name": "Jennifer Staley McCrady",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2015-05-19",
+      "office": "Judge of the Court of Common Pleas",
+      "district": "Allegheny County / Fifth Judicial District",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Republican"],
+      "sources": [
+        {
+          "url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-primary-detail-district.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:59Z",
+          "sha256": "5466dfb8a6d759200bb445050ed98ff57cd358acf69973734326d46a6f4b920e",
+          "locator": "PDF pp.1-3, Judge Of The Court Of Common Pleas, Jennifer Staley McCrady in both Democratic and Republican sections; May 19, 2015 official results",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2015-05-19-primary-common-pleas-allegheny-dan-regan",
+      "contest_key": "pa-2015-05-19-primary-common-pleas-allegheny",
+      "candidate_name": "Dan Regan",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2015-05-19",
+      "office": "Judge of the Court of Common Pleas",
+      "district": "Allegheny County / Fifth Judicial District",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Republican"],
+      "sources": [
+        {
+          "url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-primary-detail-district.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:59Z",
+          "sha256": "5466dfb8a6d759200bb445050ed98ff57cd358acf69973734326d46a6f4b920e",
+          "locator": "PDF pp.1-3, Judge Of The Court Of Common Pleas, Dan Regan in both Democratic and Republican sections; May 19, 2015 official results",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-06-20-primary-house-of-delegates-50-john-c-marsden",
+      "contest_key": "va-2023-06-20-primary-house-of-delegates-50",
+      "candidate_name": "John C. Marsden",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-06-20",
+      "office": "Member, House of Delegates",
+      "district": "50",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/media/castyourballot/candidatelist/2023-june-primary/Rep-List-of-Candidates.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:59Z",
+          "sha256": "02b7ab0666c7ecdacb1eac76e5810df60bb17e7a240e52f87f51efc8db0aadef",
+          "locator": "PDF p.2 of 6, House of Delegates District 50, John C. Marsden; notice says withdrawn after ballot printing and still appears",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "June 20, 2023 Primary Elections heading linking the Republican candidate list",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-06-20-primary-house-of-delegates-2-kevin-s-saucedo-broach",
+      "contest_key": "va-2023-06-20-primary-house-of-delegates-2",
+      "candidate_name": "Kevin S. Saucedo-Broach",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-06-20",
+      "office": "Member, House of Delegates",
+      "district": "2",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/media/castyourballot/candidatelist/2023-june-primary/Dem-List-of-Candidates-1.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "ce8e9f164472accc2381664348f2555c775b7e0dc5b68408febb94d9ded680fc",
+          "locator": "PDF p.1 of 11 and final page, House of Delegates District 2, Kevin S. Saucedo-Broach; notice says withdrawn after ballot printing and still appears",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "June 20, 2023 Primary Elections heading linking the Democratic candidate list",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "mi-2024-08-06-primary-state-legislature-4-tonya-renay-wells",
+      "contest_key": "mi-2024-08-06-primary-state-legislature-4",
+      "candidate_name": "Tonya Renay Wells",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Michigan",
+      "election_date": "2024-08-06",
+      "office": "Representative in State Legislature",
+      "district": "4",
+      "level": "state",
+      "stage": "primary",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://mi-boe.entellitrak.com/candlist/2024PRI_CANDLIST.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:41:56Z",
+          "sha256": "ae8da942d0a17e6c94c680830f0593a337a369f3c7aa2f0dd438681d0497ee1d",
+          "locator": "Official Primary Candidate Listing, State Legislature District 4, REP Republican, Wells, Tonya Renay is Disqualified; excluded row class X",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.michigan.gov/sos/elections/election-results-and-data",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:42:09Z",
+          "sha256": "8fbda15a1d45eff247a5aafc9d2f8206b68b4983e086e047a64b71585916f729",
+          "locator": "Candidate Listings table, 2024 August Primary Candidate listing",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-3-alfonso-h-lopez",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-3",
+      "candidate_name": "Alfonso H. Lopez",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "3",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 3, Alfonso H. Lopez, Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-7-karen-a-keys-gamarra",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-7",
+      "candidate_name": "Karen A. Keys-Gamarra",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "7",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 7, Karen A. Keys-Gamarra, Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-2-adele-y-mcclure",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-2",
+      "candidate_name": "Adele Y. McClure",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "2",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 2, Adele Y. McClure, Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-4-charniele-l-herring",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-4",
+      "candidate_name": "Charniele L. Herring",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "4",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 4, Charniele L. Herring, Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-6-richard-c-rip-sullivan-jr",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-6",
+      "candidate_name": "Richard C. \"Rip\" Sullivan Jr.",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "6",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 6, Richard C. \"Rip\" Sullivan Jr., Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-8-irene-shin",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-8",
+      "candidate_name": "Irene Shin",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "8",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 8, Irene Shin, Democratic row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-3-major-mike-webb",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-3",
+      "candidate_name": "Major Mike Webb",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "3",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Independent"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 3, Major Mike Webb, Independent row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-8-max-b-fisher",
+      "contest_key": "va-2023-11-07-general-house-of-delegates-8",
+      "candidate_name": "Max B. Fisher",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Virginia",
+      "election_date": "2023-11-07",
+      "office": "Member, House of Delegates",
+      "district": "8",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:00Z",
+          "sha256": "dd966b83f215b88c6b53b1f04d0e1b73e97e5a8e12a87d0aef16346cb7fa49a6",
+          "locator": "Member, House of Delegates, District 8, Max B. Fisher, Republican row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:36Z",
+          "sha256": "068817a0225ef805593d6012e1b8748897d64001e25b7b68368ea47daa18ccf9",
+          "locator": "November 7, 2023 General and Special Elections heading linking the cited candidate table",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ne-2024-11-05-general-legislature-5-margo-r-juarez",
+      "contest_key": "ne-2024-11-05-general-legislature-5",
+      "candidate_name": "Margo R. Juarez",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Nebraska",
+      "election_date": "2024-11-05",
+      "office": "Member of the Legislature",
+      "district": "5",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/General/English-Legislature.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "ea3bdfe34ef408f3dd9a4422a5904e4d2d9d5c8bc7d3b79a6beeaf410f2b0fe7",
+          "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 05, Margo R. Juarez printed row; GENERAL ELECTION, November 05, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "ne-2024-11-05-general-legislature-5-gilbert-ayala",
+      "contest_key": "ne-2024-11-05-general-legislature-5",
+      "candidate_name": "Gilbert Ayala",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Nebraska",
+      "election_date": "2024-11-05",
+      "office": "Member of the Legislature",
+      "district": "5",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/General/English-Legislature.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-16T07:38:58Z",
+          "sha256": "ea3bdfe34ef408f3dd9a4422a5904e4d2d9d5c8bc7d3b79a6beeaf410f2b0fe7",
+          "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 05, Gilbert Ayala printed row; GENERAL ELECTION, November 05, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "mn-2024-11-05-general-state-representative-38a-yelena-s-kurdyumova",
+      "contest_key": "mn-2024-11-05-general-state-representative-38a",
+      "candidate_name": "Yelena S. Kurdyumova",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Minnesota",
+      "election_date": "2024-11-05",
+      "office": "State Representative",
+      "district": "38A",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.sos.mn.gov/media/6313/registered-write-in-requests-2024.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:39:02Z",
+          "sha256": "1c3107f1b4b63abf1e5cf6fe62ac2b1de459b31add9fec1f2e5585d22b6137e7",
+          "locator": "PDF p.1, Registered Write-in Requests, Yelena S. Kurdyumova, State Representative, District 38A; November 5, 2024",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2015-11-03-general-common-pleas-allegheny-jennifer-staley-mccrady",
+      "contest_key": "pa-2015-11-03-general-common-pleas-allegheny",
+      "candidate_name": "Jennifer Staley McCrady",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2015-11-03",
+      "office": "Judge of the Court of Common Pleas",
+      "district": "Allegheny County / Fifth Judicial District",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Republican"],
+      "sources": [
+        {
+          "url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-general-summary.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:59Z",
+          "sha256": "60a97355828222523bd2ea0e8866bc011d35e0157285621ea403213d8f9cab23",
+          "locator": "Judge Of The Court Of Common Pleas summary, Jennifer Staley McCrady (DEM/REP); November 3, 2015 official results",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2015-11-03-general-common-pleas-allegheny-dan-regan",
+      "contest_key": "pa-2015-11-03-general-common-pleas-allegheny",
+      "candidate_name": "Dan Regan",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2015-11-03",
+      "office": "Judge of the Court of Common Pleas",
+      "district": "Allegheny County / Fifth Judicial District",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Republican"],
+      "sources": [
+        {
+          "url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-general-summary.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-16T07:38:59Z",
+          "sha256": "60a97355828222523bd2ea0e8866bc011d35e0157285621ea403213d8f9cab23",
+          "locator": "Judge Of The Court Of Common Pleas summary, Dan Regan (DEM/REP); November 3, 2015 official results",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-11-gregory-g-deal",
+      "contest_key": "pa-2022-11-08-general-state-representative-11",
+      "candidate_name": "Gregory G. Deal",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-11-08",
+      "office": "State Representative",
+      "district": "11",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Libertarian"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220816/202641-387md2022-august16%2C2022-ordergrantingpet.towithdrawnominationpapers.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:02Z",
+          "sha256": "5318739c1326f66e8549809300c3c687ba584e263c2e3f44d32bbb157944c088",
+          "locator": "PDF p.1, Gregory G. Deal, Libertarian State Representative District 11; withdrawal granted and removal directed from 2022 General Election ballot",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.pacourts.us/news-and-statistics/cases-of-public-interest/general-election-2022",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:05Z",
+          "sha256": "85b787bcd23bb03ce55846923c3bc7f0d79e557bda4f38cf4c18a24c64f643a3",
+          "locator": "General Election 2022 cases page, state-level candidates seeking the November 8, 2022 General Election ballot; docket 387 MD 2022",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-168-james-free-mitchell-v",
+      "contest_key": "pa-2022-11-08-general-state-representative-168",
+      "candidate_name": "James Free Mitchell V",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-11-08",
+      "office": "State Representative",
+      "district": "168",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Libertarian"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220815/195418-386md2022-august15%2C2022-ordergrantingobjectionpetition.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:05Z",
+          "sha256": "148c85c4c71ce8357aed719fa581dfd34b65ac544d0f761e768bcfd0db36b023",
+          "locator": "PDF p.1, 386 MD 2022 final order: James Free Mitchell V lacks valid signatures; objection granted; name shall not be placed on general-election ballot",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220805/150749-386md2022-august5%2C2022-obj.petition.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:07Z",
+          "sha256": "1f0f29abbe165baea3567126578fd0c3cc4f1342d3a1bc5e91ba37df00e72785",
+          "locator": "PDF pp.1-2, Libertarian State Representative District 168 candidacy and requested relief for November 8, 2022 election",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.pacourts.us/news-and-statistics/cases-of-public-interest/general-election-2022",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:05Z",
+          "sha256": "85b787bcd23bb03ce55846923c3bc7f0d79e557bda4f38cf4c18a24c64f643a3",
+          "locator": "General Election 2022 cases page, state-level candidates seeking the November 8, 2022 General Election ballot; docket 386 MD 2022",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-43-jeffrey-lee-barker",
+      "contest_key": "pa-2022-11-08-general-state-representative-43",
+      "candidate_name": "Jeffrey Lee Barker",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Pennsylvania",
+      "election_date": "2022-11-08",
+      "office": "Representative in the General Assembly",
+      "district": "43",
+      "level": "state",
+      "stage": "general",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Keystone"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/Storage/media/pdfs/20220815/163102-390md2022-august15%2C2022-ordergrantingobjectionpetition.pdf",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:07Z",
+          "sha256": "8d9bf3f21cdd394eb265ebcc17f0565e4efe94ea4fe38807da744503e30764e0",
+          "locator": "PDF p.1, Jeffrey Lee Barker, Keystone candidate for Representative in the General Assembly District 43; insufficient signatures; objection granted; name not placed on general ballot",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.pacourts.us/news-and-statistics/cases-of-public-interest/general-election-2022",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-16T07:39:05Z",
+          "sha256": "85b787bcd23bb03ce55846923c3bc7f0d79e557bda4f38cf4c18a24c64f643a3",
+          "locator": "General Election 2022 cases page, state-level candidates seeking the November 8, 2022 General Election ballot; docket 390 MD 2022",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-34-scott-murphy",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-34",
+      "candidate_name": "Scott Murphy",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "34",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024319_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.780Z",
+          "sha256": "229392f23d3aae71bc0438cdffcfd97527bdf127f757d4706d7a484b5cebfd70",
+          "locator": "Democratic Council District 34, Scott Murphy Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-34-jennifer-gutierrez",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-34",
+      "candidate_name": "Jennifer Gutierrez",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "34",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024319_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.780Z",
+          "sha256": "229392f23d3aae71bc0438cdffcfd97527bdf127f757d4706d7a484b5cebfd70",
+          "locator": "Democratic Council District 34, Jennifer Gutierrez Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-20-ellen-young",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-20",
+      "candidate_name": "Ellen Young",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "20",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024346_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.873Z",
+          "sha256": "7083f46add816bd873b585f004ca6e6a4067a4b06bee25a7aa4781d54a692d86",
+          "locator": "Democratic Council District 20, Ellen Young Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-21-david-aiken",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-21",
+      "candidate_name": "David Aiken",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "21",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024358_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.492Z",
+          "sha256": "9aba080021159603ec9f72bd2feb514db1b3c064dca3fb661e75299719053532",
+          "locator": "Democratic Council District 21, David Aiken Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-20-sandra-ung",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-20",
+      "candidate_name": "Sandra Ung",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "20",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024346_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.873Z",
+          "sha256": "7083f46add816bd873b585f004ca6e6a4067a4b06bee25a7aa4781d54a692d86",
+          "locator": "Democratic Council District 20, Sandra Ung Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-41-darlene-mealy",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-41",
+      "candidate_name": "Darlene Mealy",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "41",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024424_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.965Z",
+          "sha256": "ea657f8951b2dd481814af99a6922561ab06fe9dcadec06ef7e774ee011c793e",
+          "locator": "Democratic Council District 41, Darlene Mealy Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-21-francisco-p-moya",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-21",
+      "candidate_name": "Francisco P. Moya",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "21",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024358_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.492Z",
+          "sha256": "9aba080021159603ec9f72bd2feb514db1b3c064dca3fb661e75299719053532",
+          "locator": "Democratic Council District 21, Francisco P. Moya Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-41-alicka-tani-ampry-samuel",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-41",
+      "candidate_name": "Alicka Tani Ampry-Samuel",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "41",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024424_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.965Z",
+          "sha256": "ea657f8951b2dd481814af99a6922561ab06fe9dcadec06ef7e774ee011c793e",
+          "locator": "Democratic Council District 41, Alicka Tani Ampry-Samuel Round 1 row; June 22, 2021 official RCV result",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5-robyn-mulenga",
+      "contest_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5",
+      "candidate_name": "Robyn Mulenga",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Auburn, King County, WA",
+      "election_date": "2023-08-01",
+      "office": "City Councilmember",
+      "district": "Position No. 5",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://aqua.kingcounty.gov/elections/2023/aug-primary/results.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.891Z",
+          "sha256": "689fe1e296103bc4009fbd87e184ba26f649ea3daa3eec6109746089a2f6d83f",
+          "locator": "Official August 1, 2023 primary results, Auburn Council Position No. 5, Robyn Mulenga row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5-clinton-taylor",
+      "contest_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5",
+      "candidate_name": "Clinton Taylor",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Auburn, King County, WA",
+      "election_date": "2023-08-01",
+      "office": "City Councilmember",
+      "district": "Position No. 5",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://aqua.kingcounty.gov/elections/2023/aug-primary/results.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.891Z",
+          "sha256": "689fe1e296103bc4009fbd87e184ba26f649ea3daa3eec6109746089a2f6d83f",
+          "locator": "Official August 1, 2023 primary results, Auburn Council Position No. 5, Clinton Taylor row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-la-ca-2024-03-05-avalon-city-council-carl-johnson",
+      "contest_key": "local-primary-la-ca-2024-03-05-avalon-city-council",
+      "candidate_name": "CARL JOHNSON",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Avalon, Los Angeles County, CA",
+      "election_date": "2024-03-05",
+      "office": "Member of the City Council",
+      "district": "At-large",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://content.lavote.gov/docs/rrcc/election-info/write-in-important-notice---march-5-2024-presidential-primary-election.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:40.316Z",
+          "sha256": "a57ab43652449041899673d1b8d10fb67712a5c19d0c3bce28b7eb5d3e21bf6b",
+          "locator": "PDF index p.3 (zero-based PDF page P2), Avalon Member City Council, CARL JOHNSON registered write-in row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-la-ca-2024-03-05-compton-city-council-district-4-ariana-garcia",
+      "contest_key": "local-primary-la-ca-2024-03-05-compton-city-council-district-4",
+      "candidate_name": "ARIANA GARCIA",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Compton, Los Angeles County, CA",
+      "election_date": "2024-03-05",
+      "office": "Member of the City Council",
+      "district": "4",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://content.lavote.gov/docs/rrcc/election-info/write-in-important-notice---march-5-2024-presidential-primary-election.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:40.316Z",
+          "sha256": "a57ab43652449041899673d1b8d10fb67712a5c19d0c3bce28b7eb5d3e21bf6b",
+          "locator": "PDF index p.3 (zero-based PDF page P2), Compton Member City Council District 4, ARIANA GARCIA registered write-in row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-lancaster-pa-2021-05-18-elizabethtown-school-director-kristy-moore",
+      "contest_key": "local-primary-lancaster-pa-2021-05-18-elizabethtown-school-director",
+      "candidate_name": "Kristy Moore",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Elizabethtown Area School District, Lancaster County, PA",
+      "election_date": "2021-05-18",
+      "office": "School Director",
+      "district": "At-large",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Republican"],
+      "sources": [
+        {
+          "url": "https://vr.co.lancaster.pa.us/ElectionReturns/May_18%2C_2021_-_Municipal_Primary_Future_Release/reports/55.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:40.576Z",
+          "sha256": "0ee02a16f114cb743e8b7497a7c40fd5ac72636cfdb3a7ba513044898a67e19e",
+          "locator": "Elizabethtown School Director report, Kristy Moore named DEM and REP rows; used only for printed cross-filed participation, not outcome",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-west-point-ut-2025-08-12-city-council-joelle-caruso",
+      "contest_key": "local-primary-west-point-ut-2025-08-12-city-council",
+      "candidate_name": "Joelle Caruso",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "West Point City, Davis County, UT",
+      "election_date": "2025-08-12",
+      "office": "City Council Member",
+      "district": "At-large",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.westpointutah.gov/DocumentCenter/View/2035/NOTICE-OF-CANDIDATE-WITHDRAWAL?bidId=",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:47:42.729Z",
+          "sha256": "0a29b660a3142799bbe378930cb07937c1ffd3af8f4f0231e2a02a6c4bcf19f6",
+          "locator": "PDF p.1, 2025 Primary Election withdrawal notice: Joelle Caruso withdrew; although listed on the Primary Election ballot",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.westpointutah.gov/DocumentCenter/View/2009/Primary-Election---Sample-Ballot?bidId=",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-29T00:47:46.415Z",
+          "sha256": "503752a6cc75fa9262764a6911fd539fcc6af9d02b644f74b84738b7f4da6c15",
+          "locator": "PDF p.1, West Point City August 12, 2025 sample primary ballot, City Council, JOELLE CARUSO",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-delaware-county-pa-2025-05-20-county-council-charles-alexander",
+      "contest_key": "local-primary-delaware-county-pa-2025-05-20-county-council",
+      "candidate_name": "Charles Alexander",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Delaware County, PA",
+      "election_date": "2025-05-20",
+      "office": "County Council Member",
+      "district": "At-large",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Republican"],
+      "sources": [
+        {
+          "url": "https://www.pacourts.us/assets/opinions/Commonwealth/out/386CD25_4-25-25.pdf?cb=1",
+          "source_type": "official_court_record",
+          "retrieved_at": "2026-08-29T00:47:52.653Z",
+          "sha256": "fc7a0c6ca31ec97f02754cf787d8f51ef299e5f559d09d034111fa6f1e21cda7",
+          "locator": "PDF pp.1, 3, 7-8: Republican Delaware County Council candidacy; barred/removed from May 20, 2025 Municipal Primary ballot; affirmance order",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.delcopa.gov/sites/default/files/media/P2025-Legal-Notices-Polling-Places-and-others-published.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-29T00:47:53.413Z",
+          "sha256": "9feb89c7e972cef37074abb7befac53fcdfc208584a661ee86c83ebeb17ca78c",
+          "locator": "PDF p.1 countywide-contest scope and PDF p.11 Republican sample-ballot page 1: complete County Council contest has only numbered entries 41/42 plus write-in spaces",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://delcopa.gov/sites/default/files/2025-06/Write-In-Cumulative-Results.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:47:55.143Z",
+          "sha256": "aa73a8b5cb26386972e00beddaf12c34a28f35b0dd8a5623650f3d80af3745e7",
+          "locator": "PDF pp.17-18: 428/428 Republican County Council report; numbered 41/42 rows; Charles Alexander (W); used only for display classification, not outcome",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-primary-nyc-ny-2021-06-22-city-council-21-hiram-monserratte",
+      "contest_key": "local-primary-nyc-2021-06-22-city-council-21",
+      "candidate_name": "Hiram Monserratte",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2021-06-22",
+      "office": "Member of the New York City Council",
+      "district": "21",
+      "level": "local",
+      "stage": "primary",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": ["Democratic"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/video_scripts/video_transcripts/commissioner_meetings/2021/20210414_CommissionersHearings_April_14_2021.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:41.785Z",
+          "sha256": "c6c522ea9ad68bb6fb0ce0c7f61dd258a1c9bd751f09c17dfbe40576e329ad76",
+          "locator": "Transcript pp.177-180, District 21 Democratic petition, ineligibility/removal recommendation, adopted motion, and candidate off ballot",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024358_1.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:42.492Z",
+          "sha256": "9aba080021159603ec9f72bd2feb514db1b3c064dca3fb661e75299719053532",
+          "locator": "June 22, 2021 Democratic Member of the City Council District 21 official RCV result header",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-san-francisco-2024-11-05-supervisor-district-1-marjan-philhour",
+      "contest_key": "local-general-san-francisco-2024-11-05-supervisor-district-1",
+      "candidate_name": "Marjan Philhour",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City and County of San Francisco, CA",
+      "election_date": "2024-11-05",
+      "office": "Member, Board of Supervisors",
+      "district": "1",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://sfelections.org/results/20241105/index.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:44.001Z",
+          "sha256": "86730b0c9bbcb5db852028cefa3901197b6f262c54fa3bb997694170479ee25d",
+          "locator": "Board of Supervisors District 1, Marjan Philhour final result row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-michael-gongora",
+      "contest_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor",
+      "candidate_name": "Michael Gongora",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Miami Beach, Miami-Dade County, FL",
+      "election_date": "2023-11-07",
+      "office": "Mayor",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:43.055Z",
+          "sha256": "f98f3ff39a66dd6de306043465a8eb8a571e99a8f2d3475a6fe699721ed7ea81",
+          "locator": "City of Miami Beach Mayor, Michael Gongora row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-steven-meiner",
+      "contest_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor",
+      "candidate_name": "Steven Meiner",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Miami Beach, Miami-Dade County, FL",
+      "election_date": "2023-11-07",
+      "office": "Mayor",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:43.055Z",
+          "sha256": "f98f3ff39a66dd6de306043465a8eb8a571e99a8f2d3475a6fe699721ed7ea81",
+          "locator": "City of Miami Beach Mayor, Steven Meiner row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-minneapolis-2023-11-07-city-council-ward-2-robin-wonsley",
+      "contest_key": "local-general-minneapolis-2023-11-07-city-council-ward-2",
+      "candidate_name": "Robin Wonsley",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Minneapolis, MN",
+      "election_date": "2023-11-07",
+      "office": "City Council Member",
+      "district": "2",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://vote.minneapolismn.gov/results-data/election-results/2023/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:43.594Z",
+          "sha256": "c828c9aea5d606180c37383d94e2b29c74bccf018363df1937cf99afabb8d0e4",
+          "locator": "City Council Ward 2, Robin Wonsley row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-minneapolis-2023-11-07-city-council-ward-1-elliott-payne",
+      "contest_key": "local-general-minneapolis-2023-11-07-city-council-ward-1",
+      "candidate_name": "Elliott Payne",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Minneapolis, MN",
+      "election_date": "2023-11-07",
+      "office": "City Council Member",
+      "district": "1",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://vote.minneapolismn.gov/results-data/election-results/2023/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:43.594Z",
+          "sha256": "c828c9aea5d606180c37383d94e2b29c74bccf018363df1937cf99afabb8d0e4",
+          "locator": "City Council Ward 1, Elliott Payne row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-boston-2023-11-07-city-councillor-at-large-ruthzee-louijeune",
+      "contest_key": "local-general-boston-2023-11-07-city-councillor-at-large",
+      "candidate_name": "Ruthzee Louijeune",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Boston, MA",
+      "election_date": "2023-11-07",
+      "office": "City Councillor At Large",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.boston.gov/sites/default/files/file/2024/01/2023-11-07-23-City-Councillor-at-Large.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:44.452Z",
+          "sha256": "398b5aa8e02cc740a42491d9e3deaaa28c612d73a0a3ddf857b173632de14aae",
+          "locator": "PDF p.1, City Councillor At Large, Ruthzee Louijeune row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-mike-grieco",
+      "contest_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor",
+      "candidate_name": "Mike Grieco",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Miami Beach, Miami-Dade County, FL",
+      "election_date": "2023-11-07",
+      "office": "Mayor",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:43.055Z",
+          "sha256": "f98f3ff39a66dd6de306043465a8eb8a571e99a8f2d3475a6fe699721ed7ea81",
+          "locator": "City of Miami Beach Mayor, Mike Grieco row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-cambridge-2023-11-07-city-council-patricia-m-nolan",
+      "contest_key": "local-general-cambridge-2023-11-07-city-council",
+      "candidate_name": "Patricia M. Nolan",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Cambridge, MA",
+      "election_date": "2023-11-07",
+      "office": "City Councillor",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "ordinary",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.cambridgema.gov/-/media/files/electioncommission/2023municipalelection/citycouncilballot1specimen.pdf",
+          "source_type": "official_ballot",
+          "retrieved_at": "2026-08-29T00:13:04.160Z",
+          "sha256": "3d6b484910b3cc7b88bf24537d263cb13fdc6d10bfe2a1eef84dfbd7ab8e7b18",
+          "locator": "PDF p.1, City Council specimen ballot, Patricia M. Nolan printed row with no party label",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.cambridgema.gov/-/media/files/electioncommission/2023municipalelection/2023municipalelectioncalendar.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:13:05.255Z",
+          "sha256": "628441edbf49a86414dcc1c16ffdc46e9aa25668b8909d6acfb4687b3389a75d",
+          "locator": "PDF p.1, 2023 Municipal Election Calendar, November 7 Municipal Election",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-11-anthony-tony-ciaravino",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-11",
+      "candidate_name": "Anthony \"Tony\" Ciaravino",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "11",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/general/Candidate%20Filing%20Report%20M2023.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.277Z",
+          "sha256": "060afd6447225ad9c65efb2d47d80e455a11166ba0744ebd1bc373c57febe92c",
+          "locator": "PDF p.6, 11th Ward, Anthony \"Tony\" Ciaravino candidate row with ballot order and no party line",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-11-ambria-taylor",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-11",
+      "candidate_name": "Ambria Taylor",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "11",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "nonpartisan",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/general/Candidate%20Filing%20Report%20M2023.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.277Z",
+          "sha256": "060afd6447225ad9c65efb2d47d80e455a11166ba0744ebd1bc373c57febe92c",
+          "locator": "PDF p.6, 11th Ward, Ambria Taylor candidate row with ballot order and no party line",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-3-jasmine-roberson",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-3",
+      "candidate_name": "Jasmine Roberson",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "3",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/general/Write-In%20Candidate%20List%20M2023.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.614Z",
+          "sha256": "7f07f52aa34d9d00a41a8235fd980e241f703fd0b1416c64073051cbc710e99e",
+          "locator": "PDF p.1, certified 3rd Ward Jasmine Roberson write-in row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-5-william-calloway",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-5",
+      "candidate_name": "William Calloway",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "5",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "write_in",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "write_in",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/general/Write-In%20Candidate%20List%20M2023.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.614Z",
+          "sha256": "7f07f52aa34d9d00a41a8235fd980e241f703fd0b1416c64073051cbc710e99e",
+          "locator": "PDF p.1, certified 5th Ward William Calloway write-in row",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-nyc-ny-2023-11-07-city-council-10-carmen-n-de-la-rosa",
+      "contest_key": "local-general-nyc-ny-2023-11-07-city-council-10",
+      "candidate_name": "Carmen N. De La Rosa",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "New York City, NY",
+      "election_date": "2023-11-07",
+      "office": "Member of the New York City Council",
+      "district": "10",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "cross_filed",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Democratic", "Working Families"],
+      "sources": [
+        {
+          "url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2023/20231107General%20Election/00101600010New%20York%20Member%20of%20the%20City%20Council%2010th%20Council%20District%20Recap.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:44.262Z",
+          "sha256": "18ffa173aa2f15a6eafa1be93c545ab779895e87caad7e0824b483f11e751d92",
+          "locator": "Council District 10 recap, Carmen N. De La Rosa Democratic and Working Families rows",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-west-point-ut-2023-11-21-city-council-kelly-r-ross",
+      "contest_key": "local-general-west-point-ut-2023-11-21-city-council",
+      "candidate_name": "Kelly R. Ross",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "West Point City, Davis County, UT",
+      "election_date": "2023-11-21",
+      "office": "City Council Member",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.westpointutah.gov/DocumentCenter/View/1238/Notice-of-General-Election-?bidId=",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:47:48.287Z",
+          "sha256": "4760f45f749ec455774eeb9468f343c3161fad753ac92a1421da6c1ed27c5b0d",
+          "locator": "PDF p.1, Nov. 21, 2023 City Council Member notice: will-appear list includes Kelly R. Ross; bottom notice records withdrawal effective Oct. 31 and votes not counted",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.westpointutah.gov/1437/2023-Elections",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:47:49.213Z",
+          "sha256": "614dbda1f87d5e938d345613c3e4f687d3870b441c20cbe4aa2821cdc6d240ed",
+          "locator": "2023 General Election - November 21, 2023 section, Kelly R. Ross - (WITHDREW) heading",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-hyrum-ut-2025-11-04-city-council-paul-james",
+      "contest_key": "local-general-hyrum-ut-2025-11-04-city-council",
+      "candidate_name": "Paul James",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "Hyrum City, Cache County, UT",
+      "election_date": "2025-11-04",
+      "office": "City Council Member",
+      "district": "At-large",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "withdrawn",
+      "lifecycle_status": "withdrawn",
+      "ballot_appearance": "printed",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://www.utah.gov/pmn/files/1331015.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:47:50.346Z",
+          "sha256": "2d59a0b59b1ff6e8ca1f8a5a0c6ed32251541a4aebfb88f2033fc4a407485ef6",
+          "locator": "Image-rendered PDF p.1, Hyrum 2025 Municipal General Election notice: Paul James officially withdrew; ballots already printed; name will still appear",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        },
+        {
+          "url": "https://www.utah.gov/pmn/sitemap/noticeprint/971019.html",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:51:18.631Z",
+          "sha256": "52f583c8f762cdab18556f7ea01293ed82ad13c8effc758591071b83189b1f22",
+          "locator": "Description/Agenda: Nov. 4, 2025 General Election; two City Council Members; non-partisan; elected at-large",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-4-paul-pearson",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-4",
+      "candidate_name": "Paul Pearson",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "4",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/Electoral-Board/23-EB-ALD-033%20Findings%20and%20Decision.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.744Z",
+          "sha256": "8f8409543624a0389438fe394ef47c85f4b3cd069263dc15fc9f31d9b49a8b4c",
+          "locator": "PDF p.1 caption and p.4 order (PDF index p.3): February 28 contest; papers invalid; Paul Pearson name shall not be printed",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-5-adrienne-irmer",
+      "contest_key": "local-general-chicago-il-2023-02-28-alderperson-5",
+      "candidate_name": "Adrienne Irmer",
+      "official_ids": [],
+      "reviewed_aliases": [],
+      "jurisdiction": "City of Chicago, IL",
+      "election_date": "2023-02-28",
+      "office": "Alderperson",
+      "district": "5",
+      "level": "local",
+      "stage": "general",
+      "sample_stratum": "disqualified",
+      "lifecycle_status": "disqualified",
+      "ballot_appearance": "not_on_ballot",
+      "party_lines": [],
+      "sources": [
+        {
+          "url": "https://app.chicagoelections.gov/documents/general/Statement%20from%20CBOE%20on%205th%20Ward%20VBM%20ballots.pdf",
+          "source_type": "official_election_authority",
+          "retrieved_at": "2026-08-29T00:11:38.801Z",
+          "sha256": "5d71984b345e1d2a51942d460e29e384ead78a8c181a176fa303d6d5cffbb77c",
+          "locator": "PDF p.1, Adrienne Irmer removed January 20, 2023, not qualified to be printed, corrected ballots issued for February 28 election",
+          "effective_at": null,
+          "effective_time_reason": "not_published"
+        }
+      ]
+    }
+  ],
+  "authorities": [
+    {
+      "authority_id": "federal-hi-office-of-elections",
+      "authority_name": "Hawaii Office of Elections",
+      "authority_level": "federal",
+      "state_code": "HI"
+    },
+    {
+      "authority_id": "federal-ca-secretary-of-state",
+      "authority_name": "California Secretary of State",
+      "authority_level": "federal",
+      "state_code": "CA"
+    },
+    {
+      "authority_id": "federal-ny-schuyler-county-board-of-elections",
+      "authority_name": "Schuyler County Board of Elections",
+      "authority_level": "federal",
+      "state_code": "NY"
+    },
+    {
+      "authority_id": "federal-ny-tioga-county-board-of-elections",
+      "authority_name": "Tioga County Board of Elections",
+      "authority_level": "federal",
+      "state_code": "NY"
+    },
+    {
+      "authority_id": "federal-pa-department-of-state",
+      "authority_name": "Pennsylvania Department of State",
+      "authority_level": "federal",
+      "state_code": "PA"
+    },
+    {
+      "authority_id": "federal-md-state-board-of-elections",
+      "authority_name": "Maryland State Board of Elections",
+      "authority_level": "federal",
+      "state_code": "MD"
+    },
+    {
+      "authority_id": "federal-az-secretary-of-state",
+      "authority_name": "Arizona Secretary of State",
+      "authority_level": "federal",
+      "state_code": "AZ"
+    },
+    {
+      "authority_id": "federal-pa-commonwealth-court",
+      "authority_name": "Commonwealth Court of Pennsylvania",
+      "authority_level": "federal",
+      "state_code": "PA"
+    },
+    {
+      "authority_id": "federal-mi-secretary-of-state",
+      "authority_name": "Michigan Secretary of State",
+      "authority_level": "federal",
+      "state_code": "MI"
+    },
+    {
+      "authority_id": "federal-ny-chautauqua-county-board-of-elections",
+      "authority_name": "Chautauqua County Board of Elections",
+      "authority_level": "federal",
+      "state_code": "NY"
+    },
+    {
+      "authority_id": "federal-nj-division-of-elections",
+      "authority_name": "New Jersey Department of State, Division of Elections",
+      "authority_level": "federal",
+      "state_code": "NJ"
+    },
+    {
+      "authority_id": "federal-ga-secretary-of-state",
+      "authority_name": "Georgia Secretary of State",
+      "authority_level": "federal",
+      "state_code": "GA"
+    },
+    {
+      "authority_id": "federal-ak-division-of-elections",
+      "authority_name": "Alaska Division of Elections",
+      "authority_level": "federal",
+      "state_code": "AK"
+    },
+    {
+      "authority_id": "state-ca-secretary-of-state",
+      "authority_name": "California Secretary of State",
+      "authority_level": "state",
+      "state_code": "CA"
+    },
+    {
+      "authority_id": "state-ne-secretary-of-state",
+      "authority_name": "Nebraska Secretary of State",
+      "authority_level": "state",
+      "state_code": "NE"
+    },
+    {
+      "authority_id": "state-pa-allegheny-county-elections",
+      "authority_name": "Allegheny County Elections",
+      "authority_level": "state",
+      "state_code": "PA"
+    },
+    {
+      "authority_id": "state-va-department-of-elections",
+      "authority_name": "Virginia Department of Elections",
+      "authority_level": "state",
+      "state_code": "VA"
+    },
+    {
+      "authority_id": "state-mi-bureau-of-elections",
+      "authority_name": "Michigan Bureau of Elections",
+      "authority_level": "state",
+      "state_code": "MI"
+    },
+    {
+      "authority_id": "state-mn-secretary-of-state",
+      "authority_name": "Minnesota Secretary of State",
+      "authority_level": "state",
+      "state_code": "MN"
+    },
+    {
+      "authority_id": "state-pa-commonwealth-court",
+      "authority_name": "Pennsylvania Commonwealth Court",
+      "authority_level": "state",
+      "state_code": "PA"
+    },
+    {
+      "authority_id": "local-il-chicago-boe",
+      "authority_name": "Chicago Board of Election Commissioners",
+      "authority_level": "local",
+      "state_code": "IL"
+    },
+    {
+      "authority_id": "local-wa-king-county-elections",
+      "authority_name": "King County Elections",
+      "authority_level": "local",
+      "state_code": "WA"
+    },
+    {
+      "authority_id": "local-ca-la-county-rrcc",
+      "authority_name": "Los Angeles County Registrar-Recorder/County Clerk",
+      "authority_level": "local",
+      "state_code": "CA"
+    },
+    {
+      "authority_id": "local-pa-lancaster-county-elections",
+      "authority_name": "Lancaster County Board of Elections",
+      "authority_level": "local",
+      "state_code": "PA"
+    },
+    {
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "authority_name": "Board of Elections in the City of New York",
+      "authority_level": "local",
+      "state_code": "NY"
+    },
+    {
+      "authority_id": "local-fl-miami-dade-elections",
+      "authority_name": "Miami-Dade County Elections Department",
+      "authority_level": "local",
+      "state_code": "FL"
+    },
+    {
+      "authority_id": "local-mn-minneapolis-elections",
+      "authority_name": "City of Minneapolis Elections & Voter Services",
+      "authority_level": "local",
+      "state_code": "MN"
+    },
+    {
+      "authority_id": "local-ca-san-francisco-elections",
+      "authority_name": "San Francisco Department of Elections",
+      "authority_level": "local",
+      "state_code": "CA"
+    },
+    {
+      "authority_id": "local-ma-boston-election-department",
+      "authority_name": "City of Boston Election Department",
+      "authority_level": "local",
+      "state_code": "MA"
+    },
+    {
+      "authority_id": "local-ma-cambridge-election-commission",
+      "authority_name": "City of Cambridge Election Commission",
+      "authority_level": "local",
+      "state_code": "MA"
+    },
+    {
+      "authority_id": "local-ut-west-point-city-recorder",
+      "authority_name": "West Point City Recorder",
+      "authority_level": "local",
+      "state_code": "UT"
+    },
+    {
+      "authority_id": "local-ut-hyrum-city-recorder",
+      "authority_name": "Hyrum City Recorder",
+      "authority_level": "local",
+      "state_code": "UT"
+    },
+    {
+      "authority_id": "local-pa-delaware-county-board-of-elections",
+      "authority_name": "Delaware County Board of Elections",
+      "authority_level": "local",
+      "state_code": "PA"
+    }
+  ],
+  "authority_assignments": [
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:john-raghu-giuffre",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ca:2022-06-07:primary:us-house-4:seth-t-newman",
+      "authority_id": "federal-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2022-primary/cert-list-writein.pdf",
+      "locator": "PDF page 2, “Official Certified List of Write-In Candidates — Amended,” U.S. Representative Districts 4 and 6"
+    },
+    {
+      "record_key": "federal:us:ca:2022-06-07:primary:us-house-6:chris-richardson",
+      "authority_id": "federal-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2022-primary/cert-list-writein.pdf",
+      "locator": "PDF page 2, “Official Certified List of Write-In Candidates — Amended,” U.S. Representative Districts 4 and 6"
+    },
+    {
+      "record_key": "federal:us:ny:2018-06-26:primary:us-house-23:tracy-mitrano",
+      "authority_id": "federal-ny-schuyler-county-board-of-elections",
+      "source_url": "https://www.schuylercountyny.gov/DocumentCenter/View/6763/2018-Federal-PE-Official-Tally",
+      "locator": "Display p.1: `2018 Federal Primary - Official Results`, election date June 26, 2018, Tracy Mitrano in both U.S. Representative Democratic (`DEM`) and Women's Equality (`WE`) summaries; display p.2 Democratic detail; display p.9 Women's Equality detail."
+    },
+    {
+      "record_key": "federal:us:ny:2016-06-28:primary:us-house-22:claudia-tenney",
+      "authority_id": "federal-ny-tioga-county-board-of-elections",
+      "source_url": "https://tiogacountyny.gov/media/6061/pf16-official-results.pdf",
+      "locator": "Sole display page: `2016 Tioga County Federal Primary`, June 28, `Official`; U.S. House district 22 Republican table at top and Reform table at bottom, Claudia Tenney in both"
+    },
+    {
+      "record_key": "federal:us:pa:2022-05-17:primary:us-house-1:caroline-avery",
+      "authority_id": "federal-pa-department-of-state",
+      "source_url": "https://www.pa.gov/content/dam/copapwp-pagov/en/dos/resources/voting-and-elections/bulk-data/ElectionReturns_2022_Primary_PrecinctReturns.txt",
+      "locator": "All 353,742 CSV records; schema filter office `USC`, party `REP`, candidate district/U.S. congressional district `1`: Alex Entin and Brian Fitzpatrick only; zero rows containing `AVERY`"
+    },
+    {
+      "record_key": "federal:us:md:2020-06-02:primary:us-house-1:erik-lane",
+      "authority_id": "federal-md-state-board-of-elections",
+      "source_url": "https://elections.maryland.gov/elections/archive/2020/primary_candidates/gen_cand_lists_2020_3_008X.csv",
+      "locator": "UTF-8 CSV row beginning `Representative in Congress, Congressional District 01, Erik Lane, Democratic, Harford County, Withdrawn - 01/27/2020, Federal - 11/04/2019`"
+    },
+    {
+      "record_key": "federal:us:az:2024-07-30:primary:us-house-8:sheila-bilyeu",
+      "authority_id": "federal-az-secretary-of-state",
+      "source_url": "https://azsos.gov/sites/default/files/docs/2024_CadidatesFiled_web_list_20240411.pdf",
+      "locator": "PDF page 1, federal candidate rows; footer says qualified for July 30, 2024 Primary Ballot pending court removal"
+    },
+    {
+      "record_key": "federal:us:pa:2022-05-17:primary:us-house-15:george-rathmell",
+      "authority_id": "federal-pa-commonwealth-court",
+      "source_url": "https://www.pacourts.us/Storage/media/pdfs/20220414/161426-121md2022-april8%2C2022-opinion.pdf",
+      "locator": "PDF display p.1: caption and Republican candidate for U.S. House district 15 in May 17, 2022 primary; display p.27: order grants petition and directs removal"
+    },
+    {
+      "record_key": "federal:us:mi:2010-08-03:primary:us-house-13:john-hauler",
+      "authority_id": "federal-mi-secretary-of-state",
+      "source_url": "https://www.michigan.gov/sos/-/media/Project/Websites/sos/Election-Results-and-Statistics/August-Primary-Precinct-Results-Summary/2010-August-Primary-Precinct-Results-Summary_Part3.pdf?hash=733C9A3A6B173249FC4DD8BFEC32C93E&rev=5ded1f777707430d96d462fb1bbb0b31",
+      "locator": "PDF display p.189 / printed report p.002, Wayne County, Aug. 3, 2010 Republican, `REP IN CONGRESS 13TH`, John Hauler row"
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:paul-dolan",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:barbara-lee",
+      "authority_id": "federal-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+      "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals"
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:clyde-mcclain-lewman",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:melba-amaral",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:james-bradley",
+      "authority_id": "federal-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+      "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals"
+    },
+    {
+      "record_key": "federal:us:ca:2024-03-05:primary:us-senate-full-term:sepi-gilani",
+      "authority_id": "federal-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/sov/2024-primary/sov/complete-sov-updated.pdf",
+      "locator": "PDF display p.11 / printed summary p.9, March 5, 2024 U.S. Senate Full Term table; Lee/Bradley/Gilani rows with party codes and vote totals"
+    },
+    {
+      "record_key": "federal:us:hi:2024-08-10:primary:us-senate:adriel-c-lam",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-house-2:randall-kelly-meyer",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:az:2024-11-05:general:us-senate:jannie-prosser",
+      "authority_id": "federal-az-secretary-of-state",
+      "source_url": "https://azsos.gov/sites/default/files/docs/2024_General_Candidates-Write-In_and_Withdrawn_Candidates-20240927.pdf",
+      "locator": "PDF page 2, lines 70–77, WRITE-IN CANDIDATES; document date 9/27/2024"
+    },
+    {
+      "record_key": "federal:us:az:2024-11-05:general:us-senate:sarah-williams",
+      "authority_id": "federal-az-secretary-of-state",
+      "source_url": "https://azsos.gov/sites/default/files/docs/2024_General_Candidates-Write-In_and_Withdrawn_Candidates-20240927.pdf",
+      "locator": "PDF page 2, lines 70–77, WRITE-IN CANDIDATES; document date 9/27/2024"
+    },
+    {
+      "record_key": "federal:us:ny:2018-11-06:general:us-house-23:tracy-mitrano",
+      "authority_id": "federal-ny-chautauqua-county-board-of-elections",
+      "source_url": "https://chautauquacountyny.gov/sites/default/files/document-files/2019-10/2018%20General%20Election%20LEGAL%20NOTICE.pdf",
+      "locator": "Sole display page: completed Nov. 6, 2018 canvass and §9-212 certificates; party-abbreviation legend; U.S. House district 23 lines for Mitrano and Reed"
+    },
+    {
+      "record_key": "federal:us:ny:2018-11-06:general:us-house-23:thomas-w-reed-ii",
+      "authority_id": "federal-ny-chautauqua-county-board-of-elections",
+      "source_url": "https://chautauquacountyny.gov/sites/default/files/document-files/2019-10/2018%20General%20Election%20LEGAL%20NOTICE.pdf",
+      "locator": "Sole display page: completed Nov. 6, 2018 canvass and §9-212 certificates; party-abbreviation legend; U.S. House district 23 lines for Mitrano and Reed"
+    },
+    {
+      "record_key": "federal:us:nj:2024-11-05:general:us-senate:robert-menendez",
+      "authority_id": "federal-nj-division-of-elections",
+      "source_url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-certification-amended-certification-of-nominees-general-us-senate.pdf",
+      "locator": "Display p.1 withdrawal and shall-not-appear certification dated Aug. 19, 2024; display pp.2-8 amended official Nov. 5 candidate list and six-candidate total"
+    },
+    {
+      "record_key": "federal:us:nj:2024-11-05:general:us-house-5:richard-siegel",
+      "authority_id": "federal-nj-division-of-elections",
+      "source_url": "https://www.nj.gov/state/elections/assets/pdf/election-results/2024/2024-certification-amended-5th-congressional-district-us-house.pdf",
+      "locator": "Display p.1 withdrawal and shall-not-appear certification dated July 31, 2024; display pp.2-3 amended official Nov. 5 district 5 list and five-candidate total"
+    },
+    {
+      "record_key": "federal:us:pa:2022-11-08:general:us-house-1:caroline-avery",
+      "authority_id": "federal-pa-commonwealth-court",
+      "source_url": "https://www.pacourts.us/Storage/media/pdfs/20220823/172331-392md2022-august23%2C2022-opinionandordergrantingobjectionpetition.pdf",
+      "locator": "PDF display p.1: caption, Libertarian candidate, U.S. House district 1, petition granted; display p.10: removal order for Nov. 8, 2022 ballot"
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-12:elizabeth-liz-johnson",
+      "authority_id": "federal-ga-secretary-of-state",
+      "source_url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+      "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone"
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:shelby-pikachu-billionaire",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ak:2024-11-05:general:us-house-at-large:nick-begich",
+      "authority_id": "federal-ak-division-of-elections",
+      "source_url": "https://www.elections.alaska.gov/candidates/?election=24genr",
+      "locator": "2024 General Election, Election Date November 5, 2024; U.S. Representative “Candidate Name on Ballot,” Certified and Withdrawn subsections"
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:bob-mcdermott",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-10:mike-collins",
+      "authority_id": "federal-ga-secretary-of-state",
+      "source_url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+      "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone"
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-house-2:aaron-toman",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-11:barry-loudermilk",
+      "authority_id": "federal-ga-secretary-of-state",
+      "source_url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+      "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone"
+    },
+    {
+      "record_key": "federal:us:ga:2024-11-05:general:us-house-12:rick-w-allen",
+      "authority_id": "federal-ga-secretary-of-state",
+      "source_url": "https://sos.ga.gov/sites/default/files/2024-11/contest_results_comparison_0.pdf",
+      "locator": "PDF page 3, U.S. House Districts 10–12, lines 67–83; election date lines 63–66; Last Updated 11/22/2024 2:20:38 PM without timezone"
+    },
+    {
+      "record_key": "federal:us:hi:2024-11-05:general:us-senate:emma-jane-avila-pohlman",
+      "authority_id": "federal-hi-office-of-elections",
+      "source_url": "https://elections.hawaii.gov/2024-candidate-election-status/",
+      "locator": "Lines 21–24 define status and columns; federal candidate rows 50–69"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-22-jessica-self",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.34, State Assembly District 22, Jessica Self Democratic certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-29-j-w-paine",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.36, State Assembly District 29, J.W. Paine Republican certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-33-hipolito-a-cerros",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.37, State Assembly District 33, Hipolito A. Cerros Democratic certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-25-lan-ngo",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.35, State Assembly District 25, Lan Ngo Democratic certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-26-omar-din",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.35, State Assembly District 26, Omar Din Democratic certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-28-liz-lawler",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.36, State Assembly District 28, Liz Lawler Republican certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-34-ricardo-ortega",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.37, State Assembly District 34, Ricardo Ortega Democratic certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-27-joanna-garcia-rose",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.35, State Assembly District 27, Joanna Garcia Rose Republican certified candidate row"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-23-lydia-kou",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/cert-list-candidates.pdf",
+      "locator": "Document p.34, State Assembly District 23, Lydia Kou Democratic certified candidate row"
+    },
+    {
+      "record_key": "ne-2024-05-14-primary-legislature-1-dennis-schaardt",
+      "authority_id": "state-ne-secretary-of-state",
+      "source_url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/Primary/English_Legislature.pdf",
+      "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 01, Dennis Schaardt printed row; PRIMARY ELECTION, May 14, 2024"
+    },
+    {
+      "record_key": "ne-2024-05-14-primary-legislature-1-bob-holman",
+      "authority_id": "state-ne-secretary-of-state",
+      "source_url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/Primary/English_Legislature.pdf",
+      "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 01, Bob Holman printed row; PRIMARY ELECTION, May 14, 2024"
+    },
+    {
+      "record_key": "ca-2024-03-05-primary-state-assembly-4-sherman-m-mcfarland",
+      "authority_id": "state-ca-secretary-of-state",
+      "source_url": "https://elections.cdn.sos.ca.gov/statewide-elections/2024-primary/write-in-voter-nominated.pdf",
+      "locator": "Document p.2 of 3, State Assembly District 4, Sherman M McFarland (W/I) Democratic; March 5, 2024"
+    },
+    {
+      "record_key": "pa-2015-05-19-primary-common-pleas-allegheny-jennifer-staley-mccrady",
+      "authority_id": "state-pa-allegheny-county-elections",
+      "source_url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-primary-detail-district.pdf",
+      "locator": "PDF pp.1-3, Judge Of The Court Of Common Pleas, Jennifer Staley McCrady in both Democratic and Republican sections; May 19, 2015 official results"
+    },
+    {
+      "record_key": "pa-2015-05-19-primary-common-pleas-allegheny-dan-regan",
+      "authority_id": "state-pa-allegheny-county-elections",
+      "source_url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-primary-detail-district.pdf",
+      "locator": "PDF pp.1-3, Judge Of The Court Of Common Pleas, Dan Regan in both Democratic and Republican sections; May 19, 2015 official results"
+    },
+    {
+      "record_key": "va-2023-06-20-primary-house-of-delegates-50-john-c-marsden",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/media/castyourballot/candidatelist/2023-june-primary/Rep-List-of-Candidates.pdf",
+      "locator": "PDF p.2 of 6, House of Delegates District 50, John C. Marsden; notice says withdrawn after ballot printing and still appears"
+    },
+    {
+      "record_key": "va-2023-06-20-primary-house-of-delegates-2-kevin-s-saucedo-broach",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/media/castyourballot/candidatelist/2023-june-primary/Dem-List-of-Candidates-1.pdf",
+      "locator": "PDF p.1 of 11 and final page, House of Delegates District 2, Kevin S. Saucedo-Broach; notice says withdrawn after ballot printing and still appears"
+    },
+    {
+      "record_key": "mi-2024-08-06-primary-state-legislature-4-tonya-renay-wells",
+      "authority_id": "state-mi-bureau-of-elections",
+      "source_url": "https://mi-boe.entellitrak.com/candlist/2024PRI_CANDLIST.html",
+      "locator": "Official Primary Candidate Listing, State Legislature District 4, REP Republican, Wells, Tonya Renay is Disqualified; excluded row class X"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-3-alfonso-h-lopez",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 3, Alfonso H. Lopez, Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-7-karen-a-keys-gamarra",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 7, Karen A. Keys-Gamarra, Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-2-adele-y-mcclure",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 2, Adele Y. McClure, Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-4-charniele-l-herring",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 4, Charniele L. Herring, Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-6-richard-c-rip-sullivan-jr",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 6, Richard C. \"Rip\" Sullivan Jr., Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-8-irene-shin",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 8, Irene Shin, Democratic row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-3-major-mike-webb",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 3, Major Mike Webb, Independent row"
+    },
+    {
+      "record_key": "va-2023-11-07-general-house-of-delegates-8-max-b-fisher",
+      "authority_id": "state-va-department-of-elections",
+      "source_url": "https://www.elections.virginia.gov/casting-a-ballot/previous-candidate-lists/2023-november-general-election---ga-candidates/",
+      "locator": "Member, House of Delegates, District 8, Max B. Fisher, Republican row"
+    },
+    {
+      "record_key": "ne-2024-11-05-general-legislature-5-margo-r-juarez",
+      "authority_id": "state-ne-secretary-of-state",
+      "source_url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/General/English-Legislature.pdf",
+      "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 05, Margo R. Juarez printed row; GENERAL ELECTION, November 05, 2024"
+    },
+    {
+      "record_key": "ne-2024-11-05-general-legislature-5-gilbert-ayala",
+      "authority_id": "state-ne-secretary-of-state",
+      "source_url": "https://sos.nebraska.gov/sites/default/files/doc/elections/2024/Sample_Ballots/General/English-Legislature.pdf",
+      "locator": "PDF p.1, NONPARTISAN TICKET, Member of the Legislature District 05, Gilbert Ayala printed row; GENERAL ELECTION, November 05, 2024"
+    },
+    {
+      "record_key": "mn-2024-11-05-general-state-representative-38a-yelena-s-kurdyumova",
+      "authority_id": "state-mn-secretary-of-state",
+      "source_url": "https://www.sos.mn.gov/media/6313/registered-write-in-requests-2024.pdf",
+      "locator": "PDF p.1, Registered Write-in Requests, Yelena S. Kurdyumova, State Representative, District 38A; November 5, 2024"
+    },
+    {
+      "record_key": "pa-2015-11-03-general-common-pleas-allegheny-jennifer-staley-mccrady",
+      "authority_id": "state-pa-allegheny-county-elections",
+      "source_url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-general-summary.pdf",
+      "locator": "Judge Of The Court Of Common Pleas summary, Jennifer Staley McCrady (DEM/REP); November 3, 2015 official results"
+    },
+    {
+      "record_key": "pa-2015-11-03-general-common-pleas-allegheny-dan-regan",
+      "authority_id": "state-pa-allegheny-county-elections",
+      "source_url": "https://www.alleghenycounty.us/files/assets/county/v/1/government/elections/documents/elections-archive/2015-general-summary.pdf",
+      "locator": "Judge Of The Court Of Common Pleas summary, Dan Regan (DEM/REP); November 3, 2015 official results"
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-11-gregory-g-deal",
+      "authority_id": "state-pa-commonwealth-court",
+      "source_url": "https://www.pacourts.us/Storage/media/pdfs/20220816/202641-387md2022-august16%2C2022-ordergrantingpet.towithdrawnominationpapers.pdf",
+      "locator": "PDF p.1, Gregory G. Deal, Libertarian State Representative District 11; withdrawal granted and removal directed from 2022 General Election ballot"
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-168-james-free-mitchell-v",
+      "authority_id": "state-pa-commonwealth-court",
+      "source_url": "https://www.pacourts.us/Storage/media/pdfs/20220815/195418-386md2022-august15%2C2022-ordergrantingobjectionpetition.pdf",
+      "locator": "PDF p.1, 386 MD 2022 final order: James Free Mitchell V lacks valid signatures; objection granted; name shall not be placed on general-election ballot"
+    },
+    {
+      "record_key": "pa-2022-11-08-general-state-representative-43-jeffrey-lee-barker",
+      "authority_id": "state-pa-commonwealth-court",
+      "source_url": "https://www.pacourts.us/Storage/media/pdfs/20220815/163102-390md2022-august15%2C2022-ordergrantingobjectionpetition.pdf",
+      "locator": "PDF p.1, Jeffrey Lee Barker, Keystone candidate for Representative in the General Assembly District 43; insufficient signatures; objection granted; name not placed on general ballot"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-34-scott-murphy",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024319_1.html",
+      "locator": "Democratic Council District 34, Scott Murphy Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-34-jennifer-gutierrez",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024319_1.html",
+      "locator": "Democratic Council District 34, Jennifer Gutierrez Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-20-ellen-young",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024346_1.html",
+      "locator": "Democratic Council District 20, Ellen Young Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-21-david-aiken",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024358_1.html",
+      "locator": "Democratic Council District 21, David Aiken Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-20-sandra-ung",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024346_1.html",
+      "locator": "Democratic Council District 20, Sandra Ung Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-41-darlene-mealy",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024424_1.html",
+      "locator": "Democratic Council District 41, Darlene Mealy Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-21-francisco-p-moya",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024358_1.html",
+      "locator": "Democratic Council District 21, Francisco P. Moya Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-nyc-2021-06-22-city-council-41-alicka-tani-ampry-samuel",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2021/20210622Primary%20Election/rcv/024424_1.html",
+      "locator": "Democratic Council District 41, Alicka Tani Ampry-Samuel Round 1 row; June 22, 2021 official RCV result"
+    },
+    {
+      "record_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5-robyn-mulenga",
+      "authority_id": "local-wa-king-county-elections",
+      "source_url": "https://aqua.kingcounty.gov/elections/2023/aug-primary/results.pdf",
+      "locator": "Official August 1, 2023 primary results, Auburn Council Position No. 5, Robyn Mulenga row"
+    },
+    {
+      "record_key": "local-primary-king-wa-2023-08-01-auburn-council-position-5-clinton-taylor",
+      "authority_id": "local-wa-king-county-elections",
+      "source_url": "https://aqua.kingcounty.gov/elections/2023/aug-primary/results.pdf",
+      "locator": "Official August 1, 2023 primary results, Auburn Council Position No. 5, Clinton Taylor row"
+    },
+    {
+      "record_key": "local-primary-la-ca-2024-03-05-avalon-city-council-carl-johnson",
+      "authority_id": "local-ca-la-county-rrcc",
+      "source_url": "https://content.lavote.gov/docs/rrcc/election-info/write-in-important-notice---march-5-2024-presidential-primary-election.pdf",
+      "locator": "PDF index p.3 (zero-based PDF page P2), Avalon Member City Council, CARL JOHNSON registered write-in row"
+    },
+    {
+      "record_key": "local-primary-la-ca-2024-03-05-compton-city-council-district-4-ariana-garcia",
+      "authority_id": "local-ca-la-county-rrcc",
+      "source_url": "https://content.lavote.gov/docs/rrcc/election-info/write-in-important-notice---march-5-2024-presidential-primary-election.pdf",
+      "locator": "PDF index p.3 (zero-based PDF page P2), Compton Member City Council District 4, ARIANA GARCIA registered write-in row"
+    },
+    {
+      "record_key": "local-primary-lancaster-pa-2021-05-18-elizabethtown-school-director-kristy-moore",
+      "authority_id": "local-pa-lancaster-county-elections",
+      "source_url": "https://vr.co.lancaster.pa.us/ElectionReturns/May_18%2C_2021_-_Municipal_Primary_Future_Release/reports/55.html",
+      "locator": "Elizabethtown School Director report, Kristy Moore named DEM and REP rows; used only for printed cross-filed participation, not outcome"
+    },
+    {
+      "record_key": "local-primary-west-point-ut-2025-08-12-city-council-joelle-caruso",
+      "authority_id": "local-ut-west-point-city-recorder",
+      "source_url": "https://www.westpointutah.gov/DocumentCenter/View/2035/NOTICE-OF-CANDIDATE-WITHDRAWAL?bidId=",
+      "locator": "PDF p.1, 2025 Primary Election withdrawal notice: Joelle Caruso withdrew; although listed on the Primary Election ballot"
+    },
+    {
+      "record_key": "local-primary-delaware-county-pa-2025-05-20-county-council-charles-alexander",
+      "authority_id": "local-pa-delaware-county-board-of-elections",
+      "source_url": "https://www.pacourts.us/assets/opinions/Commonwealth/out/386CD25_4-25-25.pdf?cb=1",
+      "locator": "PDF pp.1, 3, 7-8: Republican Delaware County Council candidacy; barred/removed from May 20, 2025 Municipal Primary ballot; affirmance order"
+    },
+    {
+      "record_key": "local-primary-nyc-ny-2021-06-22-city-council-21-hiram-monserratte",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/video_scripts/video_transcripts/commissioner_meetings/2021/20210414_CommissionersHearings_April_14_2021.pdf",
+      "locator": "Transcript pp.177-180, District 21 Democratic petition, ineligibility/removal recommendation, adopted motion, and candidate off ballot"
+    },
+    {
+      "record_key": "local-general-san-francisco-2024-11-05-supervisor-district-1-marjan-philhour",
+      "authority_id": "local-ca-san-francisco-elections",
+      "source_url": "https://sfelections.org/results/20241105/index.html",
+      "locator": "Board of Supervisors District 1, Marjan Philhour final result row"
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-michael-gongora",
+      "authority_id": "local-fl-miami-dade-elections",
+      "source_url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+      "locator": "City of Miami Beach Mayor, Michael Gongora row"
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-steven-meiner",
+      "authority_id": "local-fl-miami-dade-elections",
+      "source_url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+      "locator": "City of Miami Beach Mayor, Steven Meiner row"
+    },
+    {
+      "record_key": "local-general-minneapolis-2023-11-07-city-council-ward-2-robin-wonsley",
+      "authority_id": "local-mn-minneapolis-elections",
+      "source_url": "https://vote.minneapolismn.gov/results-data/election-results/2023/",
+      "locator": "City Council Ward 2, Robin Wonsley row"
+    },
+    {
+      "record_key": "local-general-minneapolis-2023-11-07-city-council-ward-1-elliott-payne",
+      "authority_id": "local-mn-minneapolis-elections",
+      "source_url": "https://vote.minneapolismn.gov/results-data/election-results/2023/",
+      "locator": "City Council Ward 1, Elliott Payne row"
+    },
+    {
+      "record_key": "local-general-boston-2023-11-07-city-councillor-at-large-ruthzee-louijeune",
+      "authority_id": "local-ma-boston-election-department",
+      "source_url": "https://www.boston.gov/sites/default/files/file/2024/01/2023-11-07-23-City-Councillor-at-Large.pdf",
+      "locator": "PDF p.1, City Councillor At Large, Ruthzee Louijeune row"
+    },
+    {
+      "record_key": "local-general-miami-dade-2023-11-07-miami-beach-mayor-mike-grieco",
+      "authority_id": "local-fl-miami-dade-elections",
+      "source_url": "https://enr.electionsfl.org/DAD/3450/Summary/",
+      "locator": "City of Miami Beach Mayor, Mike Grieco row"
+    },
+    {
+      "record_key": "local-general-cambridge-2023-11-07-city-council-patricia-m-nolan",
+      "authority_id": "local-ma-cambridge-election-commission",
+      "source_url": "https://www.cambridgema.gov/-/media/files/electioncommission/2023municipalelection/citycouncilballot1specimen.pdf",
+      "locator": "PDF p.1, City Council specimen ballot, Patricia M. Nolan printed row with no party label"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-11-anthony-tony-ciaravino",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/general/Candidate%20Filing%20Report%20M2023.pdf",
+      "locator": "PDF p.6, 11th Ward, Anthony \"Tony\" Ciaravino candidate row with ballot order and no party line"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-11-ambria-taylor",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/general/Candidate%20Filing%20Report%20M2023.pdf",
+      "locator": "PDF p.6, 11th Ward, Ambria Taylor candidate row with ballot order and no party line"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-3-jasmine-roberson",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/general/Write-In%20Candidate%20List%20M2023.pdf",
+      "locator": "PDF p.1, certified 3rd Ward Jasmine Roberson write-in row"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-5-william-calloway",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/general/Write-In%20Candidate%20List%20M2023.pdf",
+      "locator": "PDF p.1, certified 5th Ward William Calloway write-in row"
+    },
+    {
+      "record_key": "local-general-nyc-ny-2023-11-07-city-council-10-carmen-n-de-la-rosa",
+      "authority_id": "local-ny-nyc-board-of-elections",
+      "source_url": "https://www.vote.nyc/sites/default/files/pdf/election_results/2023/20231107General%20Election/00101600010New%20York%20Member%20of%20the%20City%20Council%2010th%20Council%20District%20Recap.pdf",
+      "locator": "Council District 10 recap, Carmen N. De La Rosa Democratic and Working Families rows"
+    },
+    {
+      "record_key": "local-general-west-point-ut-2023-11-21-city-council-kelly-r-ross",
+      "authority_id": "local-ut-west-point-city-recorder",
+      "source_url": "https://www.westpointutah.gov/DocumentCenter/View/1238/Notice-of-General-Election-?bidId=",
+      "locator": "PDF p.1, Nov. 21, 2023 City Council Member notice: will-appear list includes Kelly R. Ross; bottom notice records withdrawal effective Oct. 31 and votes not counted"
+    },
+    {
+      "record_key": "local-general-hyrum-ut-2025-11-04-city-council-paul-james",
+      "authority_id": "local-ut-hyrum-city-recorder",
+      "source_url": "https://www.utah.gov/pmn/files/1331015.pdf",
+      "locator": "Image-rendered PDF p.1, Hyrum 2025 Municipal General Election notice: Paul James officially withdrew; ballots already printed; name will still appear"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-4-paul-pearson",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/Electoral-Board/23-EB-ALD-033%20Findings%20and%20Decision.pdf",
+      "locator": "PDF p.1 caption and p.4 order (PDF index p.3): February 28 contest; papers invalid; Paul Pearson name shall not be printed"
+    },
+    {
+      "record_key": "local-general-chicago-il-2023-02-28-alderperson-5-adrienne-irmer",
+      "authority_id": "local-il-chicago-boe",
+      "source_url": "https://app.chicagoelections.gov/documents/general/Statement%20from%20CBOE%20on%205th%20Ward%20VBM%20ballots.pdf",
+      "locator": "PDF p.1, Adrienne Irmer removed January 20, 2023, not qualified to be printed, corrected ballots issued for February 28 election"
+    }
+  ],
   "ordinary_control_manifest": [
     {
       "level": "federal",
