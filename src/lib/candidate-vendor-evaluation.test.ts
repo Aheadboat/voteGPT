@@ -1777,9 +1777,9 @@ describe("validateCandidateComparisonSet", () => {
     );
     const requiredStateCodes: readonly UsStateCode[] = ["CA", "MI", "PA", "VA"];
     expect(stateCodes.size).toBeGreaterThanOrEqual(10);
-    expect(requiredStateCodes.every((stateCode) => stateCodes.has(stateCode))).toBe(
-      true,
-    );
+    expect(
+      requiredStateCodes.every((stateCode) => stateCodes.has(stateCode)),
+    ).toBe(true);
     expect(
       candidateSet.authorities.filter(
         (authority) => authority.authority_level === "local",
