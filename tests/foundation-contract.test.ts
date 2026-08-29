@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "20c94bddc2a836c9bda0662e7d5bc2d5b895864a2d96301737d927f40bae1d84",
-  "ROADMAP.md": "cc5e177f3fd0a29fb4c53752983d770159261fa6716684f5167ffcd5c0723a1c",
+  "ROADMAP.md": "6bbb540e65a3f78edd3bea95768d51ab457a576838c33612667662d1f177fc7e",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1339,6 +1339,18 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(g1).toContain(
       "Public evidence refreshed on 2026-08-28 PT still supports `NO-GO (reopenable)`",
+    )
+    expect(g1).toContain(
+      "Exact feature head `5d93a66f5e10c938330a08122cc3d61c588f62f0` adds only the durable `G1-VENDOR-DECISION.md` artifact and its concise `PROJECT-MAP.md` route.",
+    )
+    expect(g1).toContain(
+      "coordinator verification passed 5/5 decision-contract cases, 358/358 evaluator cases, 37 files/1,308 full tests",
+    )
+    expect(g1).toContain(
+      "Two independent read-only reviews reported zero Critical, Important, or Minor finding",
+    )
+    expect(g1).toContain(
+      "G1-T4 is GREEN; G1-T5/T6 and every external or F7 action remain unauthorized",
     )
     expect(readCoordinationField(g1, "Phase")).toBe("`RED`")
     expect(readCoordinationField(g1, "Branch")).toBe(
