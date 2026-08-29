@@ -1,0 +1,114 @@
+{
+  "as_of": "2026-08-29T01:53:03.730Z",
+  "records": [],
+  "authorities": [],
+  "authority_assignments": [],
+  "ordinary_control_manifest": [
+    {
+      "level": "federal",
+      "stage": "primary",
+      "eligible_record_keys": [
+        "federal:us:mi:2010-08-03:primary:us-house-13:john-hauler",
+        "federal:us:ca:2024-03-05:primary:us-senate-full-term:barbara-lee",
+        "federal:us:hi:2024-08-10:primary:us-senate:paul-dolan",
+        "federal:us:ca:2024-03-05:primary:us-senate-full-term:james-bradley",
+        "federal:us:ca:2024-03-05:primary:us-senate-full-term:sepi-gilani",
+        "federal:us:hi:2024-08-10:primary:us-senate:clyde-mcclain-lewman",
+        "federal:us:hi:2024-08-10:primary:us-senate:melba-amaral",
+        "federal:us:hi:2024-08-10:primary:us-senate:adriel-c-lam",
+        "federal:us:hi:2024-08-10:primary:us-senate:emmanuel-tipon",
+        "federal:us:hi:2024-08-10:primary:us-senate:ron-curtis",
+        "federal:us:hi:2024-08-10:primary:us-senate:arturo-p-reyes",
+        "federal:us:hi:2024-08-10:primary:us-house-1:cecil-r-hale"
+      ]
+    },
+    {
+      "level": "federal",
+      "stage": "general",
+      "eligible_record_keys": [
+        "federal:us:ga:2024-11-05:general:us-house-12:elizabeth-liz-johnson",
+        "federal:us:hi:2024-11-05:general:us-senate:shelby-pikachu-billionaire",
+        "federal:us:ak:2024-11-05:general:us-house-at-large:nick-begich",
+        "federal:us:hi:2024-11-05:general:us-senate:bob-mcdermott",
+        "federal:us:ga:2024-11-05:general:us-house-10:mike-collins",
+        "federal:us:hi:2024-11-05:general:us-house-2:aaron-toman",
+        "federal:us:ga:2024-11-05:general:us-house-11:barry-loudermilk",
+        "federal:us:ga:2024-11-05:general:us-house-12:rick-w-allen",
+        "federal:us:hi:2024-11-05:general:us-senate:emma-jane-avila-pohlman",
+        "federal:us:ak:2024-11-05:general:us-house-at-large:john-wayne-howe",
+        "federal:us:hi:2024-11-05:general:us-house-1:patrick-c-largey",
+        "federal:us:ga:2024-11-05:general:us-house-10:alexandra-lexy-doherty",
+        "federal:us:hi:2024-11-05:general:us-house-2:steve-bond",
+        "federal:us:ga:2024-11-05:general:us-house-11:katy-kate-l-stamper",
+        "federal:us:ak:2024-11-05:general:us-house-at-large:eric-hafner",
+        "federal:us:ak:2024-11-05:general:us-house-at-large:mary-s-peltola"
+      ]
+    },
+    {
+      "level": "state",
+      "stage": "primary",
+      "eligible_record_keys": [
+        "ca-2024-03-05-primary-state-assembly-22-jessica-self",
+        "ca-2024-03-05-primary-state-assembly-29-j-w-paine",
+        "ca-2024-03-05-primary-state-assembly-33-hipolito-a-cerros",
+        "ca-2024-03-05-primary-state-assembly-25-lan-ngo",
+        "ca-2024-03-05-primary-state-assembly-26-omar-din",
+        "ca-2024-03-05-primary-state-assembly-28-liz-lawler",
+        "ca-2024-03-05-primary-state-assembly-34-ricardo-ortega",
+        "ca-2024-03-05-primary-state-assembly-27-joanna-garcia-rose",
+        "ca-2024-03-05-primary-state-assembly-23-lydia-kou",
+        "ca-2024-03-05-primary-state-assembly-30-dalila-epperson",
+        "ca-2024-03-05-primary-state-assembly-31-solomon-verduzco",
+        "ca-2024-03-05-primary-state-assembly-24-bob-brunton"
+      ]
+    },
+    {
+      "level": "state",
+      "stage": "general",
+      "eligible_record_keys": [
+        "va-2023-11-07-general-house-of-delegates-3-alfonso-h-lopez",
+        "va-2023-11-07-general-house-of-delegates-7-karen-a-keys-gamarra",
+        "va-2023-11-07-general-house-of-delegates-2-adele-y-mcclure",
+        "va-2023-11-07-general-house-of-delegates-4-charniele-l-herring",
+        "va-2023-11-07-general-house-of-delegates-6-richard-c-rip-sullivan-jr",
+        "va-2023-11-07-general-house-of-delegates-8-irene-shin",
+        "va-2023-11-07-general-house-of-delegates-3-major-mike-webb",
+        "va-2023-11-07-general-house-of-delegates-8-max-b-fisher",
+        "va-2023-11-07-general-house-of-delegates-7-luellen-hoffman-maskeny",
+        "va-2023-11-07-general-house-of-delegates-5-elizabeth-b-bennett-parker",
+        "va-2023-11-07-general-house-of-delegates-1-patrick-a-hope",
+        "va-2023-11-07-general-house-of-delegates-6-kristin-l-hoffman"
+      ]
+    },
+    {
+      "level": "local",
+      "stage": "primary",
+      "eligible_record_keys": [
+        "local-primary-nyc-2021-06-22-city-council-34-scott-murphy",
+        "local-primary-nyc-2021-06-22-city-council-34-jennifer-gutierrez",
+        "local-primary-nyc-2021-06-22-city-council-20-ellen-young",
+        "local-primary-nyc-2021-06-22-city-council-21-david-aiken",
+        "local-primary-nyc-2021-06-22-city-council-20-sandra-ung",
+        "local-primary-nyc-2021-06-22-city-council-41-darlene-mealy",
+        "local-primary-nyc-2021-06-22-city-council-21-francisco-p-moya",
+        "local-primary-nyc-2021-06-22-city-council-41-alicka-tani-ampry-samuel",
+        "local-primary-nyc-2021-06-22-city-council-21-ingrid-p-gomez"
+      ]
+    },
+    {
+      "level": "local",
+      "stage": "general",
+      "eligible_record_keys": [
+        "local-general-san-francisco-2024-11-05-supervisor-district-1-marjan-philhour",
+        "local-general-miami-dade-2023-11-07-miami-beach-mayor-michael-gongora",
+        "local-general-miami-dade-2023-11-07-miami-beach-mayor-steven-meiner",
+        "local-general-minneapolis-2023-11-07-city-council-ward-2-robin-wonsley",
+        "local-general-minneapolis-2023-11-07-city-council-ward-1-elliott-payne",
+        "local-general-boston-2023-11-07-city-councillor-at-large-ruthzee-louijeune",
+        "local-general-cambridge-2023-11-07-city-council-patricia-m-nolan",
+        "local-general-miami-dade-2023-11-07-miami-beach-mayor-mike-grieco",
+        "local-general-san-francisco-2024-11-05-supervisor-district-1-connie-chan"
+      ]
+    }
+  ]
+}
