@@ -3366,6 +3366,16 @@ const invalidCandidateVendorDecisionEvidenceCases: readonly InvalidCandidateVend
     { name: "a top-level array", makeEvidence: () => [] },
     { name: "an empty top-level object", makeEvidence: () => ({}) },
     {
+      name: "an unknown extra evidence requirement",
+      makeEvidence: () => {
+        const evidence = validCandidateVendorDecisionEvidence();
+        evidence.legal_permissions.push(
+          candidateDecisionEvidenceRecord("unknown_requirement", {}),
+        );
+        return evidence;
+      },
+    },
+    {
       name: "a malformed legal-permissions container",
       makeEvidence: () => ({
         ...validCandidateVendorDecisionEvidence(),
@@ -3572,6 +3582,20 @@ const candidateVendorDecisionFailureCases: readonly CandidateVendorDecisionFailu
       ),
     },
     {
+      name: "rejects numeric truth for a boolean minimum",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").public_use = 1;
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "public_use",
+        "true",
+        "1",
+      ),
+    },
+    {
       name: "rejects redisplay missing normalized source facts",
       mutate: (evidence) => {
         legalDecisionEvidence(evidence, "public_redisplay").normalized_facts = [
@@ -3587,6 +3611,26 @@ const candidateVendorDecisionFailureCases: readonly CandidateVendorDecisionFailu
         "normalized_facts",
         '["candidate","contest","status","source"]',
         '["candidate","contest","status"]',
+      ),
+    },
+    {
+      name: "rejects redisplay with an extra normalized fact",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "public_redisplay").normalized_facts = [
+          "candidate",
+          "contest",
+          "status",
+          "source",
+          "extra",
+        ];
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "public_redisplay",
+        "normalized_facts",
+        '["candidate","contest","status","source"]',
+        '["candidate","contest","status","source","extra"]',
       ),
     },
     {
@@ -3619,6 +3663,21 @@ const candidateVendorDecisionFailureCases: readonly CandidateVendorDecisionFailu
         "minimum_days",
         ">=30",
         "29",
+      ),
+    },
+    {
+      name: "rejects a string for a numeric cache minimum",
+      mutate: (evidence) => {
+        legalDecisionEvidence(evidence, "current_response_cache").minimum_days =
+          "30";
+      },
+      diagnostic: expectedDecisionDiagnostic(
+        "legal_minimum_not_met",
+        "legal_permission",
+        "current_response_cache",
+        "minimum_days",
+        ">=30",
+        "30",
       ),
     },
     {
@@ -4469,6 +4528,38 @@ describe("evaluateCandidateVendorDecision", () => {
     const serialized =
       candidateVendorDecisionApi.serializeCandidateVendorDecision(forward);
 
+    expect(forward).toEqual({
+      decision: "no_go",
+      technical_result: "pass",
+      rights_and_operations_result: "fail",
+      quote_approved: false,
+      diagnostics: [
+        expectedDecisionDiagnostic(
+          "legal_minimum_not_met",
+          "legal_permission",
+          "current_response_cache",
+          "minimum_days",
+          ">=30",
+          "29",
+        ),
+        expectedDecisionDiagnostic(
+          "operational_minimum_not_met",
+          "operational_commitment",
+          "content_refresh",
+          "maximum_interval_hours",
+          "<=24",
+          "25",
+        ),
+        expectedDecisionDiagnostic(
+          "quote_not_approved",
+          "quote",
+          null,
+          "quote_approved",
+          "true",
+          "false",
+        ),
+      ],
+    });
     expect(serialized).toBe(
       candidateVendorDecisionApi.serializeCandidateVendorDecision(reverse),
     );
