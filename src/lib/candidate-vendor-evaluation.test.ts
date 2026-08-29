@@ -1730,6 +1730,25 @@ describe("validateCandidateComparisonSet", () => {
     expect(validateCandidateComparisonSet(value)).toBe(false);
   });
 
+  it("rejects more than 100 exhaustive records", () => {
+    const value = validCandidateComparisonSet();
+    const extra = structuredClone(value.records[0]!);
+    extra.record_key = "extra-federal-primary-ordinary-101";
+    extra.contest_key = "contest-extra-federal-primary-ordinary-101";
+    extra.candidate_name = "Candidate 101";
+    extra.official_ids[0]!.value = extra.record_key;
+    extra.sources[0]!.locator = "record extra-federal-primary-ordinary-101";
+    value.records.push(extra);
+    value.authority_assignments.push({
+      record_key: extra.record_key,
+      authority_id: "authority-1",
+      source_url: extra.sources[0]!.url,
+      locator: extra.sources[0]!.locator,
+    });
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
   it("rejects a per-cell stratum quota mutation", () => {
     const value = validCandidateComparisonSet();
     const index = recordIndex(value, "federal", "primary", "ordinary");
@@ -1831,6 +1850,14 @@ describe("validateCandidateComparisonSet", () => {
   it("rejects source retrieval after the set as-of instant", () => {
     const value = validCandidateComparisonSet();
     value.records[0]!.sources[0]!.retrieved_at = "2026-08-15T12:00:01Z";
+
+    expect(validateCandidateComparisonSet(value)).toBe(false);
+  });
+
+  it("rejects sub-millisecond source retrieval after the set as-of instant", () => {
+    const value = validCandidateComparisonSet();
+    value.as_of = "2026-08-15T12:00:00.0000Z";
+    value.records[0]!.sources[0]!.retrieved_at = "2026-08-15T12:00:00.0001Z";
 
     expect(validateCandidateComparisonSet(value)).toBe(false);
   });
@@ -2094,6 +2121,21 @@ describe("validateCandidateComparisonSet", () => {
         value.authorities.push({
           ...value.authorities[0]!,
           authority_id: "authority-11",
+        });
+        value.authority_assignments.find(
+          (assignment) => assignment.authority_id === "authority-1",
+        )!.authority_id = "authority-11";
+        return value;
+      },
+    ],
+    [
+      "a normalized split duplicate authority identity",
+      () => {
+        const value = validCandidateComparisonSet();
+        value.authorities.push({
+          ...value.authorities[0]!,
+          authority_id: "authority-11",
+          authority_name: "LOCAL\u2003ELECTION\u00a0AUTHORITY 1",
         });
         value.authority_assignments.find(
           (assignment) => assignment.authority_id === "authority-1",

@@ -372,7 +372,6 @@ function readComparisonRecords(
 ): readonly CandidateParticipation[] | null {
   const records: CandidateParticipation[] = [];
   const recordKeys = new Set<string>();
-  const asOfInstant = Date.parse(asOf);
   for (const value of values) {
     if (!validateCandidateParticipationValue(value)) {
       return null;
@@ -395,7 +394,7 @@ function readComparisonRecords(
     }
     for (const source of sources) {
       if (
-        Date.parse(source.retrieved_at) > asOfInstant ||
+        compareRfc3339Instants(source.retrieved_at, asOf) > 0 ||
         isFecHostname(new URL(source.url).hostname)
       ) {
         return null;
@@ -1259,4 +1258,22 @@ function isRfc3339(value: unknown): value is string {
     offsetHour <= 23 &&
     offsetMinute <= 59
   );
+}
+
+function compareRfc3339Instants(left: string, right: string): number {
+  const leftMilliseconds = Date.parse(left);
+  const rightMilliseconds = Date.parse(right);
+  if (leftMilliseconds !== rightMilliseconds) {
+    return leftMilliseconds < rightMilliseconds ? -1 : 1;
+  }
+
+  const leftFraction = /\.(\d+)/.exec(left)?.[1] ?? "";
+  const rightFraction = /\.(\d+)/.exec(right)?.[1] ?? "";
+  const width = Math.max(leftFraction.length, rightFraction.length);
+  const paddedLeft = leftFraction.padEnd(width, "0");
+  const paddedRight = rightFraction.padEnd(width, "0");
+  if (paddedLeft === paddedRight) {
+    return 0;
+  }
+  return paddedLeft < paddedRight ? -1 : 1;
 }
