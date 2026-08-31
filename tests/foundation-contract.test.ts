@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "884a5bf1f35d463f2e96ac91302ef123ff76d9fbb9c451b988d55ffe9ea18e41",
-  "ROADMAP.md": "bcf07e257c206b5c0625086b8cf05517d8d1350fc5b2f65af90bb3d292efb103",
+  "ROADMAP.md": "20611181da65da392605c9bf1d9c43be5da1d707b8cd0bc4f3b7faa4e21fd2cc",
 } as const
 
 function readRepositoryFile(path: string): string {
