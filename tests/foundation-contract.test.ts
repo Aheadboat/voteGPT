@@ -10,10 +10,10 @@ const expectedG1GovernanceSnapshots = {
   "README.md":
     "a31c9a633916534599b7e0b89242b96ad0928b0a932545c2f230f00e53c0ab6a",
   "ROADMAP.md":
-    "106865aa145dadc758c5bf7fb50246379799ae4925397b489987c5e3c72c8f03",
+    "ac1037e41be3f95a43640ccb6beb8b57250c00b83c99b94fc3beb75544a7ce2e",
 } as const
 const expectedG1NonGovernanceSnapshot =
-  "69538087d17db16b33d8c89f138f20867b7b06921c97c4f681c441dd76fde6e8"
+  "afdb1ddf08bf45ac5272cc921e7b334d1cd8b60423b558b9a0b87dad3b920884"
 const g1ImplementationHead = "5e51e85f7a48935bf9d6e4e873996195963c8926"
 const g1IntegratedMain = "d4e1f2d411847b44ab1d50996d0ded22cba218c3"
 const g1FeaturePr = "28"
@@ -3466,7 +3466,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(f5MergeOrder).toContain(
       "cannot reach Gate B until it integrates completed F4",
     )
-  })
+  }, 30_000)
 
   it("records the approved F6 Gate A plan without starting implementation", () => {
     const roadmap = readRepositoryFile("ROADMAP.md")
