@@ -1,0 +1,27 @@
+{
+  "vendor_id": "synthetic-candidate-provider",
+  "records": [
+    {
+      "vendor_record_id": "synthetic-record-template",
+      "contest_key": "synthetic-contest",
+      "candidate_name": "Synthetic Candidate",
+      "official_ids": [],
+      "jurisdiction": "ocd-division/country:us/state:ct/place:synthetic",
+      "election_date": "2024-11-05",
+      "office": "Synthetic Office",
+      "district": "1",
+      "level": "local",
+      "stage": "general",
+      "lifecycle_status": "qualified",
+      "ballot_appearance": "printed",
+      "party_lines": ["Synthetic Party"],
+      "sources": [
+        {
+          "url": "https://synthetic.vendor.example/candidate-records",
+          "retrieved_at": "2026-08-15T12:00:00Z",
+          "locator": "synthetic candidate record"
+        }
+      ]
+    }
+  ]
+}

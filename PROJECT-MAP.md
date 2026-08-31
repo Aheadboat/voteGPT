@@ -29,6 +29,10 @@ Start: [officials component](src/components/federal-officials.tsx), [officials s
 
 Start: [dashboard](src/app/dashboard/page.tsx), [government navigation](src/components/government-navigation.tsx), [State officials](src/components/state-officials.tsx). Adjacent: [State domain](src/lib/state-officials.ts), [OpenStates adapter](src/lib/openstates.ts), [State source trust policy](src/lib/state-source-policy.ts), [State cache service](src/lib/state-officials-service.ts). Check: `npm.cmd test -- src/components/government-navigation.test.tsx src/components/state-officials.test.tsx src/lib/state-officials-service.test.ts`.
 
+### Candidate-data vendor decision
+
+Start: [public-evidence decision](G1-VENDOR-DECISION.md). Check: `npm.cmd test -- tests/g1-vendor-decision.test.ts`.
+
 ### Persistence
 
 Start: [database schema](src/db/schema.ts), [database access](src/db/index.ts). Adjacent: [latest migration](drizzle/0004_state_official_cache.sql), [State-cache integration contract](integration/state-official-cache.test.ts). Check: `npm.cmd test -- src/db/index.test.ts`.
