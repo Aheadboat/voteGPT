@@ -10,10 +10,10 @@ const expectedG1GovernanceSnapshots = {
   "README.md":
     "a31c9a633916534599b7e0b89242b96ad0928b0a932545c2f230f00e53c0ab6a",
   "ROADMAP.md":
-    "cd0fc36c802bf0df2bbd6f3c71808b04e071b2b85a7766def0265bf233372a54",
+    "106865aa145dadc758c5bf7fb50246379799ae4925397b489987c5e3c72c8f03",
 } as const
 const expectedG1NonGovernanceSnapshot =
-  "e52fe2132032c0027f944fbe2f54629187cee73f83f27c028cae8c376434fe33"
+  "69538087d17db16b33d8c89f138f20867b7b06921c97c4f681c441dd76fde6e8"
 const g1ImplementationHead = "5e51e85f7a48935bf9d6e4e873996195963c8926"
 const g1IntegratedMain = "d4e1f2d411847b44ab1d50996d0ded22cba218c3"
 const g1FeaturePr = "28"
@@ -27,6 +27,19 @@ const g1NextGate =
   "Human Gate B — after offline G1-T1 through G1-T4/G1-T7 reach `VERIFIED`, the feature PR has successful hosted CI and mergeability, and independent review has no unresolved Critical or Important finding, approve or reject the delivered behavior before merge. G1-T5/T6 external vendor actions remain separately unapproved."
 const g1VerifiedReadmeStatus =
   "## Status\n\nR0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is active in `VERIFIED` on [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) at immutable reviewed implementation head `5e51e85f7a48935bf9d6e4e873996195963c8926`; both exact-head hosted CI triggers passed, GitHub reported `CLEAN` and `MERGEABLE`, and independent exact-diff review found no unresolved Critical, Important, or Minor finding. The coordinator-only G1-T8 lifecycle guard is added on top, and its final PR head still requires fresh exact-head hosted CI, renewed independent review, and mergeability before Human Gate B; G1 has not merged and is not `DONE`. Its durable decision remains a public-source-fallback `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.\n\n"
+const g1VerifiedReadmeClause = g1VerifiedReadmeStatus
+  .slice(g1VerifiedReadmeStatus.indexOf("G1 —"))
+  .trim()
+
+function g1CompletedReadmeClause(closeoutPr: string): string {
+  return (
+    "G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #" +
+    closeoutPr +
+    "](https://github.com/Aheadboat/voteGPT/pull/" +
+    closeoutPr +
+    "); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved."
+  )
+}
 
 function readRepositoryFile(path: string): string {
   return readFileSync(resolve(repositoryRoot, path), "utf8")
@@ -112,6 +125,7 @@ function gitObjectSha(type: "blob" | "tree", contents: Buffer): string {
 }
 
 type GitCommitRecord = {
+  message: string
   parents: string[]
   tree: string
 }
@@ -137,7 +151,13 @@ function readGitCommitRecord(revision: string): GitCommitRecord {
       encoding: "utf8",
     },
   ).replace(/\r\n/g, "\n")
-  const header = contents.slice(0, contents.indexOf("\n\n"))
+  const separator = contents.indexOf("\n\n")
+
+  if (separator === -1) {
+    throw new Error("Git commit has no header separator for " + revision)
+  }
+
+  const header = contents.slice(0, separator)
   const lines = header.split("\n")
   const treeLines = lines.filter((line) => line.startsWith("tree "))
   const parentLines = lines.filter((line) => line.startsWith("parent "))
@@ -151,6 +171,7 @@ function readGitCommitRecord(revision: string): GitCommitRecord {
   }
 
   return {
+    message: contents.slice(separator + 2),
     parents: parentLines.map((line) => line.slice("parent ".length)),
     tree: treeLines[0].slice("tree ".length),
   }
@@ -191,90 +212,246 @@ type GitHubLifecycleEvent = {
   number?: unknown
   pull_request?: {
     base?: { ref?: unknown; sha?: unknown }
-    head?: { ref?: unknown; sha?: unknown }
+    head?: {
+      label?: unknown
+      ref?: unknown
+      repo?: { full_name?: unknown }
+      sha?: unknown
+    }
   }
 }
 
-function expectG1TerminalGitHubAnchor(
-  mergeCommit: string,
-  closeoutPr: string,
-  terminalCommit: string,
-  terminalParents: string[],
-): void {
+type GitHubLifecycleContext = {
+  event: GitHubLifecycleEvent
+  eventName: string
+  ref: string | undefined
+  sha: string | undefined
+}
+
+type G1TerminalRuntime = {
+  branch: string
+  closeoutBranchTip?: string
+  github?: GitHubLifecycleContext
+  mainCommit: string
+}
+
+type G1TerminalBase = {
+  commit: string
+  topology: "ancestry" | "direct"
+}
+
+function readGitHubLifecycleContext(): GitHubLifecycleContext | undefined {
   const eventName = process.env.GITHUB_EVENT_NAME
   const eventPath = process.env.GITHUB_EVENT_PATH
 
   if (!eventName && !eventPath) {
-    const branch = execFileSync("git", ["branch", "--show-current"], {
-      cwd: repositoryRoot,
-      encoding: "utf8",
-    }).trim()
-
-    if (branch === "codex/g1-closeout") {
-      expect(terminalParents, "local G1 closeout commit parents").toHaveLength(
-        1,
-      )
-      return
-    }
-    if (branch === "main") {
-      expect(terminalParents, "local G1 closeout merge parents").toHaveLength(2)
-      return
-    }
-    throw new Error("G1 terminal state is on an unsupported local branch")
+    return undefined
   }
   if (!eventName || !eventPath) {
     throw new Error("Incomplete GitHub event context for G1 closeout")
   }
 
-  const event = JSON.parse(
-    readFileSync(eventPath, "utf8"),
-  ) as GitHubLifecycleEvent
-  const githubRef = process.env.GITHUB_REF
-  const githubSha = process.env.GITHUB_SHA
+  return {
+    event: JSON.parse(readFileSync(eventPath, "utf8")) as GitHubLifecycleEvent,
+    eventName,
+    ref: process.env.GITHUB_REF,
+    sha: process.env.GITHUB_SHA,
+  }
+}
 
-  expect(githubSha, "GitHub terminal SHA").toBe(terminalCommit)
+function ensureG1MainHistoryAvailable(): void {
+  const shallow = execFileSync(
+    "git",
+    ["rev-parse", "--is-shallow-repository"],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    },
+  ).trim()
 
-  if (eventName === "pull_request") {
-    expect(
-      terminalParents,
-      "G1 closeout pull-request merge parents",
-    ).toHaveLength(2)
-    expect(terminalParents[1], "G1 closeout pull-request head parent").toBe(
-      event.pull_request?.head?.sha,
-    )
-    expect(String(event.number), "G1 closeout pull request").toBe(closeoutPr)
-    expect(githubRef, "G1 closeout pull-request ref").toBe(
-      `refs/pull/${closeoutPr}/merge`,
-    )
-    expect(event.pull_request?.base?.ref, "G1 closeout base ref").toBe("main")
-    expect(event.pull_request?.base?.sha, "G1 closeout base SHA").toBe(
-      mergeCommit,
-    )
-    expect(event.pull_request?.head?.ref, "G1 closeout head ref").toBe(
-      "codex/g1-closeout",
-    )
+  if (shallow === "false") {
     return
   }
+  if (shallow !== "true") {
+    throw new Error("Invalid Git shallow-repository state")
+  }
 
-  if (eventName === "push") {
+  execFileSync(
+    "git",
+    [
+      "fetch",
+      "--no-tags",
+      "--unshallow",
+      "origin",
+      "+refs/heads/main:refs/remotes/origin/main",
+    ],
+    { cwd: repositoryRoot, stdio: "pipe" },
+  )
+}
+
+function fetchG1CloseoutBranchTip(): string {
+  execFileSync(
+    "git",
+    [
+      "fetch",
+      "--no-tags",
+      "origin",
+      "+refs/heads/codex/g1-closeout:refs/remotes/origin/codex/g1-closeout",
+    ],
+    { cwd: repositoryRoot, stdio: "pipe" },
+  )
+  return execFileSync(
+    "git",
+    ["rev-parse", "refs/remotes/origin/codex/g1-closeout"],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    },
+  ).trim()
+}
+
+function readG1TerminalRuntime(): G1TerminalRuntime {
+  const github = readGitHubLifecycleContext()
+  ensureG1MainHistoryAvailable()
+  const needsCloseoutTip =
+    github?.eventName === "pull_request" ||
+    (github?.eventName === "push" &&
+      github.ref === "refs/heads/codex/g1-closeout")
+
+  return {
+    branch: execFileSync("git", ["branch", "--show-current"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).trim(),
+    closeoutBranchTip: needsCloseoutTip
+      ? fetchG1CloseoutBranchTip()
+      : undefined,
+    github,
+    mainCommit: execFileSync("git", ["rev-parse", "refs/remotes/origin/main"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).trim(),
+  }
+}
+
+function expectG1TerminalEventAnchor(
+  closeoutPr: string,
+  terminalCommit: string,
+  terminalRecord: GitCommitRecord,
+  runtime: G1TerminalRuntime,
+): G1TerminalBase {
+  const { github } = runtime
+
+  if (!github) {
+    if (runtime.branch === "codex/g1-closeout") {
+      expect(
+        terminalRecord.parents.length,
+        "local G1 closeout commit must have a parent",
+      ).toBeGreaterThan(0)
+      expectNonzeroSha(runtime.mainCommit, "local G1 closeout base")
+      return { commit: runtime.mainCommit, topology: "ancestry" }
+    }
+    if (runtime.branch === "main") {
+      expect(
+        terminalRecord.parents,
+        "local G1 closeout merge parents",
+      ).toHaveLength(2)
+      expect(terminalRecord.message.split("\n", 1)[0]).toBe(
+        `Merge pull request #${closeoutPr} from Aheadboat/codex/g1-closeout`,
+      )
+      return { commit: terminalRecord.parents[0], topology: "direct" }
+    }
+    throw new Error("G1 terminal state is on an unsupported local branch")
+  }
+
+  expect(github.sha, "GitHub terminal SHA").toBe(terminalCommit)
+
+  if (github.eventName === "pull_request") {
+    expect(
+      terminalRecord.parents,
+      "G1 closeout pull-request merge parents",
+    ).toHaveLength(2)
+    expect(
+      terminalRecord.parents[0],
+      "G1 closeout pull-request base parent",
+    ).toBe(github.event.pull_request?.base?.sha)
+    expect(
+      terminalRecord.parents[1],
+      "G1 closeout pull-request head parent",
+    ).toBe(github.event.pull_request?.head?.sha)
+    expect(String(github.event.number), "G1 closeout pull request").toBe(
+      closeoutPr,
+    )
+    expect(github.ref, "G1 closeout pull-request ref").toBe(
+      `refs/pull/${closeoutPr}/merge`,
+    )
+    expect(github.event.pull_request?.base?.ref, "G1 closeout base ref").toBe(
+      "main",
+    )
+    expect(github.event.pull_request?.head?.ref, "G1 closeout head ref").toBe(
+      "codex/g1-closeout",
+    )
+    expect(
+      github.event.pull_request?.head?.label,
+      "G1 closeout head label",
+    ).toBe("Aheadboat:codex/g1-closeout")
+    expect(
+      github.event.pull_request?.head?.repo?.full_name,
+      "G1 closeout head repository",
+    ).toBe("Aheadboat/voteGPT")
+    expect(runtime.closeoutBranchTip, "G1 closeout remote branch tip").toBe(
+      github.event.pull_request?.head?.sha,
+    )
+    const base = github.event.pull_request?.base?.sha
+
+    if (typeof base !== "string") {
+      throw new Error("Missing G1 closeout pull-request base SHA")
+    }
+    expectNonzeroSha(base, "G1 closeout pull-request base")
+    return { commit: base, topology: "direct" }
+  }
+
+  if (github.eventName === "push") {
     expect(
       ["refs/heads/codex/g1-closeout", "refs/heads/main"],
       "G1 closeout push ref",
-    ).toContain(githubRef)
-    expect(event.after, "G1 closeout pushed SHA").toBe(terminalCommit)
+    ).toContain(github.ref)
+    expect(github.event.after, "G1 closeout pushed SHA").toBe(terminalCommit)
 
-    if (githubRef === "refs/heads/main") {
-      expect(terminalParents, "G1 closeout main merge parents").toHaveLength(2)
-      expect(event.before, "G1 closeout main predecessor").toBe(mergeCommit)
-    } else {
-      expect(terminalParents, "G1 closeout branch commit parents").toHaveLength(
-        1,
+    if (github.ref === "refs/heads/main") {
+      expect(
+        terminalRecord.parents,
+        "G1 closeout main merge parents",
+      ).toHaveLength(2)
+      expect(github.event.before, "G1 closeout main predecessor").toBe(
+        terminalRecord.parents[0],
       )
+      expect(terminalRecord.message.split("\n", 1)[0]).toBe(
+        `Merge pull request #${closeoutPr} from Aheadboat/codex/g1-closeout`,
+      )
+      const base = github.event.before
+
+      if (typeof base !== "string") {
+        throw new Error("Missing G1 closeout main predecessor")
+      }
+      expectNonzeroSha(base, "G1 closeout main predecessor")
+      return { commit: base, topology: "direct" }
     }
-    return
+
+    expect(
+      terminalRecord.parents.length,
+      "G1 closeout branch commit must have a parent",
+    ).toBeGreaterThan(0)
+    expect(runtime.closeoutBranchTip, "G1 closeout pushed branch tip").toBe(
+      terminalCommit,
+    )
+    expectNonzeroSha(runtime.mainCommit, "G1 closeout branch base")
+    return { commit: runtime.mainCommit, topology: "ancestry" }
   }
 
-  throw new Error("Unsupported GitHub event for G1 closeout: " + eventName)
+  throw new Error(
+    "Unsupported GitHub event for G1 closeout: " + github.eventName,
+  )
 }
 
 function expectG1TerminalGitAnchor(
@@ -283,35 +460,27 @@ function expectG1TerminalGitAnchor(
   secondParent: string,
   mergeTree: string,
   closeoutPr: string,
-): void {
+  reconstructedRoadmap: string,
+  reconstructedReadme: string,
+): { readme: string; roadmap: string } {
   expectOnlyG1GovernanceWorktreeChanges()
 
+  const runtime = readG1TerminalRuntime()
   const terminalCommit = readGitCommitRecord("HEAD")
   const terminalCommitSha = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: repositoryRoot,
     encoding: "utf8",
   }).trim()
-
-  expect(
-    terminalCommit.parents[0],
-    "G1 terminal checkout must descend directly from the recorded feature merge",
-  ).toBe(mergeCommit)
-  expectG1TerminalGitHubAnchor(
-    mergeCommit,
+  const closeout = expectG1TerminalEventAnchor(
     closeoutPr,
     terminalCommitSha,
-    terminalCommit.parents,
+    terminalCommit,
+    runtime,
   )
+  const closeoutBase = closeout.commit
 
-  if (!hasGitCommitObject(mergeCommit)) {
-    expect(
-      execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
-        cwd: repositoryRoot,
-        encoding: "utf8",
-      }).trim(),
-      "a missing G1 feature-merge object is allowed only in a shallow checkout",
-    ).toBe("true")
-    return
+  if (!hasGitCommitObject(mergeCommit) || !hasGitCommitObject(closeoutBase)) {
+    throw new Error("G1 closeout requires the feature merge and base commits")
   }
 
   const featureMerge = readGitCommitRecord(mergeCommit)
@@ -320,6 +489,54 @@ function expectG1TerminalGitAnchor(
     secondParent,
   ])
   expect(featureMerge.tree, "G1 feature-merge tree").toBe(mergeTree)
+
+  execFileSync(
+    "git",
+    ["merge-base", "--is-ancestor", mergeCommit, closeoutBase],
+    { cwd: repositoryRoot, stdio: "pipe" },
+  )
+  if (closeout.topology === "direct") {
+    expect(terminalCommit.parents[0], "G1 closeout direct base parent").toBe(
+      closeoutBase,
+    )
+  } else {
+    execFileSync(
+      "git",
+      ["merge-base", "--is-ancestor", closeoutBase, terminalCommitSha],
+      { cwd: repositoryRoot, stdio: "pipe" },
+    )
+  }
+  expect(
+    [
+      ...new Set(
+        readNullDelimitedGitPaths(["diff", "--name-only", "-z", closeoutBase]),
+      ),
+    ].sort(),
+    "G1 closeout changed paths against its actual base",
+  ).toEqual(["README.md", "ROADMAP.md"])
+
+  const closeoutBaseRecord = readGitCommitRecord(closeoutBase)
+  expect(
+    reconstructedPreCloseoutTreeSha(reconstructedRoadmap, reconstructedReadme),
+    "G1 closeout tree after reversing its two governance documents",
+  ).toBe(closeoutBaseRecord.tree)
+
+  const baseRoadmap = normalizeGovernanceDocument(
+    execFileSync("git", ["show", closeoutBase + ":ROADMAP.md"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }),
+  )
+  const baseReadme = normalizeGovernanceDocument(
+    execFileSync("git", ["show", closeoutBase + ":README.md"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }),
+  )
+  expect(reconstructedRoadmap, "G1 closeout base ROADMAP.md").toBe(baseRoadmap)
+  expect(reconstructedReadme, "G1 closeout base README.md").toBe(baseReadme)
+
+  return { readme: baseReadme, roadmap: baseRoadmap }
 }
 
 function reconstructedPreCloseoutTreeSha(
@@ -437,13 +654,19 @@ function parseCanonicalDate(value: string, label: string): number {
   return timestamp
 }
 
-function expectExactG1VerifiedState(roadmap: string, readme: string): void {
-  expect(
-    readG1NonGovernanceSnapshot(),
-    "exact G1 non-governance snapshot",
-  ).toBe(expectedG1NonGovernanceSnapshot)
-  expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
-  expectG1GovernanceSnapshot("README.md", readme)
+function expectG1VerifiedState(
+  roadmap: string,
+  readme: string,
+  exactSnapshots: boolean,
+): void {
+  if (exactSnapshots) {
+    expect(
+      readG1NonGovernanceSnapshot(),
+      "exact G1 non-governance snapshot",
+    ).toBe(expectedG1NonGovernanceSnapshot)
+    expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
+    expectG1GovernanceSnapshot("README.md", readme)
+  }
 
   const statuses = readRoadmapStatuses(roadmap)
   const item = readRoadmapItem(roadmap, "G1")
@@ -465,7 +688,13 @@ function expectExactG1VerifiedState(roadmap: string, readme: string): void {
   expect(readCoordinationField(item, "Post-merge evidence")).toBe("Pending.")
   expect(readCoordinationField(item, "Closeout PR/CI/merge")).toBe("Pending.")
   expect(readCoordinationField(item, "Next Human Gate")).toBe(g1NextGate)
-  expect(readMarkdownSection(readme, "## Status")).toBe(g1VerifiedReadmeStatus)
+  const readmeStatus = readMarkdownSection(readme, "## Status")
+
+  if (exactSnapshots) {
+    expect(readmeStatus).toBe(g1VerifiedReadmeStatus)
+  } else {
+    expect(readmeStatus.split(g1VerifiedReadmeClause)).toHaveLength(2)
+  }
   expect(item).toContain(
     "**Human Gate A approval:** The user approved the presented design and tests-first plan on 2026-08-15 PT.",
   )
@@ -503,7 +732,7 @@ function expectG1GovernanceLifecycle({
     expect(providedChangedFiles).toBeUndefined()
     expect(providedPreCloseoutReadme).toBeUndefined()
     expect(providedPreCloseoutRoadmap).toBeUndefined()
-    expectExactG1VerifiedState(normalizedRoadmap, normalizedReadme)
+    expectG1VerifiedState(normalizedRoadmap, normalizedReadme, true)
     return true
   }
 
@@ -700,23 +929,23 @@ function expectG1GovernanceLifecycle({
     reconstructedItem,
     "G1 roadmap item",
   )
-  const expectedCompletedReadmeStatus =
-    "## Status\n\nR0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #" +
-    closeoutPrLabel +
-    "](https://github.com/Aheadboat/voteGPT/pull/" +
-    closeoutPrLabel +
-    "); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.\n\n"
-  expect(readMarkdownSection(normalizedReadme, "## Status")).toBe(
-    expectedCompletedReadmeStatus,
+  const expectedCompletedReadmeClause = g1CompletedReadmeClause(closeoutPrLabel)
+  const completedReadmeStatus = readMarkdownSection(
+    normalizedReadme,
+    "## Status",
+  )
+  const reconstructedReadmeStatus = replaceExactlyOnce(
+    completedReadmeStatus,
+    expectedCompletedReadmeClause,
+    g1VerifiedReadmeClause,
+    "G1 README status clause",
   )
   const reconstructedReadme = replaceExactlyOnce(
     normalizedReadme,
-    expectedCompletedReadmeStatus,
-    g1VerifiedReadmeStatus,
-    "G1 README status",
+    completedReadmeStatus,
+    reconstructedReadmeStatus,
+    "G1 README status section",
   )
-
-  expectExactG1VerifiedState(reconstructedRoadmap, reconstructedReadme)
 
   if (hasExplicitContext) {
     if (!providedPreCloseoutRoadmap || !providedPreCloseoutReadme) {
@@ -729,21 +958,18 @@ function expectG1GovernanceLifecycle({
     expect(normalizeGovernanceDocument(providedPreCloseoutReadme)).toBe(
       reconstructedReadme,
     )
+    expectG1VerifiedState(reconstructedRoadmap, reconstructedReadme, true)
   } else {
-    expect(
-      reconstructedPreCloseoutTreeSha(
-        reconstructedRoadmap,
-        reconstructedReadme,
-      ),
-      "G1 closeout may change only ROADMAP.md and README.md",
-    ).toBe(mergeTree)
-    expectG1TerminalGitAnchor(
+    const base = expectG1TerminalGitAnchor(
       mergeCommit,
       firstParent,
       secondParent,
       mergeTree,
       closeoutPrLabel,
+      reconstructedRoadmap,
+      reconstructedReadme,
     )
+    expectG1VerifiedState(base.roadmap, base.readme, false)
   }
 
   return true
@@ -1261,16 +1487,17 @@ describe("concurrent roadmap delivery contract", () => {
       completedItem,
     )
     const verifiedStatus = readMarkdownSection(preCloseoutReadme, "## Status")
-    const completedStatus = [
-      "## Status",
-      "",
-      "R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #29](https://github.com/Aheadboat/voteGPT/pull/29); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-      "",
-      "",
-    ].join("\n")
-    const completedReadme = preCloseoutReadme.replace(
+    const completedStatus = replaceExactlyOnce(
+      verifiedStatus,
+      g1VerifiedReadmeClause,
+      g1CompletedReadmeClause("29"),
+      "synthetic G1 README status clause",
+    )
+    const completedReadme = replaceExactlyOnce(
+      preCloseoutReadme,
       verifiedStatus,
       completedStatus,
+      "synthetic G1 README status section",
     )
 
     expect(completedRoadmap).not.toBe(preCloseoutRoadmap)
@@ -1868,6 +2095,153 @@ describe("concurrent roadmap delivery contract", () => {
           roadmap: completedRoadmap,
         }),
       ).toBe(true)
+
+      const syntheticBase = "3333333333333333333333333333333333333333"
+      const syntheticCloseoutHead = "4444444444444444444444444444444444444444"
+      const syntheticTerminal = "5555555555555555555555555555555555555555"
+      const syntheticTree = "6666666666666666666666666666666666666666"
+      const pullRequestRecord: GitCommitRecord = {
+        message: "Synthetic pull-request merge\n",
+        parents: [syntheticBase, syntheticCloseoutHead],
+        tree: syntheticTree,
+      }
+      const pullRequestRuntime: G1TerminalRuntime = {
+        branch: "",
+        closeoutBranchTip: syntheticCloseoutHead,
+        github: {
+          event: {
+            number: 29,
+            pull_request: {
+              base: { ref: "main", sha: syntheticBase },
+              head: {
+                label: "Aheadboat:codex/g1-closeout",
+                ref: "codex/g1-closeout",
+                repo: { full_name: "Aheadboat/voteGPT" },
+                sha: syntheticCloseoutHead,
+              },
+            },
+          },
+          eventName: "pull_request",
+          ref: "refs/pull/29/merge",
+          sha: syntheticTerminal,
+        },
+        mainCommit: syntheticBase,
+      }
+      expect(
+        expectG1TerminalEventAnchor(
+          "29",
+          syntheticTerminal,
+          pullRequestRecord,
+          pullRequestRuntime,
+        ),
+      ).toEqual({ commit: syntheticBase, topology: "direct" })
+
+      const branchPushRecord: GitCommitRecord = {
+        message: "Resolve closeout conflict\n",
+        parents: [syntheticCloseoutHead, syntheticBase],
+        tree: syntheticTree,
+      }
+      const branchPushRuntime: G1TerminalRuntime = {
+        branch: "codex/g1-closeout",
+        closeoutBranchTip: syntheticTerminal,
+        github: {
+          event: { after: syntheticTerminal, before: syntheticCloseoutHead },
+          eventName: "push",
+          ref: "refs/heads/codex/g1-closeout",
+          sha: syntheticTerminal,
+        },
+        mainCommit: syntheticBase,
+      }
+      expect(
+        expectG1TerminalEventAnchor(
+          "29",
+          syntheticTerminal,
+          branchPushRecord,
+          branchPushRuntime,
+        ),
+      ).toEqual({ commit: syntheticBase, topology: "ancestry" })
+
+      const mainPushRecord: GitCommitRecord = {
+        message:
+          "Merge pull request #29 from Aheadboat/codex/g1-closeout\n\nG1 closeout\n",
+        parents: [syntheticBase, syntheticCloseoutHead],
+        tree: syntheticTree,
+      }
+      const mainPushRuntime: G1TerminalRuntime = {
+        branch: "main",
+        github: {
+          event: { after: syntheticTerminal, before: syntheticBase },
+          eventName: "push",
+          ref: "refs/heads/main",
+          sha: syntheticTerminal,
+        },
+        mainCommit: syntheticTerminal,
+      }
+      expect(
+        expectG1TerminalEventAnchor(
+          "29",
+          syntheticTerminal,
+          mainPushRecord,
+          mainPushRuntime,
+        ),
+      ).toEqual({ commit: syntheticBase, topology: "direct" })
+
+      for (const invalidAnchor of [
+        () =>
+          expectG1TerminalEventAnchor(
+            "30",
+            syntheticTerminal,
+            pullRequestRecord,
+            pullRequestRuntime,
+          ),
+        () =>
+          expectG1TerminalEventAnchor(
+            "29",
+            syntheticTerminal,
+            { ...pullRequestRecord, parents: [syntheticCloseoutHead] },
+            pullRequestRuntime,
+          ),
+        () =>
+          expectG1TerminalEventAnchor(
+            "29",
+            syntheticTerminal,
+            pullRequestRecord,
+            {
+              ...pullRequestRuntime,
+              closeoutBranchTip: syntheticBase,
+            },
+          ),
+        () =>
+          expectG1TerminalEventAnchor(
+            "29",
+            syntheticTerminal,
+            branchPushRecord,
+            {
+              ...branchPushRuntime,
+              github: {
+                ...branchPushRuntime.github!,
+                ref: "refs/heads/not-g1-closeout",
+              },
+            },
+          ),
+        () =>
+          expectG1TerminalEventAnchor(
+            "29",
+            syntheticTerminal,
+            { ...mainPushRecord, parents: [syntheticBase] },
+            mainPushRuntime,
+          ),
+        () =>
+          expectG1TerminalEventAnchor(
+            "29",
+            syntheticTerminal,
+            { ...mainPushRecord, message: "Fabricated direct merge\n" },
+            mainPushRuntime,
+          ),
+      ]) {
+        expect(invalidAnchor).toThrow()
+      }
+
       expect(() =>
         expectG1GovernanceLifecycle({
           readme: completedReadme,
