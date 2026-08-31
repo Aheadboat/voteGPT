@@ -7,9 +7,26 @@ import { describe, expect, it } from "vitest"
 
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
-  "README.md": "884a5bf1f35d463f2e96ac91302ef123ff76d9fbb9c451b988d55ffe9ea18e41",
-  "ROADMAP.md": "20611181da65da392605c9bf1d9c43be5da1d707b8cd0bc4f3b7faa4e21fd2cc",
+  "README.md":
+    "a31c9a633916534599b7e0b89242b96ad0928b0a932545c2f230f00e53c0ab6a",
+  "ROADMAP.md":
+    "cd0fc36c802bf0df2bbd6f3c71808b04e071b2b85a7766def0265bf233372a54",
 } as const
+const expectedG1NonGovernanceSnapshot =
+  "e52fe2132032c0027f944fbe2f54629187cee73f83f27c028cae8c376434fe33"
+const g1ImplementationHead = "5e51e85f7a48935bf9d6e4e873996195963c8926"
+const g1IntegratedMain = "d4e1f2d411847b44ab1d50996d0ded22cba218c3"
+const g1FeaturePr = "28"
+const g1InitialPushRun = "33361506030"
+const g1InitialPullRequestRun = "33361531224"
+const g1VerifiedFeatureEvidence =
+  "[PR #28](https://github.com/Aheadboat/voteGPT/pull/28) contains immutable implementation evidence at reviewed head `5e51e85f7a48935bf9d6e4e873996195963c8926`. Exact-head push [run `33361506030`](https://github.com/Aheadboat/voteGPT/actions/runs/33361506030) and pull-request [run `33361531224`](https://github.com/Aheadboat/voteGPT/actions/runs/33361531224) each passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, typecheck, zero-warning lint, production build, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that head `CLEAN` and `MERGEABLE`; independent blocker-resolution review of the exact diff found no unresolved Critical, Important, or Minor finding. No formal GitHub review object is claimed. The coordinator-only G1-T8 guard is added on top; its final PR head must pass fresh exact-head hosted CI, renewed independent review, and mergeability before Human Gate B."
+const g1Blockers =
+  "None for the approved G1 scope. G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain unauthorized, and F7 remains inactive; reopening the decision or taking any external action requires separate explicit approval."
+const g1NextGate =
+  "Human Gate B — after offline G1-T1 through G1-T4/G1-T7 reach `VERIFIED`, the feature PR has successful hosted CI and mergeability, and independent review has no unresolved Critical or Important finding, approve or reject the delivered behavior before merge. G1-T5/T6 external vendor actions remain separately unapproved."
+const g1VerifiedReadmeStatus =
+  "## Status\n\nR0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is active in `VERIFIED` on [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) at immutable reviewed implementation head `5e51e85f7a48935bf9d6e4e873996195963c8926`; both exact-head hosted CI triggers passed, GitHub reported `CLEAN` and `MERGEABLE`, and independent exact-diff review found no unresolved Critical, Important, or Minor finding. The coordinator-only G1-T8 lifecycle guard is added on top, and its final PR head still requires fresh exact-head hosted CI, renewed independent review, and mergeability before Human Gate B; G1 has not merged and is not `DONE`. Its durable decision remains a public-source-fallback `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.\n\n"
 
 function readRepositoryFile(path: string): string {
   return readFileSync(resolve(repositoryRoot, path), "utf8")
@@ -17,17 +34,35 @@ function readRepositoryFile(path: string): string {
 
 function governanceSha256(contents: string): string {
   return createHash("sha256")
-    .update(contents.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"))
+    .update(normalizeGovernanceDocument(contents))
     .digest("hex")
+}
+
+function normalizeGovernanceDocument(contents: string): string {
+  if (/\r(?!\n)/u.test(contents)) {
+    throw new Error("Governance document contains a lone carriage return")
+  }
+
+  for (const character of contents) {
+    if (
+      /[\p{Z}\p{Cc}\p{Cf}]/u.test(character) &&
+      !" \t\r\n".includes(character)
+    ) {
+      throw new Error("Governance document contains an unsafe separator")
+    }
+  }
+
+  return contents.replace(/\r\n/g, "\n")
 }
 
 function expectG1GovernanceSnapshot(
   path: keyof typeof expectedG1GovernanceSnapshots,
   contents: string,
 ): void {
-  expect(governanceSha256(contents), path + " exact G1 governance snapshot").toBe(
-    expectedG1GovernanceSnapshots[path],
-  )
+  expect(
+    governanceSha256(contents),
+    path + " exact G1 governance snapshot",
+  ).toBe(expectedG1GovernanceSnapshots[path])
 }
 
 type G1GovernanceLifecycleContext = {
@@ -38,12 +73,679 @@ type G1GovernanceLifecycleContext = {
   roadmap: string
 }
 
+function replaceExactlyOnce(
+  contents: string,
+  before: string,
+  after: string,
+  label: string,
+): string {
+  const first = contents.indexOf(before)
+
+  if (first === -1 || first !== contents.lastIndexOf(before)) {
+    throw new Error("Expected exactly one " + label)
+  }
+
+  return (
+    contents.slice(0, first) + after + contents.slice(first + before.length)
+  )
+}
+
+function replaceCoordinationField(
+  item: string,
+  label: string,
+  value: string,
+): string {
+  const current = `- **${label}:** ${readCoordinationField(item, label)}`
+  return replaceExactlyOnce(
+    item,
+    current,
+    `- **${label}:** ${value}`,
+    "G1 coordination field " + label,
+  )
+}
+
+function gitObjectSha(type: "blob" | "tree", contents: Buffer): string {
+  return createHash("sha1")
+    .update(Buffer.from(`${type} ${contents.length}\0`, "utf8"))
+    .update(contents)
+    .digest("hex")
+}
+
+type GitCommitRecord = {
+  parents: string[]
+  tree: string
+}
+
+function hasGitCommitObject(revision: string): boolean {
+  try {
+    execFileSync("git", ["cat-file", "-e", revision + "^{commit}"], {
+      cwd: repositoryRoot,
+      stdio: "ignore",
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function readGitCommitRecord(revision: string): GitCommitRecord {
+  const contents = execFileSync(
+    "git",
+    ["cat-file", "-p", revision + "^{commit}"],
+    {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    },
+  ).replace(/\r\n/g, "\n")
+  const header = contents.slice(0, contents.indexOf("\n\n"))
+  const lines = header.split("\n")
+  const treeLines = lines.filter((line) => line.startsWith("tree "))
+  const parentLines = lines.filter((line) => line.startsWith("parent "))
+
+  if (
+    treeLines.length !== 1 ||
+    !/^tree [0-9a-f]{40}$/.test(treeLines[0]) ||
+    parentLines.some((line) => !/^parent [0-9a-f]{40}$/.test(line))
+  ) {
+    throw new Error("Invalid Git commit header for " + revision)
+  }
+
+  return {
+    parents: parentLines.map((line) => line.slice("parent ".length)),
+    tree: treeLines[0].slice("tree ".length),
+  }
+}
+
+function readNullDelimitedGitPaths(arguments_: string[]): string[] {
+  return execFileSync("git", arguments_, {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean)
+}
+
+function expectOnlyG1GovernanceWorktreeChanges(): void {
+  const paths = [
+    ...readNullDelimitedGitPaths(["diff", "--name-only", "-z"]),
+    ...readNullDelimitedGitPaths(["diff", "--cached", "--name-only", "-z"]),
+    ...readNullDelimitedGitPaths([
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+    ]),
+  ]
+
+  for (const path of paths) {
+    expect(
+      ["README.md", "ROADMAP.md"],
+      "G1 closeout worktree change: " + path,
+    ).toContain(path)
+  }
+}
+
+type GitHubLifecycleEvent = {
+  after?: unknown
+  before?: unknown
+  number?: unknown
+  pull_request?: {
+    base?: { ref?: unknown; sha?: unknown }
+    head?: { ref?: unknown; sha?: unknown }
+  }
+}
+
+function expectG1TerminalGitHubAnchor(
+  mergeCommit: string,
+  closeoutPr: string,
+  terminalCommit: string,
+  terminalParents: string[],
+): void {
+  const eventName = process.env.GITHUB_EVENT_NAME
+  const eventPath = process.env.GITHUB_EVENT_PATH
+
+  if (!eventName && !eventPath) {
+    const branch = execFileSync("git", ["branch", "--show-current"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).trim()
+
+    if (branch === "codex/g1-closeout") {
+      expect(terminalParents, "local G1 closeout commit parents").toHaveLength(
+        1,
+      )
+      return
+    }
+    if (branch === "main") {
+      expect(terminalParents, "local G1 closeout merge parents").toHaveLength(2)
+      return
+    }
+    throw new Error("G1 terminal state is on an unsupported local branch")
+  }
+  if (!eventName || !eventPath) {
+    throw new Error("Incomplete GitHub event context for G1 closeout")
+  }
+
+  const event = JSON.parse(
+    readFileSync(eventPath, "utf8"),
+  ) as GitHubLifecycleEvent
+  const githubRef = process.env.GITHUB_REF
+  const githubSha = process.env.GITHUB_SHA
+
+  expect(githubSha, "GitHub terminal SHA").toBe(terminalCommit)
+
+  if (eventName === "pull_request") {
+    expect(
+      terminalParents,
+      "G1 closeout pull-request merge parents",
+    ).toHaveLength(2)
+    expect(terminalParents[1], "G1 closeout pull-request head parent").toBe(
+      event.pull_request?.head?.sha,
+    )
+    expect(String(event.number), "G1 closeout pull request").toBe(closeoutPr)
+    expect(githubRef, "G1 closeout pull-request ref").toBe(
+      `refs/pull/${closeoutPr}/merge`,
+    )
+    expect(event.pull_request?.base?.ref, "G1 closeout base ref").toBe("main")
+    expect(event.pull_request?.base?.sha, "G1 closeout base SHA").toBe(
+      mergeCommit,
+    )
+    expect(event.pull_request?.head?.ref, "G1 closeout head ref").toBe(
+      "codex/g1-closeout",
+    )
+    return
+  }
+
+  if (eventName === "push") {
+    expect(
+      ["refs/heads/codex/g1-closeout", "refs/heads/main"],
+      "G1 closeout push ref",
+    ).toContain(githubRef)
+    expect(event.after, "G1 closeout pushed SHA").toBe(terminalCommit)
+
+    if (githubRef === "refs/heads/main") {
+      expect(terminalParents, "G1 closeout main merge parents").toHaveLength(2)
+      expect(event.before, "G1 closeout main predecessor").toBe(mergeCommit)
+    } else {
+      expect(terminalParents, "G1 closeout branch commit parents").toHaveLength(
+        1,
+      )
+    }
+    return
+  }
+
+  throw new Error("Unsupported GitHub event for G1 closeout: " + eventName)
+}
+
+function expectG1TerminalGitAnchor(
+  mergeCommit: string,
+  firstParent: string,
+  secondParent: string,
+  mergeTree: string,
+  closeoutPr: string,
+): void {
+  expectOnlyG1GovernanceWorktreeChanges()
+
+  const terminalCommit = readGitCommitRecord("HEAD")
+  const terminalCommitSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  }).trim()
+
+  expect(
+    terminalCommit.parents[0],
+    "G1 terminal checkout must descend directly from the recorded feature merge",
+  ).toBe(mergeCommit)
+  expectG1TerminalGitHubAnchor(
+    mergeCommit,
+    closeoutPr,
+    terminalCommitSha,
+    terminalCommit.parents,
+  )
+
+  if (!hasGitCommitObject(mergeCommit)) {
+    expect(
+      execFileSync("git", ["rev-parse", "--is-shallow-repository"], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+      }).trim(),
+      "a missing G1 feature-merge object is allowed only in a shallow checkout",
+    ).toBe("true")
+    return
+  }
+
+  const featureMerge = readGitCommitRecord(mergeCommit)
+  expect(featureMerge.parents, "G1 feature-merge parents").toEqual([
+    firstParent,
+    secondParent,
+  ])
+  expect(featureMerge.tree, "G1 feature-merge tree").toBe(mergeTree)
+}
+
+function reconstructedPreCloseoutTreeSha(
+  roadmap: string,
+  readme: string,
+): string {
+  const replacements = new Map([
+    ["README.md", gitObjectSha("blob", Buffer.from(readme, "utf8"))],
+    ["ROADMAP.md", gitObjectSha("blob", Buffer.from(roadmap, "utf8"))],
+  ])
+  const seen = new Set<string>()
+  const entries = execFileSync("git", ["ls-tree", "-z", "HEAD"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean)
+    .map((entry) => {
+      const match = entry.match(
+        /^([0-9]{6}) (?:blob|tree|commit) ([0-9a-f]{40})\t([^\t\r\n]+)$/,
+      )
+
+      if (!match) {
+        throw new Error("Invalid HEAD root-tree entry")
+      }
+
+      const [, printedMode, originalObject, path] = match
+      const replacement = replacements.get(path)
+
+      if (replacement) {
+        seen.add(path)
+      }
+
+      const treeMode = printedMode.startsWith("0")
+        ? printedMode.slice(1)
+        : printedMode
+      return Buffer.concat([
+        Buffer.from(`${treeMode} ${path}\0`, "utf8"),
+        Buffer.from(replacement ?? originalObject, "hex"),
+      ])
+    })
+
+  expect([...seen].sort()).toEqual(["README.md", "ROADMAP.md"])
+  return gitObjectSha("tree", Buffer.concat(entries))
+}
+
+let cachedG1NonGovernanceSnapshot: string | undefined
+
+function readG1NonGovernanceSnapshot(): string {
+  if (cachedG1NonGovernanceSnapshot) {
+    return cachedG1NonGovernanceSnapshot
+  }
+
+  const snapshot = createHash("sha256")
+  const entries = execFileSync("git", ["ls-files", "--stage", "-z"], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+    .split("\0")
+    .filter(Boolean)
+
+  for (const entry of entries) {
+    const match = entry.match(/^([0-9]{6}) ([0-9a-f]{40}) ([0-3])\t(.+)$/)
+
+    if (!match || match[3] !== "0") {
+      throw new Error("Invalid or conflicted tracked-file entry")
+    }
+
+    const [, mode, objectId, , path] = match
+
+    if (path === "README.md" || path === "ROADMAP.md") {
+      continue
+    }
+
+    snapshot.update(`${mode} ${path}\0`, "utf8")
+
+    if (path === "tests/foundation-contract.test.ts") {
+      const source = normalizeGovernanceDocument(
+        readFileSync(resolve(repositoryRoot, path), "utf8"),
+      )
+      const normalizedSource = replaceExactlyOnce(
+        source,
+        `"${expectedG1NonGovernanceSnapshot}"`,
+        '"<G1_NON_GOVERNANCE_SNAPSHOT>"',
+        "G1 non-governance snapshot declaration",
+      )
+      snapshot.update(normalizedSource, "utf8")
+    } else {
+      snapshot.update(objectId, "utf8")
+    }
+
+    snapshot.update("\0", "utf8")
+  }
+
+  cachedG1NonGovernanceSnapshot = snapshot.digest("hex")
+  return cachedG1NonGovernanceSnapshot
+}
+
+function expectNonzeroSha(value: string, label: string): void {
+  expect(value, label).toMatch(/^[0-9a-f]{40}$/)
+  expect(value, label + " must not be all zeroes").not.toMatch(/^0{40}$/)
+}
+
+function parseCanonicalDate(value: string, label: string): number {
+  const timestamp = Date.parse(value + "T00:00:00.000Z")
+
+  if (
+    !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+    !Number.isFinite(timestamp) ||
+    new Date(timestamp).toISOString().slice(0, 10) !== value
+  ) {
+    throw new Error("Invalid " + label)
+  }
+
+  return timestamp
+}
+
+function expectExactG1VerifiedState(roadmap: string, readme: string): void {
+  expect(
+    readG1NonGovernanceSnapshot(),
+    "exact G1 non-governance snapshot",
+  ).toBe(expectedG1NonGovernanceSnapshot)
+  expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
+  expectG1GovernanceSnapshot("README.md", readme)
+
+  const statuses = readRoadmapStatuses(roadmap)
+  const item = readRoadmapItem(roadmap, "G1")
+  const activeIds = [...statuses]
+    .filter(([, status]) => status !== "TODO" && status !== "DONE")
+    .map(([id]) => id)
+
+  expect(statuses.get("G1")).toBe("VERIFIED")
+  expect(activeIds).toEqual(["G1"])
+  expect(item.split("\n", 1)[0]).toBe(
+    "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
+  )
+  expect(readCoordinationField(item, "Phase")).toBe("`VERIFIED`")
+  expect(readCoordinationField(item, "Feature PR/CI")).toBe(
+    g1VerifiedFeatureEvidence,
+  )
+  expect(readCoordinationField(item, "Blockers")).toBe(g1Blockers)
+  expect(readCoordinationField(item, "Feature merge")).toBe("Pending.")
+  expect(readCoordinationField(item, "Post-merge evidence")).toBe("Pending.")
+  expect(readCoordinationField(item, "Closeout PR/CI/merge")).toBe("Pending.")
+  expect(readCoordinationField(item, "Next Human Gate")).toBe(g1NextGate)
+  expect(readMarkdownSection(readme, "## Status")).toBe(g1VerifiedReadmeStatus)
+  expect(item).toContain(
+    "**Human Gate A approval:** The user approved the presented design and tests-first plan on 2026-08-15 PT.",
+  )
+  expect(item).toContain(
+    "G1-T5/T6 outreach, credentials, terms, a trial, vendor data, a quote, spend, production use, and every later roadmap item remain unapproved",
+  )
+
+  for (const id of [
+    "F7",
+    "F8",
+    "G2",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "F13",
+    "F14",
+  ]) {
+    expect(statuses.get(id), id + " must remain inactive").toBe("TODO")
+  }
+}
+
 function expectG1GovernanceLifecycle({
+  changedFiles: providedChangedFiles,
+  preCloseoutReadme: providedPreCloseoutReadme,
+  preCloseoutRoadmap: providedPreCloseoutRoadmap,
   readme,
   roadmap,
 }: G1GovernanceLifecycleContext): boolean {
-  expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
-  expectG1GovernanceSnapshot("README.md", readme)
+  const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
+  const normalizedReadme = normalizeGovernanceDocument(readme)
+  const status = readRoadmapStatuses(normalizedRoadmap).get("G1")
+
+  if (status === "VERIFIED") {
+    expect(providedChangedFiles).toBeUndefined()
+    expect(providedPreCloseoutReadme).toBeUndefined()
+    expect(providedPreCloseoutRoadmap).toBeUndefined()
+    expectExactG1VerifiedState(normalizedRoadmap, normalizedReadme)
+    return true
+  }
+
+  if (status !== "DONE") {
+    throw new Error("Unsupported G1 lifecycle status: " + String(status))
+  }
+
+  const providedContextCount = [
+    providedChangedFiles,
+    providedPreCloseoutReadme,
+    providedPreCloseoutRoadmap,
+  ].filter((value) => value !== undefined).length
+
+  if (providedContextCount !== 0 && providedContextCount !== 3) {
+    throw new Error("G1 closeout context must be complete or Git-derived")
+  }
+
+  const hasExplicitContext = providedContextCount === 3
+
+  if (hasExplicitContext) {
+    if (!providedChangedFiles) {
+      throw new Error("G1 closeout requires the changed-file set")
+    }
+
+    expect(providedChangedFiles).toHaveLength(2)
+    expect([...new Set(providedChangedFiles)].sort()).toEqual([
+      "README.md",
+      "ROADMAP.md",
+    ])
+  }
+
+  const statuses = readRoadmapStatuses(normalizedRoadmap)
+  const activeIds = [...statuses]
+    .filter(([, itemStatus]) => itemStatus !== "TODO" && itemStatus !== "DONE")
+    .map(([id]) => id)
+  const item = readRoadmapItem(normalizedRoadmap, "G1")
+  const featureEvidence = readCoordinationField(item, "Feature PR/CI")
+  const featureMerge = readCoordinationField(item, "Feature merge")
+  const postMerge = readCoordinationField(item, "Post-merge evidence")
+  const closeout = readCoordinationField(item, "Closeout PR/CI/merge")
+  const nextGate = readCoordinationField(item, "Next Human Gate")
+
+  expect(activeIds).toEqual([])
+  expect(item.split("\n", 1)[0]).toBe(
+    "## G1 — Candidate-Data Vendor Proof of Concept [DONE]",
+  )
+  expect(readCoordinationField(item, "Phase")).toBe("`DONE`")
+  expect(readCoordinationField(item, "Blockers")).toBe(g1Blockers)
+  expect(item).toContain(
+    "**Human Gate A approval:** The user approved the presented design and tests-first plan on 2026-08-15 PT.",
+  )
+  expect(statuses.get("F7")).toBe("TODO")
+
+  const featureMatch = featureEvidence.match(
+    /^\[PR #([1-9][0-9]*)\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/pull\/([1-9][0-9]*)\) merged after approved head `([0-9a-f]{40})` passed exact-head push \[run `([1-9][0-9]*)`\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/actions\/runs\/([1-9][0-9]*)\) and pull-request \[run `([1-9][0-9]*)`\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/actions\/runs\/([1-9][0-9]*)\); each passed migrations, 3\/3 PostgreSQL files with 37\/37 tests, 37\/37 non-E2E files with 1308\/1308 tests, typecheck, zero-warning lint, production build, 26\/26 Chromium journeys, and both disposable-database drops\. GitHub reported the approved head `CLEAN` and `MERGEABLE`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on ([0-9]{4}-[0-9]{2}-[0-9]{2})\.$/,
+  )
+
+  if (!featureMatch) {
+    throw new Error("Invalid G1 terminal feature evidence")
+  }
+
+  const [
+    ,
+    featurePrLabel,
+    featurePrUrl,
+    approvedHead,
+    pushRunLabel,
+    pushRunUrl,
+    pullRequestRunLabel,
+    pullRequestRunUrl,
+    gateBDate,
+  ] = featureMatch
+  expect(featurePrLabel).toBe(g1FeaturePr)
+  expect(featurePrUrl).toBe(featurePrLabel)
+  expectNonzeroSha(approvedHead, "G1 approved feature head")
+  expect(approvedHead).not.toBe(g1ImplementationHead)
+  expect(pushRunUrl).toBe(pushRunLabel)
+  expect(pullRequestRunUrl).toBe(pullRequestRunLabel)
+  expect(pushRunLabel).not.toBe(pullRequestRunLabel)
+  expect([pushRunLabel, pullRequestRunLabel]).not.toContain(g1InitialPushRun)
+  expect([pushRunLabel, pullRequestRunLabel]).not.toContain(
+    g1InitialPullRequestRun,
+  )
+
+  const mergeMatch = featureMerge.match(
+    /^\[PR #([1-9][0-9]*)\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/pull\/([1-9][0-9]*)\) merged to `main` as `([0-9a-f]{40})` on ([0-9]{4}-[0-9]{2}-[0-9]{2}) UTC; feature head `([0-9a-f]{40})` is reachable from `main`, and the merge commit has parents `([0-9a-f]{40})` and `([0-9a-f]{40})` with tree `([0-9a-f]{40})`\.$/,
+  )
+
+  if (!mergeMatch) {
+    throw new Error("Invalid G1 feature merge evidence")
+  }
+
+  const [
+    ,
+    mergePrLabel,
+    mergePrUrl,
+    mergeCommit,
+    mergeDate,
+    mergedHead,
+    firstParent,
+    secondParent,
+    mergeTree,
+  ] = mergeMatch
+  expect(mergePrLabel).toBe(g1FeaturePr)
+  expect(mergePrUrl).toBe(mergePrLabel)
+  expectNonzeroSha(mergeCommit, "G1 merge commit")
+  expectNonzeroSha(mergedHead, "G1 merged feature head")
+  expectNonzeroSha(firstParent, "G1 merge first parent")
+  expectNonzeroSha(secondParent, "G1 merge second parent")
+  expectNonzeroSha(mergeTree, "G1 merge tree")
+  expect(
+    new Set([mergeCommit, firstParent, secondParent, mergeTree]).size,
+    "G1 merge commit, parents, and tree must be distinct Git objects",
+  ).toBe(4)
+  expect(mergedHead).toBe(approvedHead)
+  expect(secondParent).toBe(approvedHead)
+  expect(firstParent).toBe(g1IntegratedMain)
+  expect(
+    parseCanonicalDate(gateBDate, "G1 Gate B date"),
+    "Human Gate B must precede or match the feature merge date",
+  ).toBeLessThanOrEqual(parseCanonicalDate(mergeDate, "G1 merge date"))
+
+  const postMergeMatch = postMerge.match(
+    /^Exact merged `main` `([0-9a-f]{40})` passed local `npm\.cmd run check` \(37 files\/1308 tests plus typecheck, zero-warning lint, and production build\), `npm\.cmd run db:check`, the focused G1 contract \(363\/363\), and the required local E2E guard `E2E database requires explicit destructive opt-in\.` Hosted post-merge push \[run `([1-9][0-9]*)`\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/actions\/runs\/([1-9][0-9]*)\) passed migrations, 3\/3 PostgreSQL files with 37\/37 tests, 37\/37 non-E2E files with 1308\/1308 tests, 26\/26 Chromium journeys, and both disposable-database drops\. After merge, `codegraph sync \.` and `codegraph status --json \.` reported ([1-9][0-9]*(?:,[0-9]{3})*) files, ([1-9][0-9]*(?:,[0-9]{3})*) nodes, ([1-9][0-9]*(?:,[0-9]{3})*) edges, zero pending files, no worktree mismatch, and no reindex recommendation\.$/,
+  )
+
+  if (!postMergeMatch) {
+    throw new Error("Invalid G1 post-merge evidence")
+  }
+
+  const [, postMergeMain, postMergeRunLabel, postMergeRunUrl] = postMergeMatch
+  expectNonzeroSha(postMergeMain, "G1 post-merge main")
+  expect(postMergeMain).toBe(mergeCommit)
+  expect(postMergeRunUrl).toBe(postMergeRunLabel)
+  expect(postMergeRunLabel).not.toBe(pushRunLabel)
+  expect(postMergeRunLabel).not.toBe(pullRequestRunLabel)
+  expect(postMergeRunLabel).not.toBe(g1InitialPushRun)
+  expect(postMergeRunLabel).not.toBe(g1InitialPullRequestRun)
+
+  const closeoutMatch = closeout.match(
+    /^\[PR #([1-9][0-9]*)\]\(https:\/\/github\.com\/Aheadboat\/voteGPT\/pull\/([1-9][0-9]*)\) changes only `ROADMAP\.md` and `README\.md`; current-head hosted CI and its merge provide final closeout proof\.$/,
+  )
+
+  if (!closeoutMatch) {
+    throw new Error("Invalid G1 closeout evidence")
+  }
+
+  const [, closeoutPrLabel, closeoutPrUrl] = closeoutMatch
+  expect(closeoutPrUrl).toBe(closeoutPrLabel)
+  expect(closeoutPrLabel).not.toBe(g1FeaturePr)
+  expect(nextGate).toBe(
+    "None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.",
+  )
+
+  let reconstructedItem = replaceExactlyOnce(
+    item,
+    "## G1 — Candidate-Data Vendor Proof of Concept [DONE]",
+    "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
+    "G1 lifecycle heading",
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Phase",
+    "`VERIFIED`",
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Feature PR/CI",
+    g1VerifiedFeatureEvidence,
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Feature merge",
+    "Pending.",
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Post-merge evidence",
+    "Pending.",
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Closeout PR/CI/merge",
+    "Pending.",
+  )
+  reconstructedItem = replaceCoordinationField(
+    reconstructedItem,
+    "Next Human Gate",
+    g1NextGate,
+  )
+  const reconstructedRoadmap = replaceExactlyOnce(
+    normalizedRoadmap,
+    item,
+    reconstructedItem,
+    "G1 roadmap item",
+  )
+  const expectedCompletedReadmeStatus =
+    "## Status\n\nR0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #" +
+    closeoutPrLabel +
+    "](https://github.com/Aheadboat/voteGPT/pull/" +
+    closeoutPrLabel +
+    "); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.\n\n"
+  expect(readMarkdownSection(normalizedReadme, "## Status")).toBe(
+    expectedCompletedReadmeStatus,
+  )
+  const reconstructedReadme = replaceExactlyOnce(
+    normalizedReadme,
+    expectedCompletedReadmeStatus,
+    g1VerifiedReadmeStatus,
+    "G1 README status",
+  )
+
+  expectExactG1VerifiedState(reconstructedRoadmap, reconstructedReadme)
+
+  if (hasExplicitContext) {
+    if (!providedPreCloseoutRoadmap || !providedPreCloseoutReadme) {
+      throw new Error("G1 closeout requires both pre-closeout documents")
+    }
+
+    expect(normalizeGovernanceDocument(providedPreCloseoutRoadmap)).toBe(
+      reconstructedRoadmap,
+    )
+    expect(normalizeGovernanceDocument(providedPreCloseoutReadme)).toBe(
+      reconstructedReadme,
+    )
+  } else {
+    expect(
+      reconstructedPreCloseoutTreeSha(
+        reconstructedRoadmap,
+        reconstructedReadme,
+      ),
+      "G1 closeout may change only ROADMAP.md and README.md",
+    ).toBe(mergeTree)
+    expectG1TerminalGitAnchor(
+      mergeCommit,
+      firstParent,
+      secondParent,
+      mergeTree,
+      closeoutPrLabel,
+    )
+  }
+
   return true
 }
 
@@ -160,9 +862,7 @@ function readRoadmapStatuses(contents: string): Map<string, string> {
     ...normalizedContents.matchAll(/^## ([RFG]\d+)\b.*\[([^\]]+)\]$/gm),
   ]
 
-  return new Map(
-    matches.map(([, id, status]) => [id, status] as const),
-  )
+  return new Map(matches.map(([, id, status]) => [id, status] as const))
 }
 
 function expectedActivePhase(status: string): string {
@@ -287,9 +987,9 @@ function expectF6Lifecycle({
 describe("development foundation", () => {
   it("permits named environment variables only when their values are empty", () => {
     expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=\n")).toEqual([])
-    expect(findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=https://example.com\n")).toEqual([
-      "CIVIC_PROVIDER_URL=https://example.com",
-    ])
+    expect(
+      findUnsafeEnvironmentEntries("CIVIC_PROVIDER_URL=https://example.com\n"),
+    ).toEqual(["CIVIC_PROVIDER_URL=https://example.com"])
     expect(findUnsafeEnvironmentEntries("civic_provider_url=\n")).toEqual([
       "civic_provider_url=",
     ])
@@ -336,9 +1036,7 @@ describe("development foundation", () => {
       "npx playwright install --with-deps chromium",
     ]
     const yamlBlockScalarIndicators = new Set(["|", ">-"])
-    const executableCommands = [
-      ...workflow.matchAll(/^\s*run:\s*(.+?)\s*$/gm),
-    ]
+    const executableCommands = [...workflow.matchAll(/^\s*run:\s*(.+?)\s*$/gm)]
       .map(([, command]) => command)
       .filter((command) => !yamlBlockScalarIndicators.has(command))
 
@@ -407,10 +1105,7 @@ describe("repository context and hygiene contract", () => {
 
     const projectMap = readFileSync(projectMapPath, "utf8")
     const startHere = readMarkdownSection(projectMap, "## Start here")
-    const capabilities = readMarkdownSection(
-      projectMap,
-      "## Capability routes",
-    )
+    const capabilities = readMarkdownSection(projectMap, "## Capability routes")
     const localLinks = readLocalMarkdownLinks(projectMap)
     const trackedFiles = readTrackedRepositoryFiles()
 
@@ -434,17 +1129,18 @@ describe("repository context and hygiene contract", () => {
       "Verification and delivery",
     ])
     for (const path of localLinks) {
-      expect(existsSync(resolve(repositoryRoot, path)), path + " must resolve").toBe(
-        true,
-      )
-      expect(trackedFiles.has(path), path + " must be tracked current code").toBe(
-        true,
-      )
+      expect(
+        existsSync(resolve(repositoryRoot, path)),
+        path + " must resolve",
+      ).toBe(true)
+      expect(
+        trackedFiles.has(path),
+        path + " must be tracked current code",
+      ).toBe(true)
     }
     expect(
       [...trackedFiles].filter(
-        (path) =>
-          path !== "PROJECT-MAP.md" && path.endsWith("/PROJECT-MAP.md"),
+        (path) => path !== "PROJECT-MAP.md" && path.endsWith("/PROJECT-MAP.md"),
       ),
       "no child map is earned yet",
     ).toEqual([])
@@ -492,11 +1188,7 @@ describe("repository context and hygiene contract", () => {
     expect(codeGraph).toMatch(
       /PROJECT-MAP\.md[^.\n]*(?:first|before)[^.\n]*(?:grep|find|reading (?:other )?files)/i,
     )
-    expectTokensInOrder(context, [
-      "PROJECT-MAP.md",
-      "CodeGraph",
-      "scoped `rg`",
-    ])
+    expectTokensInOrder(context, ["PROJECT-MAP.md", "CodeGraph", "scoped `rg`"])
     expect(context).toMatch(
       /(?:adding|moving|removing)[^.\n]*routing surface[^.\n]*PROJECT-MAP\.md[^.\n]*before `VERIFIED`/i,
     )
@@ -513,24 +1205,26 @@ describe("repository context and hygiene contract", () => {
 })
 
 describe("concurrent roadmap delivery contract", () => {
-  it("admits only the exact G1 closeout transition after a verified feature", () => {
-    const preCloseoutRoadmap = readRepositoryFile("ROADMAP.md").replace(
-      /\r\n/g,
-      "\n",
-    )
-    const preCloseoutReadme = readRepositoryFile("README.md").replace(
-      /\r\n/g,
-      "\n",
-    )
+  const buildG1CompletedProjection = (
+    preCloseoutRoadmap: string,
+    preCloseoutReadme: string,
+  ) => {
     const verifiedItem = readRoadmapItem(preCloseoutRoadmap, "G1")
-    const replaceField = (item: string, label: string, value: string): string => {
+    const replaceField = (
+      item: string,
+      label: string,
+      value: string,
+    ): string => {
       const current = `- **${label}:** ${readCoordinationField(item, label)}`
       expect(item, `missing G1 coordination field: ${label}`).toContain(current)
       return item.replace(current, `- **${label}:** ${value}`)
     }
     const approvedHead = "1111111111111111111111111111111111111111"
     const mergeCommit = "2222222222222222222222222222222222222222"
-    const mergeTree = "3333333333333333333333333333333333333333"
+    const mergeTree = reconstructedPreCloseoutTreeSha(
+      preCloseoutRoadmap,
+      preCloseoutReadme,
+    )
     let completedItem = verifiedItem.replace(
       "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
       "## G1 — Candidate-Data Vendor Proof of Concept [DONE]",
@@ -542,7 +1236,6 @@ describe("concurrent roadmap delivery contract", () => {
       "Feature PR/CI",
       `[PR #28](https://github.com/Aheadboat/voteGPT/pull/28) merged after approved head \`${approvedHead}\` passed exact-head push [run \`40000000001\`](https://github.com/Aheadboat/voteGPT/actions/runs/40000000001) and pull-request [run \`40000000002\`](https://github.com/Aheadboat/voteGPT/actions/runs/40000000002); each passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, typecheck, zero-warning lint, production build, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported the approved head \`CLEAN\` and \`MERGEABLE\`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on 2026-09-01.`,
     )
-    completedItem = replaceField(completedItem, "Blockers", "None; G1-T5/T6 vendor or external actions remain unauthorized, and F7 remains inactive.")
     completedItem = replaceField(
       completedItem,
       "Feature merge",
@@ -573,6 +1266,7 @@ describe("concurrent roadmap delivery contract", () => {
       "",
       "R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #29](https://github.com/Aheadboat/voteGPT/pull/29); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
       "",
+      "",
     ].join("\n")
     const completedReadme = preCloseoutReadme.replace(
       verifiedStatus,
@@ -582,16 +1276,8 @@ describe("concurrent roadmap delivery contract", () => {
     expect(completedRoadmap).not.toBe(preCloseoutRoadmap)
     expect(completedReadme).not.toBe(preCloseoutReadme)
 
-    expect(
-      expectG1GovernanceLifecycle({
-        changedFiles: ["README.md", "ROADMAP.md"],
-        preCloseoutReadme,
-        preCloseoutRoadmap,
-        readme: completedReadme,
-        roadmap: completedRoadmap,
-      }),
-    ).toBe(true)
-  })
+    return { completedReadme, completedRoadmap }
+  }
 
   it("accepts the exact F6 closeout lifecycle without activating a later item", () => {
     const completedItem = [
@@ -635,22 +1321,26 @@ describe("concurrent roadmap delivery contract", () => {
     ).toThrow("Unsupported F6 lifecycle status: TODO")
     for (const [valid, invalid] of [
       ["- **Phase:** `DONE`", "- **Phase:** `VERIFIED`"],
-      ["the user approved Human Gate B", "the user did not approve Human Gate B"],
+      [
+        "the user approved Human Gate B",
+        "the user did not approve Human Gate B",
+      ],
       ["merged to `main`", "has not merged to `main`"],
-      ["Hosted push [run `30764781792`]", "Hosted push [run `30764781792`] failed after"],
+      [
+        "Hosted push [run `30764781792`]",
+        "Hosted push [run `30764781792`] failed after",
+      ],
       [
         "current-head hosted CI and its merge provide final closeout proof",
         "current-head hosted CI and its merge remain Pending",
       ],
-      [
-        "this closeout activates no later item",
-        "this closeout activates G1",
-      ],
+      ["this closeout activates no later item", "this closeout activates G1"],
     ] as const) {
       const mutatedItem = completedItem.replace(valid, invalid)
-      expect(mutatedItem, `missing F6 lifecycle mutation text: ${valid}`).not.toBe(
-        completedItem,
-      )
+      expect(
+        mutatedItem,
+        `missing F6 lifecycle mutation text: ${valid}`,
+      ).not.toBe(completedItem)
       expect(() =>
         expectF6Lifecycle({
           activeIds: [],
@@ -737,12 +1427,9 @@ describe("concurrent roadmap delivery contract", () => {
 
     for (const admissionContract of [admission, executionAdmission]) {
       const pass =
-        admissionContract.match(
-          /`PASS`(?:(?!`CONDITIONAL`)[^\n])*/,
-        )?.[0] ?? ""
+        admissionContract.match(/`PASS`(?:(?!`CONDITIONAL`)[^\n])*/)?.[0] ?? ""
       const conditional =
-        admissionContract.match(/`CONDITIONAL`(?:(?!`FAIL`)[^\n])*/)?.[0] ??
-        ""
+        admissionContract.match(/`CONDITIONAL`(?:(?!`FAIL`)[^\n])*/)?.[0] ?? ""
       const fail = admissionContract.match(/`FAIL`[^\n]*/)?.[0] ?? ""
 
       expect(pass).toMatch(/settled interfaces|interfaces must be settled/)
@@ -877,9 +1564,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(delegation).toContain(
       "The coordinator owns dependency and concurrency audits",
     )
-    expect(delegation).toContain(
-      "does not implement feature production code",
-    )
+    expect(delegation).toContain("does not implement feature production code")
     expect(delegation).toContain(
       "cannot change roadmap status, merge, edit another worktree, or modify coordinator-owned authoritative files",
     )
@@ -1067,13 +1752,7 @@ describe("concurrent roadmap delivery contract", () => {
         "IN PROGRESS (REFACTOR)",
         "VERIFIED",
       ].map(expectedActivePhase),
-    ).toEqual([
-      "DISCOVER/DESIGN/PLAN",
-      "RED",
-      "GREEN",
-      "REFACTOR",
-      "VERIFIED",
-    ])
+    ).toEqual(["DISCOVER/DESIGN/PLAN", "RED", "GREEN", "REFACTOR", "VERIFIED"])
     expect(() => expectedActivePhase("IN PROGRESS (PROGRESS)")).toThrow(
       "Unsupported active roadmap status: IN PROGRESS (PROGRESS)",
     )
@@ -1100,27 +1779,411 @@ describe("concurrent roadmap delivery contract", () => {
 
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
-    expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
-    expectG1GovernanceSnapshot("README.md", readme)
+    const liveG1Status = readRoadmapStatuses(roadmap).get("G1")
+    expect(expectG1GovernanceLifecycle({ readme, roadmap })).toBe(true)
+    const headRoadmap = normalizeGovernanceDocument(
+      execFileSync("git", ["show", "HEAD:ROADMAP.md"], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+      }),
+    )
+    const headReadme = normalizeGovernanceDocument(
+      execFileSync("git", ["show", "HEAD:README.md"], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+      }),
+    )
+    const headTree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    }).trim()
+    expect(readGitCommitRecord("HEAD").tree).toBe(headTree)
+    expect(
+      reconstructedPreCloseoutTreeSha(headRoadmap, headReadme),
+      "root-tree reconstruction must match HEAD without parent history",
+    ).toBe(headTree)
 
     for (const [path, current, mutated] of [
-      ["ROADMAP.md", roadmap, roadmap + "\n- **Authorization:** F7 implementation is approved."],
-      ["ROADMAP.md", roadmap, roadmap.replace("## R0 — Durable Project Contract [DONE]", "## R0 — Durable Project Contract [TODO]")],
-      ["ROADMAP.md", roadmap, roadmap.replace("## G1 — Candidate-Data Vendor Proof of Concept", "## **G1 — Candidate-Data Vendor Proof of Concept**")],
+      [
+        "ROADMAP.md",
+        roadmap,
+        roadmap + "\n- **Authorization:** F7 implementation is approved.",
+      ],
+      [
+        "ROADMAP.md",
+        roadmap,
+        roadmap.replace(
+          "## R0 — Durable Project Contract [DONE]",
+          "## R0 — Durable Project Contract [TODO]",
+        ),
+      ],
+      [
+        "ROADMAP.md",
+        roadmap,
+        roadmap.replace(
+          "## G1 — Candidate-Data Vendor Proof of Concept",
+          "## **G1 — Candidate-Data Vendor Proof of Concept**",
+        ),
+      ],
       ["ROADMAP.md", roadmap, "<!--\n" + roadmap],
-      ["README.md", readme, readme + "\n### Vendor access\n\nCredentialed production use is approved."],
-      ["README.md", readme, readme + "\nStatus\n------\n\nVendor production access is approved."],
+      [
+        "README.md",
+        readme,
+        readme +
+          "\n### Vendor access\n\nCredentialed production use is approved.",
+      ],
+      [
+        "README.md",
+        readme,
+        readme + "\nStatus\n------\n\nVendor production access is approved.",
+      ],
       ["README.md", readme, "<!--\n" + readme],
     ] as const) {
       expect(mutated, path + " mutation must change the document").not.toBe(
         current,
       )
-      expect(() => expectG1GovernanceSnapshot(path, mutated)).toThrow()
+      expect(() =>
+        expectG1GovernanceLifecycle({
+          readme: path === "README.md" ? mutated : readme,
+          roadmap: path === "ROADMAP.md" ? mutated : roadmap,
+        }),
+      ).toThrow()
+    }
+
+    if (liveG1Status === "VERIFIED") {
+      const preCloseoutRoadmap = normalizeGovernanceDocument(roadmap)
+      const preCloseoutReadme = normalizeGovernanceDocument(readme)
+      const { completedReadme, completedRoadmap } = buildG1CompletedProjection(
+        preCloseoutRoadmap,
+        preCloseoutReadme,
+      )
+      const changedFiles = ["README.md", "ROADMAP.md"]
+
+      expect(
+        expectG1GovernanceLifecycle({
+          changedFiles,
+          preCloseoutReadme,
+          preCloseoutRoadmap,
+          readme: completedReadme,
+          roadmap: completedRoadmap,
+        }),
+      ).toBe(true)
+      expect(() =>
+        expectG1GovernanceLifecycle({
+          readme: completedReadme,
+          roadmap: completedRoadmap,
+        }),
+      ).toThrow()
+
+      const mutateG1Item = (mutate: (item: string) => string): string => {
+        const item = readRoadmapItem(completedRoadmap, "G1")
+        const mutatedItem = mutate(item)
+        expect(
+          mutatedItem,
+          "G1 terminal mutation must change the item",
+        ).not.toBe(item)
+        return replaceExactlyOnce(
+          completedRoadmap,
+          item,
+          mutatedItem,
+          "completed G1 item",
+        )
+      }
+      const mutateG1Field = (
+        label: string,
+        mutate: (value: string) => string,
+      ): string =>
+        mutateG1Item((item) => {
+          const value = readCoordinationField(item, label)
+          const mutatedValue = mutate(value)
+          expect(
+            mutatedValue,
+            label + " terminal mutation must change the field",
+          ).not.toBe(value)
+          return replaceCoordinationField(item, label, mutatedValue)
+        })
+      const replaceFieldText = (
+        label: string,
+        before: string,
+        after: string,
+      ): string =>
+        mutateG1Field(label, (value) =>
+          replaceExactlyOnce(value, before, after, label + " mutation target"),
+        )
+      const allZeroSha = "0000000000000000000000000000000000000000"
+      const otherSha = "4444444444444444444444444444444444444444"
+      const mismatchedTreeRoadmap = mutateG1Field("Feature merge", (value) =>
+        value.replace(
+          /with tree `[0-9a-f]{40}`\.$/,
+          `with tree \`${otherSha}\`.`,
+        ),
+      )
+      expect(() =>
+        expectG1GovernanceLifecycle({
+          readme: completedReadme,
+          roadmap: mismatchedTreeRoadmap,
+        }),
+      ).toThrow()
+      const terminalMutations: Array<{
+        changedFiles?: string[]
+        label: string
+        readme?: string
+        roadmap?: string
+      }> = [
+        {
+          label: "zero feature PR",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "[PR #28](https://github.com/Aheadboat/voteGPT/pull/28)",
+            "[PR #0](https://github.com/Aheadboat/voteGPT/pull/0)",
+          ),
+        },
+        {
+          label: "all-zero approved head",
+          roadmap: mutateG1Item((item) =>
+            item.replaceAll(
+              "1111111111111111111111111111111111111111",
+              allZeroSha,
+            ),
+          ),
+        },
+        {
+          label: "push run URL mismatch",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "actions/runs/40000000001",
+            "actions/runs/40000000009",
+          ),
+        },
+        {
+          label: "duplicate pre-merge run",
+          roadmap: mutateG1Field("Feature PR/CI", (value) =>
+            value.replaceAll("40000000002", "40000000001"),
+          ),
+        },
+        {
+          label: "zero push run",
+          roadmap: mutateG1Field("Feature PR/CI", (value) =>
+            value.replaceAll("40000000001", "0"),
+          ),
+        },
+        {
+          label: "zero PostgreSQL count",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "migrations, 3/3 PostgreSQL files",
+            "migrations, 0/3 PostgreSQL files",
+          ),
+        },
+        {
+          label: "unequal Chromium count",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "26/26 Chromium journeys",
+            "26/25 Chromium journeys",
+          ),
+        },
+        {
+          label: "post-merge count drift",
+          roadmap: replaceFieldText(
+            "Post-merge evidence",
+            "37/37 non-E2E files with 1308/1308 tests",
+            "37/37 non-E2E files with 1307/1308 tests",
+          ),
+        },
+        {
+          label: "malformed CodeGraph count",
+          roadmap: replaceFieldText(
+            "Post-merge evidence",
+            "reported 112 files",
+            "reported 1,,, files",
+          ),
+        },
+        {
+          label: "failed after passing",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "both disposable-database drops.",
+            "both disposable-database drops, then failed.",
+          ),
+        },
+        {
+          label: "unresolved review finding",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "no unresolved Critical, Important, or Minor finding",
+            "one unresolved Important finding",
+          ),
+        },
+        {
+          label: "negated Gate B approval",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "the user approved Human Gate B",
+            "the user did not approve Human Gate B",
+          ),
+        },
+        {
+          label: "Gate B after merge",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "Human Gate B on 2026-09-01",
+            "Human Gate B on 2026-09-02",
+          ),
+        },
+        {
+          label: "invalid Gate B date",
+          roadmap: replaceFieldText(
+            "Feature PR/CI",
+            "Human Gate B on 2026-09-01",
+            "Human Gate B on 2026-99-99",
+          ),
+        },
+        {
+          label: "pending feature merge",
+          roadmap: mutateG1Field("Feature merge", () => "Pending."),
+        },
+        {
+          label: "phase mismatch",
+          roadmap: mutateG1Field("Phase", () => "`VERIFIED`"),
+        },
+        {
+          label: "missing Gate A evidence",
+          roadmap: mutateG1Item((item) =>
+            replaceExactlyOnce(
+              item,
+              "**Human Gate A approval:** The user approved the presented design and tests-first plan on 2026-08-15 PT.",
+              "**Human Gate A approval:** Missing.",
+              "Gate A evidence",
+            ),
+          ),
+        },
+        {
+          label: "duplicate coordination field",
+          roadmap: mutateG1Item((item) =>
+            replaceExactlyOnce(
+              item,
+              "- **Phase:** `DONE`",
+              "- **Phase:** `DONE`\n- **Phase:** `DONE`",
+              "G1 phase field",
+            ),
+          ),
+        },
+        {
+          label: "merge PR mismatch",
+          roadmap: replaceFieldText(
+            "Feature merge",
+            "[PR #28](https://github.com/Aheadboat/voteGPT/pull/28)",
+            "[PR #27](https://github.com/Aheadboat/voteGPT/pull/27)",
+          ),
+        },
+        {
+          label: "merge second-parent mismatch",
+          roadmap: replaceFieldText(
+            "Feature merge",
+            "and `1111111111111111111111111111111111111111` with tree",
+            `and \`${otherSha}\` with tree`,
+          ),
+        },
+        {
+          label: "merge versus post-merge main mismatch",
+          roadmap: replaceFieldText(
+            "Post-merge evidence",
+            "Exact merged `main` `2222222222222222222222222222222222222222`",
+            `Exact merged \`main\` \`${otherSha}\``,
+          ),
+        },
+        {
+          label: "closeout equals feature PR",
+          roadmap: mutateG1Field("Closeout PR/CI/merge", (value) =>
+            value.replaceAll("29", "28"),
+          ),
+        },
+        {
+          label: "README closeout mismatch",
+          readme: completedReadme.replaceAll(
+            "closeout PR #29](https://github.com/Aheadboat/voteGPT/pull/29)",
+            "closeout PR #30](https://github.com/Aheadboat/voteGPT/pull/30)",
+          ),
+        },
+        {
+          changedFiles: ["README.md", "ROADMAP.md", "AGENTS.md"],
+          label: "extra changed file",
+        },
+        {
+          label: "unrelated roadmap edit",
+          roadmap: completedRoadmap.replace(
+            "## R0 — Durable Project Contract [DONE]",
+            "## R0 — Durable Project Contract [TODO]",
+          ),
+        },
+        {
+          label: "unrelated README edit",
+          readme: completedReadme + "Unauthorized appendix.\n",
+        },
+        {
+          label: "detached authority",
+          roadmap:
+            completedRoadmap +
+            "\n- **Feature merge:** fabricated detached evidence.\n",
+        },
+        {
+          label: "duplicate G1 heading",
+          roadmap:
+            completedRoadmap +
+            "\n## G1 — Candidate-Data Vendor Proof of Concept [DONE]\n",
+        },
+        {
+          label: "F7 activation",
+          roadmap: completedRoadmap.replace(
+            "## F7 — Elections and Deterministic Candidate Validity [TODO]",
+            "## F7 — Elections and Deterministic Candidate Validity [IN PROGRESS (RED)]",
+          ),
+        },
+        {
+          label: "T5/T6 authorization",
+          roadmap: replaceFieldText(
+            "Blockers",
+            "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain unauthorized",
+            "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement are authorized",
+          ),
+        },
+        { label: "BOM", roadmap: "\uFEFF" + completedRoadmap },
+        { label: "lone carriage return", roadmap: completedRoadmap + "\rX" },
+        {
+          label: "non-breaking space",
+          roadmap: completedRoadmap.replace("PR #29", "PR\u00A0#29"),
+        },
+        { label: "line separator", roadmap: "\u2028" + completedRoadmap },
+        { label: "invisible separator", roadmap: "\u2063" + completedRoadmap },
+        { label: "NUL", roadmap: "\u0000" + completedRoadmap },
+      ]
+
+      for (const mutation of terminalMutations) {
+        const mutatedRoadmap = mutation.roadmap ?? completedRoadmap
+        const mutatedReadme = mutation.readme ?? completedReadme
+        const mutatedChangedFiles = mutation.changedFiles ?? changedFiles
+        expect(
+          mutatedRoadmap !== completedRoadmap ||
+            mutatedReadme !== completedReadme ||
+            mutatedChangedFiles !== changedFiles,
+          mutation.label + " must change terminal input",
+        ).toBe(true)
+        expect(
+          () =>
+            expectG1GovernanceLifecycle({
+              changedFiles: mutatedChangedFiles,
+              preCloseoutReadme,
+              preCloseoutRoadmap,
+              readme: mutatedReadme,
+              roadmap: mutatedRoadmap,
+            }),
+          mutation.label,
+        ).toThrow()
+      }
     }
     const implementationPlan = readRepositoryFile("R1-IMPLEMENTATION-PLAN.md")
-    const recoveryDesign = readRepositoryFile(
-      "F4-F5-LEAN-RECOVERY-DESIGN.md",
-    )
+    const recoveryDesign = readRepositoryFile("F4-F5-LEAN-RECOVERY-DESIGN.md")
     const f4RecoveryPlan = readRepositoryFile("F4-LEAN-RECOVERY-PLAN.md")
     const f5RecoveryPlan = readRepositoryFile("F5-LEAN-RECOVERY-PLAN.md")
     const statuses = readRoadmapStatuses(roadmap)
@@ -1202,7 +2265,7 @@ describe("concurrent roadmap delivery contract", () => {
       ["F5", "DONE"],
       ["R2", "DONE"],
       ["F6", "DONE"],
-      ["G1", "VERIFIED"],
+      ["G1", liveG1Status ?? ""],
       ["F7", "TODO"],
       ["F8", "TODO"],
       ["G2", "TODO"],
@@ -1214,10 +2277,10 @@ describe("concurrent roadmap delivery contract", () => {
       ["F14", "TODO"],
     ])
     expect([...statuses]).toEqual([...expectedStatuses])
-    expect(activeIds).toEqual(["G1"])
-    expect(g1Status).toBe("VERIFIED")
+    expect(activeIds).toEqual(g1Status === "DONE" ? [] : ["G1"])
+    expect(["VERIFIED", "DONE"]).toContain(g1Status)
     expect(g1.split(/\r?\n/, 1)[0]).toBe(
-      "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
+      `## G1 — Candidate-Data Vendor Proof of Concept [${g1Status}]`,
     )
     expect(g1).toContain(
       "**Dependencies:** F6. The official comparison sample set is created and validated as G1-T1 rather than treated as an external prerequisite.",
@@ -1250,9 +2313,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "Gate A approval does not authorize this task or any external action.",
     )
-    expect(g1).toContain(
-      "`lifecycle_status=qualified|withdrawn|disqualified`",
-    )
+    expect(g1).toContain("`lifecycle_status=qualified|withdrawn|disqualified`")
     expect(g1).toContain(
       "Unicode lowercase while preserving punctuation, diacritics, suffixes, and word order",
     )
@@ -1271,9 +2332,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "a new explicit user authorization for T6 RED/implementation",
     )
-    expect(g1).toContain(
-      "completed T5 retaining NO-GO with no approved T6",
-    )
+    expect(g1).toContain("completed T5 retaining NO-GO with no approved T6")
     expect(g1).toContain(
       "No terminal path is added now and no feature agent edits authority files.",
     )
@@ -1292,7 +2351,9 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "Exact feature head `e648293e38323fa25d69f1fe9efd6233b3593a56` implements only the provider-neutral truth types",
     )
-    expect(g1).toContain("pass 189/189 cases covering exact plain/null-prototype data")
+    expect(g1).toContain(
+      "pass 189/189 cases covering exact plain/null-prototype data",
+    )
     expect(g1).toContain(
       "Feature-lead commit `dff78f07a7fd0dcec0e62b912a74047538d4b8b1` changed only `src/lib/candidate-vendor-evaluation.test.ts`",
     )
@@ -1464,7 +2525,7 @@ describe("concurrent roadmap delivery contract", () => {
     expect(g1).toContain(
       "G1-T7 is VERIFIED and ready for the feature PR, hosted CI/mergeability, G1-T8 lifecycle guard, and Human Gate B",
     )
-    expect(readCoordinationField(g1, "Phase")).toBe("`VERIFIED`")
+    expect(readCoordinationField(g1, "Phase")).toBe(`\`${g1Status}\``)
     expect(readCoordinationField(g1, "Branch")).toBe(
       "`codex/g1-candidate-vendor-poc`",
     )
@@ -1492,33 +2553,50 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(g1, "Merge order")).toBe(
       "G1 feature PR → post-merge verification on `main` → G1 closeout PR/CI/merge. No later item activates automatically.",
     )
-    expect(readCoordinationField(g1, "Feature merge")).toBe("Pending.")
-    expect(readCoordinationField(g1, "Post-merge evidence")).toBe("Pending.")
-    expect(readCoordinationField(g1, "Closeout PR/CI/merge")).toBe("Pending.")
-    expect(readCoordinationField(g1, "Blockers")).toContain(
-      "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain blocked",
+    expect(readCoordinationField(g1, "Blockers")).toBe(g1Blockers)
+    expect(g1).toContain(
+      "Test-only commit `ecc1772fe30ee9c1a5586ccce418777a5e3fc31f` adds one canonical, internally cross-consistent future G1 `DONE` projection",
     )
-    expect(readCoordinationField(g1, "Blockers")).toContain(
-      "None for the completed offline VERIFIED scope or feature publication",
+    expect(g1).toContain(
+      "The coordinator-only two-state guard accepts the exact current `VERIFIED` ROADMAP/README record and one later `DONE` projection",
     )
-    expect(readCoordinationField(g1, "Blockers")).toContain(
-      "a no-write push dry-run proved exact local head `42dc50d898dcb3c6de9b0a6077640bc5fc7fd1db` can fast-forward GitHub's feature branch from `28fa0c19dd6d523098d69eff8fa3436cad45cc98`",
+    expect(g1).toContain(
+      "that final PR head still requires fresh exact-head hosted CI, renewed independent review, and mergeability before Human Gate B",
     )
-    expect(readCoordinationField(g1, "Blockers")).toContain(
-      "Feature PR publication, hosted CI/mergeability, and G1-T8 remain required workflow before Human Gate B, not blockers",
-    )
-    expect(readCoordinationField(g1, "Feature PR/CI")).toContain(
-      "G1-T8 must bind the real feature PR/head/run evidence before Human Gate B",
-    )
-    expect(readCoordinationField(g1, "Next Human Gate")).toContain(
-      "Human Gate B",
-    )
-    expect(readCoordinationField(g1, "Next Human Gate")).toContain(
-      "G1-T5/T6 external vendor actions remain separately unapproved",
-    )
-    expect(readMarkdownSection(readme, "## Status")).toContain(
-      "G1 — Candidate-Data Vendor Proof of Concept is active in `VERIFIED`; its offline G1-T1 through G1-T4/G1-T7 scope records a reviewed public-source-fallback `NO-GO (reopenable)`, while successful feature PR CI/mergeability and the G1-T8 lifecycle guard remain before Human Gate B. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-    )
+    if (g1Status === "VERIFIED") {
+      expect(readCoordinationField(g1, "Feature merge")).toBe("Pending.")
+      expect(readCoordinationField(g1, "Post-merge evidence")).toBe("Pending.")
+      expect(readCoordinationField(g1, "Closeout PR/CI/merge")).toBe("Pending.")
+      expect(readCoordinationField(g1, "Feature PR/CI")).toBe(
+        g1VerifiedFeatureEvidence,
+      )
+      expect(readCoordinationField(g1, "Next Human Gate")).toContain(
+        "Human Gate B",
+      )
+      expect(readCoordinationField(g1, "Next Human Gate")).toContain(
+        "G1-T5/T6 external vendor actions remain separately unapproved",
+      )
+      expect(readMarkdownSection(readme, "## Status")).toBe(
+        g1VerifiedReadmeStatus,
+      )
+    } else {
+      expect(readCoordinationField(g1, "Feature merge")).not.toBe("Pending.")
+      expect(readCoordinationField(g1, "Post-merge evidence")).not.toBe(
+        "Pending.",
+      )
+      expect(readCoordinationField(g1, "Closeout PR/CI/merge")).not.toBe(
+        "Pending.",
+      )
+      expect(readCoordinationField(g1, "Feature PR/CI")).toContain(
+        "merged after approved head",
+      )
+      expect(readCoordinationField(g1, "Next Human Gate")).toContain(
+        "None; Human Gate B was approved",
+      )
+      expect(readMarkdownSection(readme, "## Status")).toContain(
+        "G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28]",
+      )
+    }
 
     expect(["VERIFIED", "DONE"]).toContain(r2Status)
     expect(expectedAuthorizedPairActiveIds(statuses)).toEqual([])
@@ -1574,9 +2652,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
     expect(recoveryDesign).toContain("This thread remains the coordinator")
     expect(f4RecoveryPlan).toContain("### Task 4: Guard destructive E2E")
-    expect(f5RecoveryPlan).toContain(
-      "### Task 4: Prove the F4 handoff",
-    )
+    expect(f5RecoveryPlan).toContain("### Task 4: Prove the F4 handoff")
     expect(readme).toContain(
       "R1 — Concurrent Roadmap Delivery Contract is complete",
     )
@@ -1620,9 +2696,9 @@ describe("concurrent roadmap delivery contract", () => {
     expect(readCoordinationField(r2, "Branch")).toContain(
       "codex/r2-context-hygiene",
     )
-    expect(
-      readCoordinationField(r2, "Base commit").replace(/`/g, ""),
-    ).toBe("d262403200ff98bcf4a2d9a5cd05a7016a69d98d")
+    expect(readCoordinationField(r2, "Base commit").replace(/`/g, "")).toBe(
+      "d262403200ff98bcf4a2d9a5cd05a7016a69d98d",
+    )
     expect(
       readCoordinationField(r2, "Integrated-main commit").replace(/`/g, ""),
     ).toBe("5496a4f71cf018ba4eeb368f1aa142e19976db61")
@@ -1717,10 +2793,7 @@ describe("concurrent roadmap delivery contract", () => {
     const expectedF6CoordinationFields = new Map<string, string>([
       ["Branch", "`codex/f6-state-officials-navigation`"],
       ["Base commit", "`ea8bff3417896ba8ca669ccb517e7617d070b00d`"],
-      [
-        "Integrated-main commit",
-        "`9f77d15d2ef15ab411fadebd2c688a2f217886e5`",
-      ],
+      ["Integrated-main commit", "`9f77d15d2ef15ab411fadebd2c688a2f217886e5`"],
       [
         "Admission result",
         "`N/A` — F6 is the sole active item; its F5/R2 dependencies are `DONE`, and no concurrent pair is admitted.",
@@ -1882,7 +2955,10 @@ describe("concurrent roadmap delivery contract", () => {
       ],
     ] as const) {
       const mutated = f6.replace(authorized, widened)
-      expect(mutated, `missing authorized F6 correction text: ${authorized}`).not.toBe(f6)
+      expect(
+        mutated,
+        `missing authorized F6 correction text: ${authorized}`,
+      ).not.toBe(f6)
       expect(() => expectF6CorrectionScope(mutated)).toThrow()
     }
     for (const [field, invalid] of [
@@ -1933,9 +3009,7 @@ describe("concurrent roadmap delivery contract", () => {
       f6FeatureLeadOwnershipStart,
       frozenLaterItemsStart,
     )
-    expect(f6CoordinatorOwnership).toContain(
-      "The coordinator exclusively owns",
-    )
+    expect(f6CoordinatorOwnership).toContain("The coordinator exclusively owns")
     for (const coordinatorFile of [
       "AGENTS.md",
       "ROADMAP.md",
@@ -1964,9 +3038,9 @@ describe("concurrent roadmap delivery contract", () => {
       expect(readCoordinationField(item, "Admission result")).toContain(
         "CONDITIONAL",
       )
-      expect(
-        readCoordinationField(item, "Base commit").replace(/`/g, ""),
-      ).toBe(recoveryBase)
+      expect(readCoordinationField(item, "Base commit").replace(/`/g, "")).toBe(
+        recoveryBase,
+      )
       expect(
         readCoordinationField(item, "Integrated-main commit").replace(/`/g, ""),
       ).toMatch(/^[0-9a-f]{40}$/i)
@@ -1979,9 +3053,7 @@ describe("concurrent roadmap delivery contract", () => {
       "codex/f5-main-recovery",
     )
     expect(f4Ownership).toContain("F4 exclusively owns these shared surfaces:")
-    expect(f5Ownership).toContain(
-      "F5 defers these F4-owned shared surfaces:",
-    )
+    expect(f5Ownership).toContain("F5 defers these F4-owned shared surfaces:")
     for (const surface of sharedSurfaces) {
       expect(f4Ownership, "F4 must own " + surface).toContain(surface)
       expect(f5Ownership, "F5 must defer " + surface).toContain(surface)
