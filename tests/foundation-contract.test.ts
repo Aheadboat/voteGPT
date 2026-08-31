@@ -30,6 +30,23 @@ function expectG1GovernanceSnapshot(
   )
 }
 
+type G1GovernanceLifecycleContext = {
+  changedFiles?: string[]
+  preCloseoutReadme?: string
+  preCloseoutRoadmap?: string
+  readme: string
+  roadmap: string
+}
+
+function expectG1GovernanceLifecycle({
+  readme,
+  roadmap,
+}: G1GovernanceLifecycleContext): boolean {
+  expectG1GovernanceSnapshot("ROADMAP.md", roadmap)
+  expectG1GovernanceSnapshot("README.md", readme)
+  return true
+}
+
 function findUnsafeEnvironmentEntries(contents: string): string[] {
   return contents
     .split(/\r?\n/)
@@ -496,6 +513,86 @@ describe("repository context and hygiene contract", () => {
 })
 
 describe("concurrent roadmap delivery contract", () => {
+  it("admits only the exact G1 closeout transition after a verified feature", () => {
+    const preCloseoutRoadmap = readRepositoryFile("ROADMAP.md").replace(
+      /\r\n/g,
+      "\n",
+    )
+    const preCloseoutReadme = readRepositoryFile("README.md").replace(
+      /\r\n/g,
+      "\n",
+    )
+    const verifiedItem = readRoadmapItem(preCloseoutRoadmap, "G1")
+    const replaceField = (item: string, label: string, value: string): string => {
+      const current = `- **${label}:** ${readCoordinationField(item, label)}`
+      expect(item, `missing G1 coordination field: ${label}`).toContain(current)
+      return item.replace(current, `- **${label}:** ${value}`)
+    }
+    const approvedHead = "1111111111111111111111111111111111111111"
+    const mergeCommit = "2222222222222222222222222222222222222222"
+    const mergeTree = "3333333333333333333333333333333333333333"
+    let completedItem = verifiedItem.replace(
+      "## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]",
+      "## G1 — Candidate-Data Vendor Proof of Concept [DONE]",
+    )
+
+    completedItem = replaceField(completedItem, "Phase", "`DONE`")
+    completedItem = replaceField(
+      completedItem,
+      "Feature PR/CI",
+      `[PR #28](https://github.com/Aheadboat/voteGPT/pull/28) merged after approved head \`${approvedHead}\` passed exact-head push [run \`40000000001\`](https://github.com/Aheadboat/voteGPT/actions/runs/40000000001) and pull-request [run \`40000000002\`](https://github.com/Aheadboat/voteGPT/actions/runs/40000000002); each passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, typecheck, zero-warning lint, production build, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported the approved head \`CLEAN\` and \`MERGEABLE\`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on 2026-09-01.`,
+    )
+    completedItem = replaceField(completedItem, "Blockers", "None; G1-T5/T6 vendor or external actions remain unauthorized, and F7 remains inactive.")
+    completedItem = replaceField(
+      completedItem,
+      "Feature merge",
+      `[PR #28](https://github.com/Aheadboat/voteGPT/pull/28) merged to \`main\` as \`${mergeCommit}\` on 2026-09-01 UTC; feature head \`${approvedHead}\` is reachable from \`main\`, and the merge commit has parents \`d4e1f2d411847b44ab1d50996d0ded22cba218c3\` and \`${approvedHead}\` with tree \`${mergeTree}\`.`,
+    )
+    completedItem = replaceField(
+      completedItem,
+      "Post-merge evidence",
+      `Exact merged \`main\` \`${mergeCommit}\` passed local \`npm.cmd run check\` (37 files/1308 tests plus typecheck, zero-warning lint, and production build), \`npm.cmd run db:check\`, the focused G1 contract (363/363), and the required local E2E guard \`E2E database requires explicit destructive opt-in.\` Hosted post-merge push [run \`40000000003\`](https://github.com/Aheadboat/voteGPT/actions/runs/40000000003) passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, 26/26 Chromium journeys, and both disposable-database drops. After merge, \`codegraph sync .\` and \`codegraph status --json .\` reported 112 files, 2300 nodes, 8400 edges, zero pending files, no worktree mismatch, and no reindex recommendation.`,
+    )
+    completedItem = replaceField(
+      completedItem,
+      "Closeout PR/CI/merge",
+      "[PR #29](https://github.com/Aheadboat/voteGPT/pull/29) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.",
+    )
+    completedItem = replaceField(
+      completedItem,
+      "Next Human Gate",
+      "None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.",
+    )
+    const completedRoadmap = preCloseoutRoadmap.replace(
+      verifiedItem,
+      completedItem,
+    )
+    const verifiedStatus = readMarkdownSection(preCloseoutReadme, "## Status")
+    const completedStatus = [
+      "## Status",
+      "",
+      "R0 — Durable Project Contract, F1 — Development and Test Foundation, F2 — Identity and Public Shell, F3 — Residence Resolution Preview, F4 — Consented Saved Residence, and F5 — Federal Officials are complete on `main` through their required closeout merges. R1 — Concurrent Roadmap Delivery Contract is complete. R2 — Repository Context and Hygiene Contract is complete. F6 — State Officials and Government-Level Navigation is complete on `main` through [feature PR #24](https://github.com/Aheadboat/voteGPT/pull/24) and its required status-only closeout. G1 — Candidate-Data Vendor Proof of Concept is complete on `main` through [feature PR #28](https://github.com/Aheadboat/voteGPT/pull/28) and required status-only [closeout PR #29](https://github.com/Aheadboat/voteGPT/pull/29); its durable decision remains `NO-GO (reopenable)`. F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+      "",
+    ].join("\n")
+    const completedReadme = preCloseoutReadme.replace(
+      verifiedStatus,
+      completedStatus,
+    )
+
+    expect(completedRoadmap).not.toBe(preCloseoutRoadmap)
+    expect(completedReadme).not.toBe(preCloseoutReadme)
+
+    expect(
+      expectG1GovernanceLifecycle({
+        changedFiles: ["README.md", "ROADMAP.md"],
+        preCloseoutReadme,
+        preCloseoutRoadmap,
+        readme: completedReadme,
+        roadmap: completedRoadmap,
+      }),
+    ).toBe(true)
+  })
+
   it("accepts the exact F6 closeout lifecycle without activating a later item", () => {
     const completedItem = [
       "## F6 — State Officials and Government-Level Navigation [DONE]",
