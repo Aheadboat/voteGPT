@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const expectedG1GovernanceSnapshots = {
   "README.md": "884a5bf1f35d463f2e96ac91302ef123ff76d9fbb9c451b988d55ffe9ea18e41",
-  "ROADMAP.md": "910b9c309ab3c1d58cbff02e9c90ca23f80a78ff70222ac0c7db3aaaa1de7f42",
+  "ROADMAP.md": "bcf07e257c206b5c0625086b8cf05517d8d1350fc5b2f65af90bb3d292efb103",
 } as const
 
 function readRepositoryFile(path: string): string {
@@ -1402,13 +1402,13 @@ describe("concurrent roadmap delivery contract", () => {
       "G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain blocked",
     )
     expect(readCoordinationField(g1, "Blockers")).toContain(
-      "Feature publication is blocked in the current environment",
+      "None for the completed offline VERIFIED scope or feature publication",
     )
     expect(readCoordinationField(g1, "Blockers")).toContain(
-      "local exact head `b721b2e4f80dd24989e2901b43faa6b1831cb7fa` is not on GitHub, whose feature branch remains at `28fa0c19dd6d523098d69eff8fa3436cad45cc98`",
+      "a no-write push dry-run proved exact local head `42dc50d898dcb3c6de9b0a6077640bc5fc7fd1db` can fast-forward GitHub's feature branch from `28fa0c19dd6d523098d69eff8fa3436cad45cc98`",
     )
     expect(readCoordinationField(g1, "Blockers")).toContain(
-      "Restored repository write authentication or an operator push of exact local head `b721b2e4f80dd24989e2901b43faa6b1831cb7fa` is required",
+      "Feature PR publication, hosted CI/mergeability, and G1-T8 remain required workflow before Human Gate B, not blockers",
     )
     expect(readCoordinationField(g1, "Feature PR/CI")).toContain(
       "G1-T8 must bind the real feature PR/head/run evidence before Human Gate B",
