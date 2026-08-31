@@ -637,7 +637,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #26](https://github.com/Aheadboat/voteGPT/pull/26) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and F6 is complete only when this closeout merge reaches `main`.
 
-## G1 — Candidate-Data Vendor Proof of Concept [VERIFIED]
+## G1 — Candidate-Data Vendor Proof of Concept [DONE]
 
 - **Outcome:** Evidence-backed go/no-go decision before national candidate work.
 - **Dependencies:** F6. The official comparison sample set is created and validated as G1-T1 rather than treated as an external prerequisite.
@@ -700,7 +700,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 
 ### Coordination record
 
-- **Phase:** `VERIFIED`
+- **Phase:** `DONE`
 - **Branch:** `codex/g1-candidate-vendor-poc`
 - **Base commit:** `3e4449ca10fa36609726c1ca8c52a5eb626cb49c`
 - **Integrated-main commit:** `d4e1f2d411847b44ab1d50996d0ded22cba218c3`
@@ -708,12 +708,12 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** `g1_candidate_vendor_poc_lead` — the activation merge and coordinator handoff are integrated, Human Gate A is approved, and the lead owns the approved offline G1-T1 through G1-T4/G1-T7 tests-first implementation. The lead must not begin G1-T5/T6 or any external/vendor action without a separate explicit human decision.
 - **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, authoritative status/evidence, Human Gates, vendor/legal/spending escalations, review, CI, PRs, merges, and post-merge CodeGraph maintenance. After Human Gate A, the G1 feature lead exclusively owns G1-scoped official comparison sample artifacts and metadata, candidate-lifecycle evaluation domain, vendor adapter and evaluation harness, checked-in fixtures, focused tests, `PROJECT-MAP.md`, and `TEMPORARY.md` in the isolated G1 worktree. Existing federal/state official code and every F7-or-later production surface are read-only boundaries unless the Gate A-approved task graph names a required interface change. No credentialed vendor request, trial acceptance, quote, contract, spend, production publication, or production enablement occurs without a separate explicit human decision; shared CI and unrelated generated artifacts remain frozen.
 - **Merge order:** G1 feature PR → post-merge verification on `main` → G1 closeout PR/CI/merge. No later item activates automatically.
-- **Feature PR/CI:** [PR #28](https://github.com/Aheadboat/voteGPT/pull/28) contains immutable implementation evidence at reviewed head `5e51e85f7a48935bf9d6e4e873996195963c8926`. Exact-head push [run `33361506030`](https://github.com/Aheadboat/voteGPT/actions/runs/33361506030) and pull-request [run `33361531224`](https://github.com/Aheadboat/voteGPT/actions/runs/33361531224) each passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, typecheck, zero-warning lint, production build, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported that head `CLEAN` and `MERGEABLE`; independent blocker-resolution review of the exact diff found no unresolved Critical, Important, or Minor finding. No formal GitHub review object is claimed. The coordinator-only G1-T8 guard is added on top; its final PR head must pass fresh exact-head hosted CI, renewed independent review, and mergeability before Human Gate B.
+- **Feature PR/CI:** [PR #28](https://github.com/Aheadboat/voteGPT/pull/28) merged after approved head `a64aa7b7f5cd3f13a99b1baa1531456a261bdeba` passed exact-head push [run `33366659642`](https://github.com/Aheadboat/voteGPT/actions/runs/33366659642) and pull-request [run `33366663872`](https://github.com/Aheadboat/voteGPT/actions/runs/33366663872); each passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, typecheck, zero-warning lint, production build, 26/26 Chromium journeys, and both disposable-database drops. GitHub reported the approved head `CLEAN` and `MERGEABLE`; independent review found no unresolved Critical, Important, or Minor finding, and the user approved Human Gate B on 2026-08-31.
 - **Blockers:** None for the approved G1 scope. G1-T5/T6 vendor outreach, credentials, data, legal rights, quote, spend, and production enablement remain unauthorized, and F7 remains inactive; reopening the decision or taking any external action requires separate explicit approval.
-- **Feature merge:** Pending.
-- **Post-merge evidence:** Pending.
-- **Closeout PR/CI/merge:** Pending.
-- **Next Human Gate:** Human Gate B — after offline G1-T1 through G1-T4/G1-T7 reach `VERIFIED`, the feature PR has successful hosted CI and mergeability, and independent review has no unresolved Critical or Important finding, approve or reject the delivered behavior before merge. G1-T5/T6 external vendor actions remain separately unapproved.
+- **Feature merge:** [PR #28](https://github.com/Aheadboat/voteGPT/pull/28) merged to `main` as `0631e6e2e229d2c10cf13f700430580d735a7946` on 2026-08-31 UTC; feature head `a64aa7b7f5cd3f13a99b1baa1531456a261bdeba` is reachable from `main`, and the merge commit has parents `d4e1f2d411847b44ab1d50996d0ded22cba218c3` and `a64aa7b7f5cd3f13a99b1baa1531456a261bdeba` with tree `92b77c086988c78acca39301a8ecf07226ec8dd4`.
+- **Post-merge evidence:** Exact merged `main` `0631e6e2e229d2c10cf13f700430580d735a7946` passed local `npm.cmd run check` (37 files/1308 tests plus typecheck, zero-warning lint, and production build), `npm.cmd run db:check`, the focused G1 contract (363/363), and the required local E2E guard `E2E database requires explicit destructive opt-in.` Hosted post-merge push [run `33367327994`](https://github.com/Aheadboat/voteGPT/actions/runs/33367327994) passed migrations, 3/3 PostgreSQL files with 37/37 tests, 37/37 non-E2E files with 1308/1308 tests, 26/26 Chromium journeys, and both disposable-database drops. After merge, `codegraph sync .` and `codegraph status --json .` reported 105 files, 2,472 nodes, 9,605 edges, zero pending files, no worktree mismatch, and no reindex recommendation.
+- **Closeout PR/CI/merge:** [PR #29](https://github.com/Aheadboat/voteGPT/pull/29) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
+- **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.
 
 ## F7 — Elections and Deterministic Candidate Validity [TODO]
 
