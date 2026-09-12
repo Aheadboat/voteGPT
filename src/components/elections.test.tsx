@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { projectContest, type ContestField, type ContestResult, type ContestView } from "@/lib/elections";
 import { evidence, fixturePackage, fixturePolicy, NOW, VERIFIED_AT } from "../../tests/fixtures/elections/domain";
-import { ElectionContest } from "./elections";
+import { ElectionContest, ElectionIndex } from "./elections";
 
 function view(): ContestView {
   const { schema_version, policy_version, ...ledger } = fixturePackage();
@@ -177,5 +177,27 @@ describe("source-backed election contest", () => {
   it("links the separate ballot-access explanation to the official source", () => {
     render(<ElectionContest result={view()} />);
     expect(screen.getByRole("link", { name: "FEC ballot access guidance" })).toHaveAttribute("href", "https://www.fec.gov/help-candidates-and-committees/registering-candidate/gaining-ballot-access/");
+  });
+});
+
+describe("public election index display", () => {
+  it("groups native contest links under sourced election and stage facts", () => {
+    const contest = view();
+    render(<ElectionIndex result={{ status: "available", contests: [contest], unverified_count: 0 }} />);
+    expect(screen.getByRole("link", { name: "Synthetic House contest" })).toHaveAttribute("href", "/elections/contests/contest-house");
+    expect(screen.getByText(/Synthetic 2026 election/)).toBeInTheDocument();
+    expect(screen.getByText(/Synthetic general election/)).toBeInTheDocument();
+    expect(screen.getByText(/2026-11-03/)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Synthetic election office list" }).length).toBeGreaterThan(0);
+  });
+  it("does not turn empty or unverified inventories into absence claims", () => {
+    render(<ElectionIndex result={{ status: "available", contests: [], unverified_count: 3 }} />);
+    expect(screen.getByText(/does not mean there are no elections/)).toBeInTheDocument();
+    expect(screen.getByText(/3.*not verified/)).toBeInTheDocument();
+  });
+  it.each(["unsupported", "unavailable"] as const)("explains %s with an official recovery resource", (status) => {
+    render(<ElectionIndex result={{ status }} />);
+    expect(screen.getByText(status === "unavailable" ? /temporarily unavailable/ : /coverage is unavailable/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /official election office/i })).toHaveAttribute("href", "https://www.sos.ca.gov/elections");
   });
 });

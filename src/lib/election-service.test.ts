@@ -119,4 +119,12 @@ describe("election reads", () => {
     expect(await getStatewideElections(service, [{ id: STATE, idScheme: "ocd", name: "California", type: "state" }], "local")).toEqual({ status: "unsupported" });
     expect(repository.readUpcoming).not.toHaveBeenCalled();
   });
+  it("marks valid out-of-scope states and local elections unsupported before reading storage", async () => {
+    const { service, repository } = setup();
+    const georgia = "ocd-division/country:us/state:ga";
+    expect(await service.getUpcoming({ level: "state", jurisdiction_id: georgia, division_ids: [georgia] })).toEqual({ status: "unsupported" });
+    expect(await service.getUpcoming({ ...scope, level: "local" })).toEqual({ status: "unsupported" });
+    expect(await getStatewideElections(service, [{ id: georgia, idScheme: "ocd", name: "Georgia", type: "state" }], "state")).toEqual({ status: "unsupported" });
+    expect(repository.readUpcoming).not.toHaveBeenCalled();
+  });
 });

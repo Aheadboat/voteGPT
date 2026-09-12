@@ -151,7 +151,7 @@ export function ElectionContest({ result }: { result: ContestResult }) {
       <ContestFacts state={result.contest} />
     </section>
     <section aria-label="Candidates"><h2>Candidates</h2>
-      <p>Names appear alphabetically, then by explicit identifier. Each candidate has the same evidence tracks. Finance filings do not establish ballot qualification.</p>
+      <p>Names appear alphabetically, then by explicit identifier. Each candidate has the same evidence tracks. Finance filings do not establish ballot qualification. <a href="https://www.fec.gov/help-candidates-and-committees/registering-candidate/gaining-ballot-access/">FEC ballot access guidance</a>.</p>
       {result.candidates.length === 0 && <p>No verified candidate identities are available. This does not establish that there are no candidates.</p>}
       {[...result.candidates].sort(compareNames).map((candidate) => <Candidate key={candidate.id} candidate={candidate} />)}
     </section>
