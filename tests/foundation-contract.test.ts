@@ -6,6 +6,8 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 
 const repositoryRoot = process.cwd()
+const g1ReviewedHead = "a64aa7b7f5cd3f13a99b1baa1531456a261bdeba"
+const f7DependencyBase = "8bf9efb37a1e07d40aaea7a9caca12ab327c942a"
 const expectedG1GovernanceSnapshots = {
   "README.md":
     "a31c9a633916534599b7e0b89242b96ad0928b0a932545c2f230f00e53c0ab6a",
@@ -43,6 +45,34 @@ function g1CompletedReadmeClause(closeoutPr: string): string {
 
 function readRepositoryFile(path: string): string {
   return readFileSync(resolve(repositoryRoot, path), "utf8")
+}
+
+function readHistoricalFile(revision: string, path: string): string {
+  return execFileSync("git", ["show", revision + ":" + path], {
+    cwd: repositoryRoot,
+    encoding: "utf8",
+  })
+}
+
+function expectF7DesignActivation(roadmap: string, readme: string, paths: string[]): void {
+  const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
+  const normalizedReadme = normalizeGovernanceDocument(readme)
+  const baseRoadmap = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "ROADMAP.md"))
+  const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
+  const item = readRoadmapItem(normalizedRoadmap, "F7")
+  expect(governanceSha256(item), "exact F7 design-only activation record").toBe(
+    "787217408825d484ede656a9d16afdec7e1225da6241388a49e3e19f8e8d52bc",
+  )
+  expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
+  expect(normalizedReadme).toBe(replaceExactlyOnce(
+    baseReadme,
+    "F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 — Elections and Deterministic Candidate Validity is active in `DISCOVER/DESIGN/PLAN` using the documented official-source fallback. Human Gate A is pending; RED and production implementation have not started. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 README activation",
+  ))
+  for (const path of paths) {
+    expect(["ROADMAP.md", "README.md", "tests/foundation-contract.test.ts"], "F7 pre-Gate-A changed path: " + path).toContain(path)
+  }
 }
 
 function governanceSha256(contents: string): string {
@@ -591,7 +621,8 @@ function readG1NonGovernanceSnapshot(): string {
   }
 
   const snapshot = createHash("sha256")
-  const entries = execFileSync("git", ["ls-files", "--stage", "-z"], {
+  // G1's completed regression contract is pinned; F7's live freeze is separate.
+  const entries = execFileSync("git", ["ls-tree", "-r", "-z", g1ReviewedHead], {
     cwd: repositoryRoot,
     encoding: "utf8",
   })
@@ -599,13 +630,13 @@ function readG1NonGovernanceSnapshot(): string {
     .filter(Boolean)
 
   for (const entry of entries) {
-    const match = entry.match(/^([0-9]{6}) ([0-9a-f]{40}) ([0-3])\t(.+)$/)
+    const match = entry.match(/^([0-9]{6}) blob ([0-9a-f]{40})\t(.+)$/)
 
-    if (!match || match[3] !== "0") {
+    if (!match) {
       throw new Error("Invalid or conflicted tracked-file entry")
     }
 
-    const [, mode, objectId, , path] = match
+    const [, mode, objectId, path] = match
 
     if (path === "README.md" || path === "ROADMAP.md") {
       continue
@@ -615,7 +646,7 @@ function readG1NonGovernanceSnapshot(): string {
 
     if (path === "tests/foundation-contract.test.ts") {
       const source = normalizeGovernanceDocument(
-        readFileSync(resolve(repositoryRoot, path), "utf8"),
+        readHistoricalFile(g1ReviewedHead, path),
       )
       const normalizedSource = replaceExactlyOnce(
         source,
@@ -1955,7 +1986,49 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("keeps completed items closed and activates only G1", () => {
+  it("activates only F7 design after the immutable G1 closeout", () => {
+    ensureG1MainHistoryAvailable()
+    execFileSync("git", ["merge-base", "--is-ancestor", f7DependencyBase, "HEAD"], { cwd: repositoryRoot, stdio: "pipe" })
+    const closeout = readGitCommitRecord(f7DependencyBase)
+    expect(closeout.parents).toEqual([
+      "0631e6e2e229d2c10cf13f700430580d735a7946",
+      "34c60a3b3eeeb8a784a8ace72a9f7e77b316d0aa",
+    ])
+    expect(closeout.message.split("\n", 1)[0]).toBe("Merge pull request #29 from Aheadboat/codex/g1-closeout")
+    const changed = [...new Set([
+      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z", f7DependencyBase, "HEAD"]),
+      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z"]),
+      ...readNullDelimitedGitPaths(["diff", "--cached", "--name-only", "-z"]),
+      ...readNullDelimitedGitPaths(["ls-files", "--others", "--exclude-standard", "-z"]),
+    ])]
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const readme = readRepositoryFile("README.md")
+    expectF7DesignActivation(roadmap, readme, changed)
+    for (const [before, after] of [
+      ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
+      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[IN PROGRESS (RED)]"],
+      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[VERIFIED]"],
+      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[DONE]"],
+      ["- **Human Gate A approval:** Pending;", "- **Human Gate A approval:** Approved;"],
+      ["- **Human Gate B approval:** Pending;", "- **Human Gate B approval:** Approved;"],
+      ["- **Human Gate A approval:** Pending;", "- **Human Gate A approval:** Approved.\n- **Human Gate A approval:** Pending;"],
+      ["`N/A` — F7 is the sole active item", "`PASS` — F7 is the sole active item"],
+    ]) {
+      const mutated = roadmap.replace(before, after)
+      expect(mutated).not.toBe(roadmap)
+      expect(() => expectF7DesignActivation(mutated, readme, changed)).toThrow()
+    }
+    for (const suffix of ["\n## F7 — Duplicate [TODO]\n", "\nHuman Gate A approved.\n", "\nVendor access authorized.\n"]) {
+      expect(() => expectF7DesignActivation(roadmap + suffix, readme, changed)).toThrow()
+    }
+    expect(() => expectF7DesignActivation(roadmap, readme + "\nVendor access authorized.\n", changed)).toThrow()
+    for (const path of ["src/lib/elections.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "scratch.txt"]) {
+      expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
+    }
+  }, 30_000)
+
+  it("preserves the reviewed G1 lifecycle and adversarial regressions", () => {
+    ensureG1MainHistoryAvailable()
     expect(
       readMarkdownSection("## One\r\nbody\r\n## Two\r\n", "## One"),
     ).toContain("body")
@@ -2004,8 +2077,8 @@ describe("concurrent roadmap delivery contract", () => {
     expect(syntheticR1).not.toContain("F4")
     expect(readCoordinationField(syntheticR1, "Phase")).toBe("GREEN")
 
-    const roadmap = readRepositoryFile("ROADMAP.md")
-    const readme = readRepositoryFile("README.md")
+    const roadmap = readHistoricalFile(g1ReviewedHead, "ROADMAP.md")
+    const readme = readHistoricalFile(g1ReviewedHead, "README.md")
     const liveG1Status = readRoadmapStatuses(roadmap).get("G1")
     expect(expectG1GovernanceLifecycle({ readme, roadmap })).toBe(true)
     const headRoadmap = normalizeGovernanceDocument(
