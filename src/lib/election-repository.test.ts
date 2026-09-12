@@ -8,7 +8,7 @@ import { createDatabase } from "../db";
 import { electionEvidence, electionEvidenceSupersession } from "../db/schema";
 import { createElectionRepository, reviewElectionPackage } from "./election-repository";
 import { projectContest, serializeElectionPackage, type ApprovedElectionReceipt } from "./elections";
-import { evidence, fixtureGraph, NOW, VERIFIED_AT, STATE, DISTRICT, type Mutable } from "../../tests/fixtures/elections/domain";
+import { evidence, fixtureGraph, fixtureCalendarGraph, NOW, VERIFIED_AT, STATE, DISTRICT, type Mutable } from "../../tests/fixtures/elections/domain";
 
 function reviewedFixture(graph = fixtureGraph()) {
   const package_sha256 = createHash("sha256").update(serializeElectionPackage(graph.package), "utf8").digest("hex");
@@ -31,7 +31,21 @@ function reviewedFixture(graph = fixtureGraph()) {
   return { graph, receipt, options: { policy: graph.policy, approvedReceipts: [receipt], now: () => NOW } };
 }
 
+function reviewedCalendarFixture() {
+  const fixture = reviewedFixture(fixtureCalendarGraph());
+  fixture.receipt.documents.find((document) => document.id === "calendar-zone-reference")!.locators = ["Synthetic California zone entry"];
+  fixture.receipt.documents.find((document) => document.id === "calendar-boundary-reference")!.locators = ["Synthetic Pacific boundary paragraph"];
+  return fixture;
+}
+
 describe("protected election package review", () => {
+  it("validates a calendar package bound to every reviewed reference locator", () => {
+    const { graph, receipt, options } = reviewedCalendarFixture();
+    expect(reviewElectionPackage(graph.package, receipt.id, options)).toMatchObject({
+      status: "valid", package_sha256: receipt.package_sha256, receipt_id: receipt.id,
+    });
+  });
+
   it("admits exactly the synthetic package bound by an injected reviewed receipt without a database", () => {
     const { graph, receipt, options } = reviewedFixture();
     expect(reviewElectionPackage(graph.package, receipt.id, options)).toMatchObject({
@@ -116,6 +130,25 @@ describe("immutable election persistence", () => {
     vi.restoreAllMocks();
     const client = database.$client;
     if ("close" in client) await client.close();
+  });
+
+  it("imports and reads calendar reference provenance from its exact protected receipt", async () => {
+    const { graph, receipt, options } = reviewedCalendarFixture();
+    const repository = createElectionRepository(database, options);
+    expect(await repository.importReviewedPackage(graph.package, receipt.id)).toEqual({
+      status: "imported", package_sha256: receipt.package_sha256,
+    });
+    const retained = await repository.readContest(graph.contest_id);
+    expect(retained).not.toBeNull();
+    expect(retained?.ledger.documents.find((document) => document.id === "calendar-zone-reference")).toMatchObject({
+      sha256: "c".repeat(64), calendar_reference: {
+        locator: "Synthetic California zone entry", original_term: "Synthetic America/Los_Angeles zone",
+        verified_at: "2026-09-12T11:45:00.000Z", current_until: "2026-09-13T11:45:00.000Z",
+      },
+    });
+    expect(retained && projectContest(retained, NOW)).toMatchObject({
+      status: "available", stage: { state: "verified", verified_at: "2026-09-12T11:45:00.000Z" },
+    });
   });
 
   it("migrates all eight election ledger relations", async () => {

@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { projectContest, type ContestField, type ContestResult, type ContestView } from "@/lib/elections";
+import { projectContest, type ContestField, type ContestResult, type ContestView, type EvidenceHistory, type EvidenceRef } from "@/lib/elections";
 import { evidence, fixturePackage, fixturePolicy, NOW, VERIFIED_AT } from "../../tests/fixtures/elections/domain";
 import { ElectionContest, ElectionIndex } from "./elections";
 
@@ -215,5 +215,119 @@ describe("public election index display", () => {
     render(<ElectionIndex result={{ status }} />);
     expect(screen.getByText(status === "unavailable" ? /temporarily unavailable/ : /coverage is unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /official election office/i })).toHaveAttribute("href", "https://www.sos.ca.gov/elections");
+  });
+});
+
+// Published synthetic DTOs keep calendar presentation independent of active T1 validation work.
+const calendarStageSource = {
+  id: "synthetic-stage-date", source_url: "https://elections.example.test/date-only",
+  source_type: "official_election_authority", authority_id: "synthetic-election-authority",
+  source_label: "Synthetic date-only election source", original_term: "November 3, 2026",
+  document_sha256: "a".repeat(64), locator: "Synthetic election calendar, row 1",
+  retrieved_at: "2026-09-12T11:00:00.000Z", verified_at: VERIFIED_AT,
+  effective: { precision: "unknown", reason: "not_published" },
+  current_until: "2026-09-13T12:00:00.000Z",
+  calendar_basis: {
+    basis_id: "internal-calendar-basis-sentinel", mapping_id: "internal-calendar-mapping-sentinel",
+    jurisdiction_id: "ocd-division/country:us/state:ca", time_zone: "America/Los_Angeles",
+    references: [
+      {
+        basis_id: "internal-calendar-basis-sentinel", kind: "iana_tzdb",
+        locator: "Synthetic zone table, western jurisdiction row", original_term: "America/Los_Angeles",
+        retrieved_at: "2026-09-12T08:00:00.000Z", verified_at: "2026-09-12T10:00:00.000Z",
+        current_until: "2026-09-13T10:00:00.000Z", source_url: "https://time.example.test/zone-table",
+        source_label: "Synthetic time zone database", document_sha256: "b".repeat(64), authority_id: "internal-zone-authority-sentinel",
+      },
+      {
+        basis_id: "internal-calendar-basis-sentinel", kind: "time_zone_regulation",
+        locator: "Synthetic time rule, section 2", original_term: "Synthetic western time boundary",
+        retrieved_at: "2026-09-12T09:00:00.000Z", verified_at: "2026-09-12T11:00:00.000Z",
+        current_until: "2026-09-13T11:00:00.000Z", source_url: "https://time.example.test/regulation",
+        source_label: "Synthetic time boundary reference", document_sha256: "c".repeat(64), authority_id: "internal-rule-authority-sentinel",
+      },
+    ],
+  },
+} satisfies EvidenceRef;
+const { calendar_basis: calendarBasis, ...dateOnlySource } = calendarStageSource;
+function calendarView(): ContestView {
+  const fieldSource = { ...dateOnlySource, source_label: "Synthetic contest metadata source", group_id: "synthetic-contest-metadata" };
+  const contestSource: EvidenceRef = { ...dateOnlySource, source_label: "Synthetic contest metadata source", id: "synthetic-contest-metadata", field_sources: {
+    name: [fieldSource], office: [fieldSource], district: [fieldSource], term: [fieldSource],
+    seats: [fieldSource], form: [fieldSource], level: [fieldSource], jurisdiction_id: [fieldSource],
+    division_ids: [fieldSource], partisanship: [fieldSource],
+  } };
+  return {
+    status: "available", contest_id: "synthetic-calendar-contest", verification: "current", upcoming: true,
+    election: { state: "verified", value: { name: "Synthetic calendar election", jurisdiction_id: "ocd-division/country:us/state:ca", kind: "regular", coverage: { state: "partial", contest_ids: ["synthetic-calendar-contest"], notes: ["Synthetic test data only."] } }, evidence: [{ ...dateOnlySource, source_label: "Synthetic election metadata source", id: "synthetic-election-metadata" }], verified_at: VERIFIED_AT },
+    stage: { state: "verified", value: { name: "Synthetic general stage", kind: "general", date: "2026-11-03", time_zone: "America/Los_Angeles", successor_stage_ids: [] }, evidence: [calendarStageSource], verified_at: "2026-09-12T10:00:00.000Z" },
+    contest: { state: "verified", value: { name: "Synthetic calendar contest", office: "Synthetic office", district: "Statewide", term: "Synthetic term", seats: 1, form: "candidate_single_seat", level: "state", jurisdiction_id: "ocd-division/country:us/state:ca", division_ids: ["ocd-division/country:us/state:ca"], partisanship: "nonpartisan" }, evidence: [contestSource], verified_at: VERIFIED_AT },
+    candidates: [], retired_candidates: [], history: [],
+    history_page: { offset: 0, limit: 100, total: 0, next_offset: null, completeness: "complete" },
+  };
+}
+function expectCalendarReferences(container: HTMLElement) {
+  const label = within(container).getByText("Calendar normalization", { exact: true });
+  const group = label.closest("details") ?? label.closest("section");
+  expect(group).not.toBeNull();
+  if (!(group instanceof HTMLElement)) throw new Error("Calendar normalization must have a named source disclosure");
+  expect(group).toHaveTextContent("America/Los_Angeles");
+  for (const reference of calendarBasis.references) {
+    expect(within(group).getByText(reference.source_label, { exact: true }).closest("a")).toHaveAttribute("href", reference.source_url);
+    expect(group).toHaveTextContent(reference.locator);
+    expect(group).toHaveTextContent(reference.original_term);
+    for (const timestamp of [reference.retrieved_at, reference.verified_at, reference.current_until]) {
+      expect(group.querySelector(`time[datetime="${timestamp}"]`)).not.toBeNull();
+    }
+  }
+  expect(group).not.toHaveTextContent("internal-calendar-basis-sentinel");
+  expect(group).not.toHaveTextContent("internal-calendar-mapping-sentinel");
+}
+describe("calendar normalization provenance", () => {
+  it("separates normalization references from the date-only source beside the current stage fact", () => {
+    const result = calendarView();
+    render(<ElectionContest result={result} />);
+    const stage = screen.getByRole("region", { name: "Election and stage" });
+    expect(stage).toHaveTextContent("Election date: 2026-11-03");
+    expectCalendarReferences(stage);
+    const primary = within(stage).getByRole("link", { name: calendarStageSource.source_label }).parentElement;
+    expect(primary?.querySelector(`time[datetime="${VERIFIED_AT}"]`)).not.toBeNull();
+  });
+  it("shows the same reference provenance beside an index stage date", () => {
+    render(<ElectionIndex result={{ status: "available", contests: [calendarView()], unverified_count: 0 }} />);
+    expectCalendarReferences(screen.getByRole("region", { name: "Upcoming contests" }));
+  });
+  it("retains separately dated normalization evidence when the stage is stale", () => {
+    const result = calendarView();
+    if (result.stage.state !== "verified") throw new Error("Invalid synthetic DTO setup");
+    render(<ElectionContest result={{ ...result, verification: "historical", upcoming: null, stage: { state: "stale", previous: [{ value: result.stage.value, evidence: calendarStageSource }] } }} />);
+    const stage = screen.getByRole("region", { name: "Election and stage" });
+    expect(stage).toHaveTextContent("Stale evidence");
+    expectCalendarReferences(stage);
+  });
+  it("keeps calendar provenance with current metadata conflicts outside the history page", () => {
+    const result = calendarView();
+    if (result.stage.state !== "verified") throw new Error("Invalid synthetic DTO setup");
+    const entry: EvidenceHistory = { kind: "stage_metadata", subject: { kind: "stage", id: "synthetic-stage" }, value: result.stage.value, evidence: calendarStageSource, applicability: "current", superseded: false };
+    render(<ElectionContest result={{ status: "unverified", reason: "unverified_metadata", contest_id: result.contest_id, history: [], history_page: result.history_page, metadata_conflicts: [entry, { ...entry, value: { ...result.stage.value, date: "2026-11-04" }, evidence: { ...dateOnlySource, id: "synthetic-conflict", source_label: "Conflicting synthetic date source" } }] }} />);
+    const primary = screen.getByRole("link", { name: "Synthetic date-only election source" });
+    const assertion = primary.closest("li");
+    expect(assertion?.closest("details")).toBeNull();
+    if (!(assertion instanceof HTMLElement)) throw new Error("Current conflict must remain visible");
+    expectCalendarReferences(assertion);
+  });
+  it("retains normalization references in bounded historical evidence", () => {
+    const result = calendarView();
+    if (result.stage.state !== "verified") throw new Error("Invalid synthetic DTO setup");
+    const entry: EvidenceHistory = { kind: "stage_metadata", subject: { kind: "stage", id: "synthetic-stage" }, value: result.stage.value, evidence: calendarStageSource, applicability: "historical", superseded: true };
+    render(<ElectionContest result={{ ...result, stage: { ...result.stage, evidence: [dateOnlySource], verified_at: dateOnlySource.verified_at }, history: [entry], history_page: { ...result.history_page, total: 1 } }} />);
+    const history = screen.getByText("Evidence history (1 retained assertions)").closest("details");
+    if (!(history instanceof HTMLElement)) throw new Error("Historical evidence must retain native disclosure");
+    expectCalendarReferences(history);
+  });
+  it("keeps reference links in static HTML without publishing internal identifiers or approval fields", () => {
+    const markup = renderToStaticMarkup(<ElectionContest result={calendarView()} />);
+    expect(markup).toContain("Calendar normalization");
+    expect(markup).toContain("https://time.example.test/zone-table");
+    for (const hidden of ["internal-calendar-basis-sentinel", "internal-calendar-mapping-sentinel", "internal-zone-authority-sentinel", "internal-rule-authority-sentinel", "access_approval", "retention_approval", "receipt_id", "reviewer_id", "<script"]) expect(markup).not.toContain(hidden);
   });
 });
