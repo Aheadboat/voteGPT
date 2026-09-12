@@ -1044,3 +1044,205 @@ describe("independent review regressions", () => {
     expect(projectContest(readGraph(graph), NOW).status).toBe("unverified");
   });
 });
+
+const CONTEST_FIELDS = ["name", "office", "district", "term", "seats", "form", "level", "jurisdiction_id", "division_ids", "partisanship"];
+
+function compositeFixture() {
+  const graph = fixtureGraph();
+  for (const authority of graph.policy.authorities) {
+    for (const mapping of authority.mappings) {
+      Object.assign(mapping, { allowed_fields: mapping.kind === "contest_metadata" ? [...CONTEST_FIELDS] : [] });
+    }
+  }
+  const original = metadata(graph, "contest_metadata");
+  const source = {
+    retrieved_at: original.retrieved_at, verified_at: original.verified_at, effective: structuredClone(original.effective),
+    current_until: original.current_until,
+  };
+  const primaryFields = CONTEST_FIELDS.filter((field) => !["term", "seats", "form"].includes(field));
+  const statute = structuredClone(graph.policy.authorities[0]);
+  Object.assign(statute, {
+    id: "fixture-statute", source_type: "official_statute", urls: ["https://law.example.test/office"],
+    mappings: [{ ...statute.mappings.find((mapping) => mapping.kind === "contest_metadata")!,
+      id: "statute-fields", allowed_fields: ["term", "seats", "form"], allows_supersession: false }],
+  });
+  const registry = structuredClone(graph.policy.authorities[0]);
+  Object.assign(registry, {
+    id: "fixture-registry", source_type: "division_identifier_registry", urls: ["https://registry.example.test/divisions"],
+    mappings: [{ ...registry.mappings.find((mapping) => mapping.kind === "contest_metadata")!,
+      id: "registry-fields", allowed_fields: ["division_ids"], allows_supersession: false }],
+  });
+  graph.policy.authorities.push(statute, registry);
+  graph.package.documents.push(
+    { id: "statute-document", authority_id: statute.id, url: statute.urls[0], sha256: "c".repeat(64), label: "Synthetic statute" },
+    { id: "registry-document", authority_id: registry.id, url: registry.urls[0], sha256: "d".repeat(64), label: "Synthetic identifier registry" },
+  );
+  const snapshot = Object.assign(original, {
+    fields: primaryFields,
+    supporting_sources: [
+      { ...structuredClone(source), id: "statute", fields: ["term", "seats", "form"], document_id: "statute-document",
+        mapping_id: "statute-fields", locator: "Synthetic section 1", original_term: "Synthetic seat and term rule" },
+      { ...structuredClone(source), id: "registry", fields: ["division_ids"], document_id: "registry-document",
+        mapping_id: "registry-fields", locator: "Synthetic registry row 1", original_term: DISTRICT },
+    ],
+  });
+  return { graph, snapshot, statute, registry };
+}
+
+function previousCompositeSnapshot(fixture: ReturnType<typeof compositeFixture>) {
+  const previous = structuredClone(fixture.snapshot);
+  previous.id = "contest-before";
+  previous.fields = [...CONTEST_FIELDS];
+  previous.supporting_sources = [];
+  fixture.graph.package.evidence.push(previous);
+  fixture.snapshot.value.term = "Synthetic revised term";
+  fixture.graph.package.supersessions.push({
+    predecessor_id: previous.id, replacement_id: fixture.snapshot.id, reason: "Synthetic whole-snapshot correction",
+  });
+  return previous;
+}
+
+function expectFieldSources(reference: unknown) {
+  const shared = { retrieved_at: "2026-09-12T11:00:00.000Z", verified_at: VERIFIED_AT,
+    current_until: CURRENT_UNTIL, effective: { precision: "instant", start: "2026-09-01T00:00:00.000Z", end: null } };
+  const primary = { ...shared, group_id: "primary", source_url: "https://elections.example.test/2026/candidates",
+    source_type: "official_election_authority", original_term: "Synthetic official term", locator: "Synthetic row 1" };
+  const statute = { ...shared, group_id: "statute", source_url: "https://law.example.test/office", source_type: "official_statute",
+    original_term: "Synthetic seat and term rule", locator: "Synthetic section 1" };
+  const registry = { ...shared, group_id: "registry", source_url: "https://registry.example.test/divisions",
+    source_type: "division_identifier_registry", original_term: DISTRICT, locator: "Synthetic registry row 1" };
+  for (const field of CONTEST_FIELDS) {
+    const sources = ["term", "seats", "form"].includes(field) ? [statute] : field === "division_ids" ? [primary, registry] : [primary];
+    expect(reference).toMatchObject({ field_sources: { [field]: sources } });
+  }
+}
+
+describe("complete metadata snapshots with field-specific supporting sources", () => {
+  it("admits one whole snapshot and attributes every field to its actual supporting sources", () => {
+    const { graph } = compositeFixture();
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    const result = view(graph);
+    expect(result.contest.state).toBe("verified");
+    if (result.contest.state !== "verified") throw new Error("Expected complete sourced snapshot");
+    expectFieldSources(result.contest.evidence[0]);
+    expectFieldSources(result.history.find((entry) => entry.kind === "contest_metadata")!.evidence);
+    expect(result.candidates.every((candidate) => candidate.tracks.ballot_qualification.state === "unknown")).toBe(true);
+  });
+
+  it("retains exact per-field provenance on each conflicting complete snapshot", () => {
+    const { graph, snapshot } = compositeFixture();
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    const other = structuredClone(snapshot);
+    other.id = "contested-composite";
+    other.value.term = "Another synthetic term";
+    graph.package.evidence.push(other);
+    const result = projectContest(readGraph(graph), NOW);
+    expect(result).toMatchObject({ status: "unverified", reason: "unverified_metadata" });
+    if (result.status !== "unverified") throw new Error("Expected whole-snapshot conflict");
+    expect(result.metadata_conflicts).toHaveLength(2);
+    for (const entry of result.metadata_conflicts!) expectFieldSources(entry.evidence);
+  });
+
+  it.each(["primary_fields", "missing_field", "unknown_field", "unknown_document", "unknown_mapping", "duplicate_group", "self_approval", "wrong_jurisdiction", "wrong_contest"] as const)(
+    "rejects %s support after admitting a complete control", (change) => {
+      const fixture = compositeFixture();
+      const { graph, snapshot, statute } = fixture;
+      expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+      if (change === "primary_fields") Object.assign(snapshot, { fields: undefined });
+      if (change === "missing_field") snapshot.supporting_sources[0].fields = ["seats", "form"];
+      if (change === "unknown_field") snapshot.supporting_sources[0].fields.push("invented_field");
+      if (change === "unknown_document") snapshot.supporting_sources[0].document_id = "unknown";
+      if (change === "unknown_mapping") snapshot.supporting_sources[0].mapping_id = "unknown";
+      if (change === "duplicate_group") snapshot.supporting_sources[1].id = snapshot.supporting_sources[0].id;
+      if (change === "self_approval") Object.assign(snapshot.supporting_sources[0], { approval_reference: "package-self-approval" });
+      if (change === "wrong_jurisdiction") statute.jurisdiction_id = "ocd-division/country:us/state:ny";
+      if (change === "wrong_contest") statute.contest_keys = ["other-contest"];
+      expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("rejected");
+      expect(projectContest(readGraph(graph), NOW).status).toBe("unverified");
+    },
+  );
+
+  it.each(["statute", "registry"] as const)("hard-denies %s status, retirement, and standalone correction grants", (role) => {
+    for (const kind of ["ballot_qualification", "retirement", "correction"] as const) {
+      const fixture = compositeFixture();
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("valid");
+      const authority = fixture[role];
+      if (kind === "correction") authority.mappings[0].allows_supersession = true;
+      else Object.assign(authority.mappings[0], {
+        kind, subject_kind: "candidacy", values: kind === "ballot_qualification" ? ["certified"] : [], allowed_fields: [],
+      });
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("rejected");
+    }
+  });
+
+  it.each(["statute", "registry"] as const)("rejects an overbroad %s field grant even if source policy names it", (role) => {
+    const fixture = compositeFixture();
+    expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("valid");
+    Object.assign(fixture[role].mappings[0], { allowed_fields: [...CONTEST_FIELDS] });
+    expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("rejected");
+  });
+
+  it.each(["stale", "disabled", "future", "unknown"] as const)("cannot verify a snapshot with %s required support", (change) => {
+    const fixture = compositeFixture();
+    expect(view(fixture.graph).verification).toBe("current");
+    if (change === "stale") fixture.snapshot.supporting_sources[0].current_until = NOW.toISOString();
+    if (change === "disabled") fixture.statute.enabled = false;
+    if (change === "future") fixture.snapshot.supporting_sources[0].effective = {
+      precision: "instant", start: "2026-09-12T14:00:00.000Z", end: null,
+    };
+    if (change === "unknown") {
+      fixture.snapshot.supporting_sources[0].effective = { precision: "unknown", reason: "not_published" };
+      fixture.statute.mappings[0].supports_current_snapshot = false;
+    }
+    const result = projectContest(readGraph(fixture.graph), NOW);
+    if (result.status === "available") {
+      expect(result.verification).toBe("historical");
+      expect(result.contest.state).toBe("stale");
+    } else expect(result.status).toBe("unverified");
+  });
+
+  it("waits for joint support effect before replacing a whole snapshot and never resurrects it after expiry", () => {
+    const fixture = compositeFixture();
+    previousCompositeSnapshot(fixture);
+    fixture.snapshot.supporting_sources[0].effective = { precision: "instant", start: "2026-09-12T14:00:00.000Z", end: null };
+    fixture.snapshot.supporting_sources[1].effective = { precision: "instant", start: "2026-09-12T15:00:00.000Z", end: null };
+    fixture.snapshot.supporting_sources[0].current_until = "2026-09-12T16:00:00.000Z";
+    expect(view(fixture.graph, new Date("2026-09-12T14:59:59.999Z")).contest)
+      .toMatchObject({ state: "verified", value: { term: "2027-2029" } });
+    expect(view(fixture.graph, new Date("2026-09-12T15:00:00.000Z")).contest)
+      .toMatchObject({ state: "verified", value: { term: "Synthetic revised term" } });
+    expect(view(fixture.graph, new Date("2026-09-12T16:00:00.000Z")).contest)
+      .toMatchObject({ state: "stale", previous: [{ value: { term: "Synthetic revised term" } }] });
+  });
+
+  it("never retires a previous whole snapshot when its replacement supports have no common operative interval", () => {
+    const fixture = compositeFixture();
+    previousCompositeSnapshot(fixture);
+    fixture.snapshot.supporting_sources[0].effective = {
+      precision: "instant", start: "2026-09-01T00:00:00.000Z", end: "2026-09-12T14:00:00.000Z",
+    };
+    fixture.snapshot.supporting_sources[1].effective = { precision: "instant", start: "2026-09-12T15:00:00.000Z", end: null };
+    const result = view(fixture.graph, new Date("2026-09-12T15:30:00.000Z"));
+    expect(result.contest).toMatchObject({ state: "verified", value: { term: "2027-2029" } });
+    expect(result.history.find((entry) => entry.evidence.id === "contest-before")?.superseded).toBe(false);
+  });
+
+  it("cannot borrow an omitted field's support from the previous snapshot", () => {
+    const fixture = compositeFixture();
+    previousCompositeSnapshot(fixture);
+    expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("valid");
+    fixture.snapshot.supporting_sources[0].fields = ["seats", "form"];
+    expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("rejected");
+  });
+
+  it("preserves whole-snapshot projection and per-field attribution when support group order changes", () => {
+    const fixture = compositeFixture();
+    fixture.snapshot.supporting_sources.push({
+      ...fixture.snapshot.supporting_sources[0], id: "cohort", fields: ["term", "seats"],
+      document_id: "election-document", mapping_id: "contest_metadata:contest", original_term: "Synthetic election cohort",
+    });
+    const first = view(fixture.graph);
+    fixture.snapshot.supporting_sources.reverse();
+    expect(view(fixture.graph)).toEqual(first);
+  });
+});
