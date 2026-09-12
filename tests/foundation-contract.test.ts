@@ -60,21 +60,21 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseRoadmap = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "ROADMAP.md"))
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
-  expect(governanceSha256(item), "exact F7 design-only activation record").toBe(
-    "9d171bb36af45c7aacbbdf97844fa6f7eda4095f8aa077501449767f5a9bc3ad",
+  expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
+    "91234e760937920d590ead75290cbc072837fa8382031cfb0dfbfd0d64241b7e",
   )
-  expect(governanceSha256(plan), "exact F7 Gate A candidate, approval still pending").toBe(
+  expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
   )
   expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
   expect(normalizedReadme).toBe(replaceExactlyOnce(
     baseReadme,
     "F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-    "F7 — Elections and Deterministic Candidate Validity is active in `DISCOVER/DESIGN/PLAN` using the documented official-source fallback. Human Gate A is pending; RED and production implementation have not started. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 — Elections and Deterministic Candidate Validity is active in `DISCOVER/DESIGN/PLAN` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Source-specific rights and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts"], "F7 pre-Gate-A changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
   }
 }
 
@@ -1989,7 +1989,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("activates only F7 design after the immutable G1 closeout", () => {
+  it("permits only approved F7 engineering after the immutable G1 closeout", () => {
     ensureG1MainHistoryAvailable()
     execFileSync("git", ["merge-base", "--is-ancestor", f7DependencyBase, "HEAD"], { cwd: repositoryRoot, stdio: "pipe" })
     const closeout = readGitCommitRecord(f7DependencyBase)
@@ -2013,9 +2013,9 @@ describe("concurrent roadmap delivery contract", () => {
       ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[IN PROGRESS (RED)]"],
       ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[VERIFIED]"],
       ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[DONE]"],
-      ["- **Human Gate A approval:** Pending;", "- **Human Gate A approval:** Approved;"],
+      ["- **Human Gate A approval:** Approved by the user's explicit", "- **Human Gate A approval:** Pending; not approved by the user's explicit"],
       ["- **Human Gate B approval:** Pending;", "- **Human Gate B approval:** Approved;"],
-      ["- **Human Gate A approval:** Pending;", "- **Human Gate A approval:** Approved.\n- **Human Gate A approval:** Pending;"],
+      ["- **Human Gate A approval:** Approved by the user's explicit", "- **Human Gate A approval:** Pending.\n- **Human Gate A approval:** Approved by the user's explicit"],
       ["`N/A` — F7 is the sole active item", "`PASS` — F7 is the sole active item"],
     ]) {
       const mutated = roadmap.replace(before, after)
@@ -2026,7 +2026,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(() => expectF7DesignActivation(roadmap + suffix, readme, changed)).toThrow()
     }
     expect(() => expectF7DesignActivation(roadmap, readme + "\nVendor access authorized.\n", changed)).toThrow()
-    for (const path of ["src/lib/elections.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "scratch.txt"]) {
+    for (const path of ["src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
       expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
     }
   }, 30_000)
