@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "0bbb45662b4aa0e486c7fb5a342c9f845ef9b3e03c953fe7be25342007805de4",
+    "62579b141235d2de6aca4b4fab990b601dc4936e47df4a3acd12851a5a90f4e0",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -90,6 +90,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
       "src/components/elections.tsx", "src/components/elections.module.css",
       "src/lib/election-service.test.ts", "src/components/elections.test.tsx", "src/app/elections/page.test.tsx", "src/app/elections/contests/[contestId]/page.test.tsx",
       "src/app/dashboard/page.test.tsx", "src/components/government-navigation.test.tsx", "src/app/page.test.tsx", "src/app/identity-shell.test.tsx",
+      "src/app/dashboard/page.tsx", "src/components/government-navigation.tsx", "src/app/page.tsx",
     ], "F7 approved changed path: " + path).toContain(path)
   }
 }

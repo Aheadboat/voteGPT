@@ -15,7 +15,7 @@ const scope: ElectionReadScope = { level: "federal", jurisdiction_id: STATE, div
 function setup(records: readonly ElectionGraph[] = [graph()]) {
   const repository: ElectionRepository = {
     readUpcoming: vi.fn(async () => records), readContest: vi.fn(async () => records[0] ?? null),
-    importReviewedPackage: vi.fn(async () => ({ status: "unavailable" })),
+    importReviewedPackage: vi.fn(async () => ({ status: "unavailable" as const })),
   };
   return { repository, service: createElectionService({ repository, now: () => NOW }) };
 }

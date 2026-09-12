@@ -1,3 +1,8 @@
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { registerHooks } from "node:module";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
 const args = process.argv.slice(2);
 const values = new Map<string, string>();
 let mode: "dry-run" | "apply" | undefined;
@@ -56,18 +61,40 @@ if (!valid) {
           return nextResolve(specifier, context);
         },
       });
-      const { parseElectionImport } = await import("@/lib/election-import");
-      const parsed = parseElectionImport(text);
-      if (parsed.status === "rejected") process.stdout.write(`${JSON.stringify(parsed)}\n`);
-      else process.stderr.write("Election import is unavailable.\n");
-      process.exitCode = 1;
+      const { runElectionImport } = await import("@/lib/election-import");
+      const { getElectionSourceOptions } = await import("@/lib/election-source-policy");
+      const sourceOptions = getElectionSourceOptions();
+      const reviewed = await runElectionImport(text, { mode: "dry-run", receiptId: receipt!, sourceOptions });
+      // Validate before loading storage; dry-run never initializes a database.
+      let result = reviewed;
+      if (reviewed.status === "validated" && mode === "apply") {
+        let databaseUrl = process.env.DATABASE_URL;
+        if (["E2E_DESTRUCTIVE_OPT_IN", "E2E_DATABASE_URL", "E2E_DATABASE_MARKER"]
+          .some((name) => process.env[name] !== undefined)) {
+          const guardModule = "../e2e/database-guard.mjs";
+          const { readE2eDatabaseMarker, requireE2eDatabase } = await import(guardModule);
+          databaseUrl = await requireE2eDatabase(process.env, readE2eDatabaseMarker);
+        }
+        if (!databaseUrl) throw new Error("Storage unavailable");
+        const { createDatabase } = await import("@/db");
+        const { createElectionRepository } = await import("@/lib/election-repository");
+        const database = await createDatabase(databaseUrl);
+        try {
+          result = await runElectionImport(text, {
+            mode: "apply", receiptId: receipt!, sourceOptions,
+            repository: createElectionRepository(database, sourceOptions),
+          });
+        } finally {
+          const client = database.$client;
+          if ("end" in client) await client.end();
+          else await client.close();
+        }
+      }
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      process.exitCode = ["validated", "imported", "unchanged"].includes(result.status) ? 0 : 1;
     } catch {
       process.stderr.write("Election import is unavailable.\n");
       process.exitCode = 1;
     }
   }
 }
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { registerHooks } from "node:module";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type {
-  BallotLineView, CandidateTracks, CandidacyView, ContestField, ContestResult,
+  BallotLineView, CandidateTracks, CandidacyView, ContestField, ContestMetadata, ContestResult,
   EvidenceHistory, EvidenceRef, EvidenceState, HistoryPage, SourceReference,
 } from "@/lib/elections";
 import styles from "./elections.module.css";
@@ -32,12 +32,15 @@ function Time({ value }: { value: string }) {
 function Source({ source, shownTerm }: { source: SourceReference; shownTerm?: string }) {
   return <div className={styles.source}>
     <a href={source.source_url}>{source.source_label}</a>
-    <span>Source type: {source.source_type.replaceAll("_", " ")}. Location: {source.locator}.</span>
     {source.original_term !== shownTerm && <span>Original source term: <span>{source.original_term}</span></span>}
-    <span>Retrieved <Time value={source.retrieved_at} />. Reviewed <Time value={source.verified_at} />.</span>
-    <span>{source.effective.precision === "unknown" ? "Effective time unknown." :
+    <span>Reviewed <Time value={source.verified_at} />.</span>
+    <details><summary>Source timing and location</summary>
+    <p>Source type: {source.source_type.replaceAll("_", " ")}. Location: {source.locator}.</p>
+    <p>Retrieved <Time value={source.retrieved_at} />.</p>
+    <p>{source.effective.precision === "unknown" ? "Effective time unknown." :
       `Effective ${source.effective.start ?? "start unknown"} to ${source.effective.end ?? "end unspecified"}${source.effective.precision === "date" ? " (source-stated civil dates)" : ""}.`}
-      {" "}Verification expires <Time value={source.current_until} />.</span>
+      {" "}Verification expires <Time value={source.current_until} />.</p>
+    </details>
   </div>;
 }
 function Sources({ evidence, shownTerm }: { evidence: readonly SourceReference[]; shownTerm?: string }) {
@@ -61,8 +64,13 @@ function Tracks({ tracks }: { tracks: CandidateTracks }) {
     return <div key={kind}><dt>{trackLabels[kind]}</dt><dd><Claim state={state as EvidenceState<unknown>} renderValue={readableValue} /></dd></div>;
   })}</dl>;
 }
+function historicalValue<T>(state: EvidenceState<T>): T | null {
+  if (state.state === "verified") return state.value;
+  if (state.state === "stale") return state.previous[0]?.value ?? null;
+  return null;
+}
 function nameOf(item: CandidacyView | BallotLineView) {
-  return item.metadata.state === "verified" ? item.metadata.value.name : `Unverified identity ${item.id}`;
+  return historicalValue(item.metadata)?.name ?? `Unverified identity ${item.id}`;
 }
 function compareNames(a: CandidacyView | BallotLineView, b: CandidacyView | BallotLineView) {
   return nameOf(a).localeCompare(nameOf(b), "en", { sensitivity: "base" }) || a.id.localeCompare(b.id, "en");
@@ -106,6 +114,18 @@ function History({ entries, page, contestId }: { entries: readonly EvidenceHisto
     {page.next_offset !== null && <a href={`/elections/contests/${encodeURIComponent(contestId)}?history=${page.next_offset}`}>Next history page</a>}
   </nav>}</>;
 }
+function ContestFacts({ state }: { state: EvidenceState<ContestMetadata> }) {
+  const assertions = state.state === "verified" ? [{ value: state.value, evidence: state.evidence }] :
+    state.state === "stale" ? state.previous.map(({ value, evidence }) => ({ value, evidence: [evidence] })) : [];
+  if (assertions.length === 0) return <Claim state={state} />;
+  return <>{state.state === "stale" && <p className={styles.notice}>Stale contest facts — previously reviewed information, not current verification.</p>}
+    {assertions.map(({ value, evidence }, index) => <dl key={index}>{(Object.keys(fieldLabels) as ContestField[]).map((field) => <div key={field} data-testid={`contest-fact-${field}`} className={styles.fact}>
+      <dt>{fieldLabels[field]}</dt><dd><p>{["form", "level", "partisanship"].includes(field) ? readableValue(value[field]) : valueText(value[field])}</p>
+        <Sources evidence={evidence.flatMap((entry: EvidenceRef) => entry.field_sources?.[field] ?? [])} />
+      </dd>
+    </div>)}</dl>)}
+  </>;
+}
 export function ElectionContest({ result }: { result: ContestResult }) {
   if (result.status !== "available") return <section className={styles.shell}>
     <h1>{result.status === "missing" ? "Contest not found" : "Contest information"}</h1>
@@ -121,18 +141,14 @@ export function ElectionContest({ result }: { result: ContestResult }) {
   ])];
   return <section className={styles.shell}>
     <a href="/elections">Browse elections</a>
-    <h1>{result.contest.state === "verified" ? result.contest.value.name : "Election contest"}</h1>
+    <h1>{historicalValue(result.contest)?.name ?? "Election contest"}</h1>
     {result.verification === "historical" && <p className={styles.notice}>Historical contest — prior evidence is not current verification.</p>}
     <section aria-label="Election and stage"><h2>Election and stage</h2>
       <Claim state={result.election} renderValue={(election) => <>{election.name}. {election.kind} election. Coverage: {election.coverage.state === "partial" ? "Partial" : "Complete only within admitted contests"}. {election.coverage.notes.join(" ")}</>} />
       <Claim state={result.stage} renderValue={(stage) => <>{stage.name}. Stage: {stage.kind}. Election date: {stage.date ?? "Unknown"}. Time zone: {stage.time_zone ?? "Unknown"}. An election date does not establish polling hours.</>} />
     </section>
     <section aria-label="Contest facts"><h2>Contest facts</h2>
-      {result.contest.state === "verified" ? <dl>{(Object.keys(fieldLabels) as ContestField[]).map((field) => <div key={field} data-testid={`contest-fact-${field}`} className={styles.fact}>
-        <dt>{fieldLabels[field]}</dt><dd><p>{["form", "level", "partisanship"].includes(field) ? readableValue(result.contest.state === "verified" ? result.contest.value[field] : null) : valueText(result.contest.state === "verified" ? result.contest.value[field] : null)}</p>
-          <Sources evidence={result.contest.state === "verified" ? result.contest.evidence.flatMap((entry: EvidenceRef) => entry.field_sources?.[field] ?? []) : []} />
-        </dd>
-      </div>)}</dl> : <Claim state={result.contest} />}
+      <ContestFacts state={result.contest} />
     </section>
     <section aria-label="Candidates"><h2>Candidates</h2>
       <p>Names appear alphabetically, then by explicit identifier. Each candidate has the same evidence tracks. Finance filings do not establish ballot qualification.</p>

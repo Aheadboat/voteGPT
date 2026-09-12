@@ -65,7 +65,7 @@ describe("source-backed election contest", () => {
       ...original, group_id: field, source_label: `Source for ${field}`,
       source_url: `https://elections.example.test/${field}`,
       original_term: `Original ${field}`, verified_at: "2026-09-12T10:00:00.000Z",
-    }]])) as NonNullable<typeof original.field_sources>;
+    }]])) as unknown as NonNullable<typeof original.field_sources>;
     render(<ElectionContest result={{ ...result, contest: {
       ...result.contest, evidence: [{ ...original, field_sources }],
     } }} />);

@@ -24,9 +24,10 @@ describe("landing page", () => {
     ).toBeInTheDocument()
     expect(
       within(main).getByText(
-        "voteGPT is in development. Civic coverage is not available yet.",
+        /Civic coverage is limited.*California elections/i,
       ),
     ).toBeInTheDocument()
+    expect(within(main).getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections")
 
     const principles = within(main).getByRole("region", {
       name: "Built for trustworthy civic research",

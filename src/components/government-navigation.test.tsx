@@ -12,6 +12,13 @@ const panels = {
 };
 
 describe("GovernmentNavigation", () => {
+  it("labels Elections as civic information and preserves native mode navigation", () => {
+    render(<GovernmentNavigation panels={panels} searchParams={{ level: "state", mode: "elections" }} />);
+    expect(screen.getByRole("region", { name: "Government information" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Information type" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Elections" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "In office" })).toHaveAttribute("href", "?level=state&mode=in-office&category=legislature");
+  });
   it("lets server code normalize before invoking only the selected level loader", () => {
     const local = vi.fn();
     const state = vi.fn();
