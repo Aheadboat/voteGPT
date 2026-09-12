@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "267323417669c1983a81d5dc2e451182545d92f999bd314de2ae58989211682e",
+    "d753d142936afabec6a500c34226a8c6b16b1c56735be0aeb4aeaff1f1da9a04",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -83,7 +83,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
     expect([
       "ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "F7-SUPPLEMENTAL-SOURCE-DECISION.md",
       "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts",
-      "src/lib/election-repository.test.ts", "integration/election-evidence.test.ts",
+      "src/lib/election-repository.ts", "src/lib/election-repository.test.ts", "integration/election-evidence.test.ts",
       "src/lib/election-source-policy.test.ts", "src/lib/election-import.test.ts", "tests/election-import-command.test.ts", "tests/fixtures/elections/import.ts",
       "src/lib/election-service.test.ts", "src/components/elections.test.tsx", "src/app/elections/page.test.tsx", "src/app/elections/contests/[contestId]/page.test.tsx",
       "src/app/dashboard/page.test.tsx", "src/components/government-navigation.test.tsx", "src/app/page.test.tsx", "src/app/identity-shell.test.tsx",
@@ -2041,7 +2041,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(() => expectF7DesignActivation(roadmap + suffix, readme, changed)).toThrow()
     }
     expect(() => expectF7DesignActivation(roadmap, readme + "\nVendor access authorized.\n", changed)).toThrow()
-    for (const path of ["src/lib/election-repository.ts", "src/lib/election-source-policy.ts", "src/app/elections/page.tsx", "src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
+    for (const path of ["src/lib/election-source-policy.ts", "src/app/elections/page.tsx", "src/db/schema.ts", "src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
       expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
     }
   }, 30_000)
