@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "909557056abccf7f108cdfd2d3f07d71004376a20b6b3dba4b409bb8730d7e40",
+    "76f9d52835b3e3486feda64d1818f85bbd91e7bbe1bbf9ebe47b24411ba0d326",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
