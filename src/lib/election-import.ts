@@ -21,6 +21,7 @@ export async function runElectionImport(text: string, options: Readonly<{
   sourceOptions: ElectionRepositoryOptions;
   repository?: Pick<ElectionRepository, "importReviewedPackage">;
 }>): Promise<ImportResult | Readonly<{ status: "validated"; package_sha256: string }>> {
+  if (options?.mode !== "dry-run" && options?.mode !== "apply") return { status: "rejected", reason: "invalid_mode" };
   const parsed = parseElectionImport(text);
   if (parsed.status === "rejected") return parsed;
   try {

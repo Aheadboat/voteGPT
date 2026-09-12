@@ -126,7 +126,7 @@ async function electionsFor(userId: string, level: GovernmentNavigationState["le
       else if (result.status === "invalid") content = <p>Your saved state could not be verified. Preview and save your residence again, or browse public elections.</p>;
       else if (result.status === "unsupported") content = <p>Election coverage is unavailable for your saved state or selected level. Public California contests remain browsable.</p>;
       else if (result.status === "unavailable") content = <p role="status">Election information is temporarily unavailable. Try again later or browse public elections.</p>;
-      else content = <ElectionIndex result={result} />;
+      else if (result.status === "available") content = <ElectionIndex result={result} />;
     }
   } catch {
     content = <p role="status">Election information is temporarily unavailable. Try again later or browse public elections.</p>;

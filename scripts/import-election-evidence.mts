@@ -21,7 +21,7 @@ for (let index = 0; index < args.length; index++) {
 const file = values.get("--file");
 const receipt = values.get("--receipt");
 if (!mode || !file || !receipt || !/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,159}$/.test(receipt) ||
-    /^(?:[a-z][a-z\d+.-]*:\/\/|file:|\\\\|\/\/)/i.test(file)) valid = false;
+    /^(?:[a-z][a-z\d+.-]*:\/\/|file:|[\\/]{2})/i.test(file)) valid = false;
 
 if (!valid) {
   process.stderr.write("Election import arguments are invalid.\n");

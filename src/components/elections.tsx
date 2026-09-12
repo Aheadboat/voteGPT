@@ -70,7 +70,7 @@ function historicalValue<T>(state: EvidenceState<T>): T | null {
   return null;
 }
 function nameOf(item: CandidacyView | BallotLineView) {
-  return historicalValue(item.metadata)?.name ?? `Unverified identity ${item.id}`;
+  return historicalValue<Readonly<{ name: string }>>(item.metadata)?.name ?? `Unverified identity ${item.id}`;
 }
 function compareNames(a: CandidacyView | BallotLineView, b: CandidacyView | BallotLineView) {
   return nameOf(a).localeCompare(nameOf(b), "en", { sensitivity: "base" }) || a.id.localeCompare(b.id, "en");

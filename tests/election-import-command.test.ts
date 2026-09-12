@@ -8,6 +8,39 @@ import { fixturePackage } from "./fixtures/elections/domain";
 
 describe("election import command boundary", () => {
   it.each([
+    ["\\/synthetic-review.example.test/share/package.json", false],
+    ["/\\synthetic-review.example.test/share/package.json", false],
+    ["\\\\synthetic-review.example.test\\share\\package.json", false],
+    [resolve("synthetic-review-package.json"), true],
+  ] as const)("checks path %s before file access", (path, local) => {
+    const hook = `import fs from 'node:fs';
+import net from 'node:net';
+import tls from 'node:tls';
+import { syncBuiltinESMExports } from 'node:module';
+const originalRead = fs.readFileSync;
+fs.readFileSync = function(value, ...rest) {
+  if (value === ${JSON.stringify(path)}) {
+    process.stderr.write('BLOCKED TEST FILE READ\\n');
+    throw new Error('Prevented actual file access');
+  }
+  return originalRead.call(this, value, ...rest);
+};
+const deny = () => { process.stderr.write('FORBIDDEN NETWORK ACCESS\\n'); process.exit(77); };
+globalThis.fetch = deny;
+net.Socket.prototype.connect = deny;
+tls.connect = deny;
+syncBuiltinESMExports();`;
+    const result = spawnSync(process.execPath, [
+      "--import", `data:text/javascript;base64,${Buffer.from(hook).toString("base64")}`,
+      resolve("scripts/import-election-evidence.mts"), "--file", path, "--receipt", "receipt-1", "--dry-run",
+    ], { encoding: "utf8", timeout: 10_000 });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(local ? "BLOCKED TEST FILE READ\nElection import could not read the package.\n" :
+      "Election import arguments are invalid.\n");
+  });
+
+  it.each([
     [],
     ["--file", "private-input.json", "--approval-file", "private.approval.json"],
     ["--file", "private-input.json", "--approved", "true"],

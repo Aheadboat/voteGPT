@@ -453,4 +453,55 @@ describe("immutable election persistence", () => {
     const secondPage = await repository.readContest(initial.graph.contest_id, { offset: 2, limit: 2 });
     expect(secondPage && projectContest(secondPage, NOW)).toMatchObject({ history_page: { offset: 2, total: 10_407, next_offset: 4 } });
   }, 60_000);
+
+  it.each(["election", "stage", "contest", "candidacy", "ballot_line"] as const)("binds raw %s correction batches to the subject's actual election", async (kind) => {
+    const graph = fixtureGraph();
+    const original = graph.package.evidence.find((entry) => entry.subject.kind === kind)!;
+    graph.package.evidence.push({ ...structuredClone(original), id: "own-correction" }, { ...structuredClone(original), id: "foreign-correction" });
+    const own = reviewedFixture(graph);
+    expect((await createElectionRepository(database, own.options).importReviewedPackage(graph.package, own.receipt.id)).status).toBe("imported");
+    const foreign = fixtureGraph();
+    foreign.package = JSON.parse(JSON.stringify(foreign.package).replace(/"((?:election|stage|contest|candidate|line)-[^"\\]*)"/g, (_match, id: string) => JSON.stringify("foreign-" + id)));
+    foreign.package.election.official_key = "foreign-" + foreign.package.election.official_key;
+    for (const authority of foreign.policy.authorities) authority.election_key = foreign.package.election.official_key;
+    const other = reviewedFixture(foreign);
+    other.receipt.id += "-foreign";
+    expect((await createElectionRepository(database, other.options).importReviewedPackage(foreign.package, other.receipt.id)).status).toBe("imported");
+    await database.insert(electionEvidenceSupersession).values({ replacement_id: "own-correction", predecessor_id: original.id, batch_sha256: own.receipt.package_sha256, reason: "Synthetic valid correction" });
+    await expect(database.insert(electionEvidenceSupersession).values({ replacement_id: "foreign-correction", predecessor_id: "own-correction", batch_sha256: other.receipt.package_sha256, reason: "Synthetic foreign batch" })).rejects.toThrow();
+  });
+
+  it.each(["repeatable read", "serializable"] as const)("rejects raw corrections under unsupported %s write isolation", async (isolationLevel) => {
+    const graph = fixtureGraph();
+    for (const id of ["isolation-a", "isolation-b", "isolation-c"]) graph.package.evidence.push(evidence("intent", "declared", { id }));
+    const { receipt, options } = reviewedFixture(graph);
+    expect((await createElectionRepository(database, options).importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    await database.transaction(async (transaction) => {
+      expect((await transaction.execute(sql`show transaction_isolation`)).rows[0].transaction_isolation).toBe("read committed");
+      await transaction.insert(electionEvidenceSupersession).values({ replacement_id: "isolation-b", predecessor_id: "isolation-a", batch_sha256: receipt.package_sha256, reason: "Synthetic valid isolation" });
+    }, { isolationLevel: "read committed" });
+    await expect(database.transaction(async (transaction) => {
+      expect((await transaction.execute(sql`show transaction_isolation`)).rows[0].transaction_isolation).toBe(isolationLevel);
+      await transaction.insert(electionEvidenceSupersession).values({ replacement_id: "isolation-c", predecessor_id: "isolation-b", batch_sha256: receipt.package_sha256, reason: "Synthetic unsupported isolation" });
+    }, { isolationLevel })).rejects.toThrow();
+    await database.transaction(async (transaction) => {
+      expect((await transaction.execute(sql`show transaction_isolation`)).rows[0].transaction_isolation).toBe("repeatable read");
+      expect((await transaction.execute(sql`select count(*)::int as count from election_evidence_supersession`)).rows[0].count).toBe(1);
+    }, { isolationLevel: "repeatable read", accessMode: "read only" });
+  });
+
+  it("applies under explicit read committed when the connection default requires repeatable snapshots", async () => {
+    await database.execute(sql`set default_transaction_isolation = 'repeatable read'`);
+    await database.execute(sql`create function synthetic_require_read_committed() returns trigger language plpgsql as $$ begin
+      if current_setting('transaction_isolation') <> 'read committed' then raise exception 'Synthetic import requires read committed'; end if; return new; end $$`);
+    await database.execute(sql`create trigger synthetic_import_isolation before insert on election_import_batch for each row execute function synthetic_require_read_committed()`);
+    const graph = fixtureGraph();
+    graph.package.evidence.push(evidence("intent", "declared", { id: "import-isolation-a" }), evidence("intent", "withdrawn", { id: "import-isolation-b" }));
+    graph.package.supersessions.push({ replacement_id: "import-isolation-b", predecessor_id: "import-isolation-a", reason: "Synthetic reviewed correction" });
+    const { receipt, options } = reviewedFixture(graph);
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    expect((await repository.readContest(graph.contest_id))?.ledger.supersessions).toHaveLength(1);
+    expect((await database.execute(sql`show default_transaction_isolation`)).rows[0].default_transaction_isolation).toBe("repeatable read");
+  });
 });

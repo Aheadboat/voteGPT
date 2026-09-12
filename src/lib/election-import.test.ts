@@ -20,6 +20,19 @@ describe("local normalized election package parsing", () => {
 });
 
 describe("reviewed import execution", () => {
+  it.each([[undefined], [null], ["dryrun"]])("rejects invalid mode %j before review or storage", async (mode) => {
+    const { input, receipt, options } = importFixture();
+    const now = vi.fn(options.now);
+    const write = vi.fn(async (): Promise<ImportResult> => ({ status: "imported", package_sha256: receipt.package_sha256 }));
+    const execution = {
+      receiptId: receipt.id, sourceOptions: { ...options, now }, repository: { importReviewedPackage: write },
+      ...(mode === undefined ? {} : { mode }),
+    } as unknown as Parameters<typeof runElectionImport>[1];
+    expect(await runElectionImport(JSON.stringify(input), execution)).toEqual({ status: "rejected", reason: "invalid_mode" });
+    expect(now).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it("dry-runs reviewed normalized data without repository writes or source fetches", async () => {
     const { input, receipt, options } = importFixture();
     const fetchSource = vi.fn(() => { throw new Error("Source fetch forbidden"); });

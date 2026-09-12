@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ElectionGraph, ElectionRepository, ElectionReadScope } from "./elections";
+import type { SavedResidenceDivision } from "./saved-residence";
 import { createElectionService, getRuntimeElectionService, getStatewideElections } from "./election-service";
 import { DISTRICT, fixturePackage, fixturePolicy, NOW, STATE } from "../../tests/fixtures/elections/domain";
 
@@ -99,7 +100,7 @@ describe("election reads", () => {
       ? { ...entry, value: { ...entry.value, division_ids: [STATE] } } : entry) } };
     const mixed = { ...record, ledger: { ...record.ledger, evidence: record.ledger.evidence.map((entry) => entry.kind === "contest_metadata"
       ? { ...entry, value: { ...entry.value, division_ids: [STATE, DISTRICT] } } : entry) } };
-    const divisions = [
+    const divisions: readonly SavedResidenceDivision[] = [
       { id: STATE, idScheme: "ocd", name: "California", type: "state" },
       { id: DISTRICT, idScheme: "ocd", name: "District 12", type: "congressional_district" },
     ];
