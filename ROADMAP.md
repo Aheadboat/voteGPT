@@ -715,7 +715,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #29](https://github.com/Aheadboat/voteGPT/pull/29) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.
 
-## F7 — Elections and Deterministic Candidate Validity [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
+## F7 — Elections and Deterministic Candidate Validity [IN PROGRESS (RED)]
 
 - **Outcome:** Upcoming contests and candidates display exact source-backed legal status.
 - **Dependencies:** G1 completed with approved vendor or documented public-source fallback.
@@ -734,11 +734,11 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Source decisions pending:** Proposed initial California November 2026 general-election federal/state candidate corpus needs source-specific rights/access approval, complete row/contest review, and a named refresh operator before real-data ingestion/release. No source rows, legal clearance, production corpus, or vendor enablement are claimed. These prerequisites cannot be replaced with synthetic test fixtures or silently removed from F7 completion.
 - **Gate A packet review:** Independent read-only F7-D3 design review on 2026-09-12 cleared its identity-attribution, effective-time/supersession, and ledger/repository-retention findings. The reviewed plan SHA-256 is `a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead`; no unresolved Critical or Important design issue remains. The coordinator tightened trusted receipt injection and kept source downloading out of the importer. This was design review only. Design-head run `34681437841` passed before implementation. The subsequent Human Gate A approval above permits engineering; Gate B remains pending.
 
-- **Implementation progress:** F7-T1 through F7-T6 are unstarted at the approval checkpoint. Record the expected F7-T1 RED before production edits. T2/T3/T4 parallel lanes open only after T1 interfaces settle; T5 remains conditional on source approval and complete row review; T6 cannot establish VERIFIED without T5.
+- **Implementation progress:** F7-T1 is in RED. The feature lead added only `src/lib/elections.test.ts`: an absent/malformed persisted graph must return unverified/invalid_graph. Both lead and coordinator ran `npm.cmd test -- src/lib/elections.test.ts`; exit 1, one failed suite because `./elections` does not exist, the expected missing-feature failure. No production file existed at this checkpoint. This records module-absence RED; runtime behavioral RED/GREEN cases follow as the module is implemented. Applicable UX-02/06/07/09 initially fail because malformed/unknown evidence has no safe projection. T2/T3/T4 remain pending T1 interfaces/review; T5 remains conditional on source approval and complete row review; T6 cannot establish VERIFIED without T5.
 
 ### Coordination record
 
-- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Phase:** `RED`
 - **Branch:** `codex/f7-elections-candidate-validity`
 - **Base commit:** `8bf9efb37a1e07d40aaea7a9caca12ab327c942a`
 - **Integrated-main commit:** `bfd1fd17a37f74990d62f2553dc767d5369cbf5f`

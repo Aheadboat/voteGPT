@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "91234e760937920d590ead75290cbc072837fa8382031cfb0dfbfd0d64241b7e",
+    "ff0970286ab1732717d7bd94f9f034c0c6f35c4533ea2ce8cdff84e28894afd6",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -70,11 +70,11 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   expect(normalizedReadme).toBe(replaceExactlyOnce(
     baseReadme,
     "F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-    "F7 — Elections and Deterministic Candidate Validity is active in `DISCOVER/DESIGN/PLAN` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Source-specific rights and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 — Elections and Deterministic Candidate Validity is active in `RED` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Source-specific rights and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
   }
 }
 
@@ -2010,9 +2010,9 @@ describe("concurrent roadmap delivery contract", () => {
     expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md") + "\nHuman Gate A approved.\n")).toThrow()
     for (const [before, after] of [
       ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
-      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[IN PROGRESS (RED)]"],
-      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[VERIFIED]"],
-      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[DONE]"],
+      ["[IN PROGRESS (RED)]", "[IN PROGRESS (GREEN)]"],
+      ["[IN PROGRESS (RED)]", "[VERIFIED]"],
+      ["[IN PROGRESS (RED)]", "[DONE]"],
       ["- **Human Gate A approval:** Approved by the user's explicit", "- **Human Gate A approval:** Pending; not approved by the user's explicit"],
       ["- **Human Gate B approval:** Pending;", "- **Human Gate B approval:** Approved;"],
       ["- **Human Gate A approval:** Approved by the user's explicit", "- **Human Gate A approval:** Pending.\n- **Human Gate A approval:** Approved by the user's explicit"],
@@ -2026,7 +2026,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(() => expectF7DesignActivation(roadmap + suffix, readme, changed)).toThrow()
     }
     expect(() => expectF7DesignActivation(roadmap, readme + "\nVendor access authorized.\n", changed)).toThrow()
-    for (const path of ["src/lib/elections.ts", "src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
+    for (const path of ["src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
       expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
     }
   }, 30_000)
