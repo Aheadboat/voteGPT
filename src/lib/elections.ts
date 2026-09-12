@@ -368,16 +368,20 @@ export function projectContest(graph: ElectionGraph, now: Date): ContestView | U
     }));
     const recoveryHistory = [...selectedSubjects.values()].flatMap((subject) => pagedHistory(subject.kind, subject.id))
       .sort((a, b) => compareText(a.evidence.id, b.evidence.id));
-    const recover = (
-      reason: "unverified_metadata" | "retired_identity",
-      extraHistory: readonly EvidenceHistory[] = [],
-      extraState?: EvidenceState<unknown>,
-    ): UnverifiedContest => {
-      const conflictIds = new Set([electionState, stageState, contestState, extraState].flatMap((state) =>
-        state?.state === "conflict" ? state.assertions.map((entry) => entry.evidence.id) : []));
+    const recover = (reason: "unverified_metadata" | "retired_identity"): UnverifiedContest => {
+      const relevantIds = new Set(historyIds);
+      const metadataSubjects = new Map(context.data.evidence.filter((entry) =>
+        relevantIds.has(entry.id) && entry.kind.endsWith("_metadata"))
+        .map((entry) => [entry.subject.id, entry] as const));
+      const conflicts = [...metadataSubjects.values()].flatMap((entry) => {
+        const state = interpreter.claim(entry.subject.kind, entry.subject.id, entry.kind);
+        if (state.state !== "conflict") return [];
+        const ids = new Set(state.assertions.map((assertion) => assertion.evidence.id));
+        return interpreter.history(entry.subject.kind, entry.subject.id, ids);
+      }).sort((a, b) => compareText(a.evidence.id, b.evidence.id));
       return {
         status: "unverified", reason, contest_id: contest.id, history: recoveryHistory, history_page: historyPage,
-        metadata_conflicts: [...metadataHistory, ...extraHistory].filter((entry) => conflictIds.has(entry.evidence.id)),
+        metadata_conflicts: conflicts,
       };
     };
     if (interpreter.retired("stage", stage.id) || interpreter.retired("contest", contest.id)) {
@@ -391,14 +395,14 @@ export function projectContest(graph: ElectionGraph, now: Date): ContestView | U
     for (const candidate of context.data.candidacies.filter((item) => item.contest_id === contest.id)) {
       const candidateMetadata = interpreter.claim("candidacy", candidate.id, "candidacy_metadata");
       if (!displayable(candidateMetadata)) {
-        return recover("unverified_metadata", interpreter.history("candidacy", candidate.id), candidateMetadata);
+        return recover("unverified_metadata");
       }
       const lines: BallotLineView[] = [];
       const retiredLines: BallotLineView[] = [];
       for (const line of context.data.ballot_lines.filter((item) => item.candidacy_id === candidate.id)) {
         const lineMetadata = interpreter.claim("ballot_line", line.id, "ballot_line_metadata");
         if (!displayable(lineMetadata)) {
-          return recover("unverified_metadata", interpreter.history("ballot_line", line.id), lineMetadata);
+          return recover("unverified_metadata");
         }
         (interpreter.retired("ballot_line", line.id) ? retiredLines : lines).push({
           id: line.id, metadata: lineMetadata, tracks: interpreter.tracks("ballot_line", line.id),
@@ -522,7 +526,7 @@ function requireRule(condition: unknown, reason: PackageRejection["reason"]): as
 function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date, envelope: "import" | "ledger"): Context {
   const importing = envelope === "import";
   requireRule(validDate(now) && plainData(input, importing), "invalid_package");
-  requireRule(plainData(policy) && exact(policy, ["version", "dataset_kind", "authorities"]) &&
+  requireRule(plainData(policy, false) && exact(policy, ["version", "dataset_kind", "authorities"]) &&
     identifier(policy.version) && ["official", "synthetic"].includes(policy.dataset_kind) &&
     Array.isArray(policy.authorities) && policy.authorities.length <= 100, "invalid_policy");
   requireRule(exact(input, ["dataset_kind", "election", "stages", "contests", "candidacies", "ballot_lines",
@@ -628,7 +632,20 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
       validEffect(entry.effective), "invalid_time");
     context.evidence.set(entry.id, entry);
   }
+  const jurisdictions = new Map<string, Set<string>>();
   for (const entry of data.evidence) {
+    if (entry.kind === "election_metadata" || entry.kind === "contest_metadata") {
+      const values = jurisdictions.get(entry.subject.id) ?? new Set<string>();
+      values.add(entry.value.jurisdiction_id);
+      jurisdictions.set(entry.subject.id, values);
+    }
+  }
+  for (const entry of data.evidence) {
+    const authority = context.authorities.get(context.documents.get(entry.document_id)!.authority_id)!;
+    const lineageJurisdictions = ancestors(context, entry.subject.id)
+      .flatMap((ancestor) => [...(jurisdictions.get(ancestor.record.id) ?? [])]);
+    requireRule(lineageJurisdictions.length > 0 &&
+      lineageJurisdictions.every((jurisdiction) => jurisdiction === authority.jurisdiction_id), "source_not_admitted");
     if (entry.kind === "ballot_continuation") {
       const withdrawal = context.evidence.get(entry.value.withdrawal_evidence_id);
       requireRule(withdrawal?.kind === "intent" && withdrawal.value === "withdrawn" &&
@@ -653,7 +670,11 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     seenLinks.add(key);
   }
   requireRule(!cyclic(data.supersessions.map((link) => [link.replacement_id, link.predecessor_id] as const)), "invalid_supersession");
-  const stageLinks = data.evidence.flatMap((entry) => entry.kind === "stage_metadata"
+  const effects = new Map(data.evidence.map((entry) => [entry.id, applicability(context, entry, now)]));
+  const superseded = new Set(data.supersessions.filter((link) => effects.get(link.replacement_id)!.begun)
+    .map((link) => link.predecessor_id));
+  const stageLinks = data.evidence.flatMap((entry) => entry.kind === "stage_metadata" &&
+    effects.get(entry.id)!.applies && !superseded.has(entry.id)
     ? entry.value.successor_stage_ids.map((id) => [entry.subject.id, id] as const) : []);
   requireRule(!cyclic(stageLinks), "invalid_evidence");
   return context;
@@ -940,7 +961,8 @@ function stateDivision(value: unknown): value is string {
 }
 function publicDivision(value: unknown): value is string {
   return typeof value === "string" && value.length <= 500 &&
-    /^ocd-division\/country:us\/state:[a-z]{2}(?:\/(?:cd|sldu|sldl|county|place):[a-z0-9][a-z0-9_-]{0,199})*$/.test(value);
+    (/^ocd-division\/country:us\/state:[a-z]{2}(?:\/(?:cd|sldu|sldl|county|place):[a-z0-9][a-z0-9_-]{0,199})*$/.test(value) ||
+      /^ocd-division\/country:us\/state:ca\/board_of_equalization:[1-4]$/.test(value));
 }
 function safeSourceUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 2_048) return false;
@@ -975,11 +997,15 @@ function exact(value: unknown, keys: readonly string[]): value is Record<string,
   return typeof value === "object" && value !== null && !Array.isArray(value) &&
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+function canonical(value: unknown, field?: string): string {
+  if (Array.isArray(value)) {
+    const values = value.map((item) => canonical(item));
+    if (field === "division_ids" || field === "contest_ids" || field === "successor_stage_ids") values.sort(compareText);
+    return "[" + values.join(",") + "]";
+  }
   if (typeof value === "object" && value !== null) {
     const record = value as Record<string, unknown>;
-    return "{" + Object.keys(record).sort(compareText).map((key) => JSON.stringify(key) + ":" + canonical(record[key])).join(",") + "}";
+    return "{" + Object.keys(record).sort(compareText).map((key) => JSON.stringify(key) + ":" + canonical(record[key], key)).join(",") + "}";
   }
   return JSON.stringify(value);
 }
