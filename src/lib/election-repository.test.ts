@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createDatabase } from "../db";
 import { electionEvidence, electionEvidenceSupersession } from "../db/schema";
@@ -113,6 +113,7 @@ describe("immutable election persistence", () => {
   let database: Awaited<ReturnType<typeof createDatabase>>;
   beforeEach(async () => { database = await createDatabase("pglite://memory"); });
   afterEach(async () => {
+    vi.restoreAllMocks();
     const client = database.$client;
     if ("close" in client) await client.close();
   });
@@ -354,4 +355,102 @@ describe("immutable election persistence", () => {
       values(${"c".repeat(64)},'unrelated','f7-v1','unrelated-policy','unrelated-receipt','{}',${NOW.toISOString()})`);
     expect((await repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, NOW)).map((item) => item.contest_id)).toEqual([graph.contest_id]);
   });
+
+  it.each(["date", "time_zone"] as const)("retains scoped unknown %s for the unverified index count", async (field) => {
+    const graph = fixtureGraph();
+    graph.package.evidence.find((entry) => entry.kind === "stage_metadata")!.value[field] = null;
+    const { receipt, options } = reviewedFixture(graph);
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const direct = await repository.readContest(graph.contest_id);
+    expect(direct && projectContest(direct, NOW)).toMatchObject({ status: "available", upcoming: null });
+    const index = await repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, NOW);
+    expect(index.map((item) => item.contest_id)).toEqual([graph.contest_id]);
+    expect(projectContest(index[0], NOW)).toMatchObject({ status: "available", upcoming: null });
+  });
+
+  it("rechecks a revoked protected receipt inside the apply transaction", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    expect(reviewElectionPackage(graph.package, receipt.id, options).status).toBe("valid");
+    const transact = database.transaction.bind(database);
+    vi.spyOn(database, "transaction").mockImplementation((run: Parameters<typeof transact>[0], config: Parameters<typeof transact>[1]) => transact(async (transaction) => {
+      options.approvedReceipts = [];
+      return Reflect.apply(run, undefined, [transaction]);
+    }, config));
+    expect(await createElectionRepository(database, options).importReviewedPackage(graph.package, receipt.id)).toEqual({ status: "rejected", reason: "receipt_not_approved" });
+    for (const table of relations) expect((await database.execute(sql.raw(`select count(*)::int as count from ${table}`))).rows[0].count).toBe(0);
+  });
+
+  it("preserves immutable source keys and applies a reviewed identity revision without transferring status", async () => {
+    const graph = fixtureGraph();
+    graph.package.evidence.push(evidence("intent", "declared"));
+    const first = reviewedFixture(graph);
+    const repository = createElectionRepository(database, first.options);
+    expect((await repository.importReviewedPackage(graph.package, first.receipt.id)).status).toBe("imported");
+    const altered = structuredClone(graph);
+    altered.package.candidacies[0].official_key = "changed-source-key";
+    const bad = reviewedFixture(altered);
+    bad.receipt.id += "-bad";
+    first.options.approvedReceipts.push(bad.receipt);
+    expect(reviewElectionPackage(altered.package, bad.receipt.id, first.options).status).toBe("valid");
+    expect((await repository.importReviewedPackage(altered.package, bad.receipt.id)).status).toBe("unavailable");
+    expect((await repository.readContest(graph.contest_id))?.ledger.candidacies[0].official_key).toBe("candidate-a");
+    const corrected = structuredClone(graph);
+    corrected.package.candidacies.push({ ...corrected.package.candidacies[0], id: "candidate-corrected", revision: "correction-1", revision_of: "candidate-avery" });
+    corrected.package.evidence.push(
+      evidence("candidacy_metadata", { name: "Avery Corrected", official_person_id: { issuer: "fixture-office", value: "person-a" } }, { subject: { kind: "candidacy", id: "candidate-corrected" } }),
+      evidence("retirement", { replacement_id: "candidate-corrected" }),
+    );
+    const replacement = reviewedFixture(corrected);
+    replacement.receipt.id += "-corrected";
+    first.options.approvedReceipts.push(replacement.receipt);
+    expect((await repository.importReviewedPackage(corrected.package, replacement.receipt.id)).status).toBe("imported");
+    const retained = await repository.readContest(graph.contest_id);
+    const view = retained && projectContest(retained, NOW);
+    expect(view?.status).toBe("available");
+    if (view?.status === "available") {
+      expect(view.candidates.find((candidate) => candidate.id === "candidate-corrected")?.tracks.intent.state).toBe("unknown");
+      expect(view.retired_candidates).toHaveLength(1);
+      expect(view.retired_candidates[0].id).toBe("candidate-avery");
+      expect(retained?.ledger.evidence.find((entry) => entry.id === "candidate-avery:intent")?.value).toBe("declared");
+    }
+  });
+
+  it("retains more than one import's byte, document and assertion bounds without hiding conflicts", async () => {
+    const initial = reviewedFixture();
+    const repository = createElectionRepository(database, initial.options);
+    const documentsPerBatch = 6;
+    const assertionsPerBatch = 2_600;
+    let bytes = 0;
+    for (let batch = 0; batch < 4; batch++) {
+      const graph = fixtureGraph();
+      for (let document = 0; document < documentsPerBatch; document++) graph.package.documents.push({
+        ...graph.package.documents[0], id: `retained-document-${batch}-${document}`, label: `Synthetic edition ${batch}-${document}`,
+      });
+      for (let assertion = 0; assertion < assertionsPerBatch; assertion++) graph.package.evidence.push(evidence("intent", assertion % 2 ? "withdrawn" : "declared", {
+        id: `retained-assertion-${batch}-${assertion}`, document_id: `retained-document-${batch}-${assertion % documentsPerBatch}`,
+      }));
+      const item = reviewedFixture(graph);
+      item.receipt.id += "-" + batch;
+      initial.options.approvedReceipts.push(item.receipt);
+      const size = Buffer.byteLength(serializeElectionPackage(graph.package), "utf8");
+      expect(size).toBeLessThanOrEqual(2 * 1024 * 1024);
+      expect(reviewElectionPackage(graph.package, item.receipt.id, initial.options).status).toBe("valid");
+      bytes += size;
+      expect((await repository.importReviewedPackage(graph.package, item.receipt.id)).status).toBe("imported");
+    }
+    expect(bytes).toBeGreaterThan(2 * 1024 * 1024);
+    const result = await repository.readContest(initial.graph.contest_id, { offset: 0, limit: 2 });
+    expect(result?.ledger.documents).toHaveLength(26);
+    expect(result?.ledger.evidence).toHaveLength(10_407);
+    const view = result && projectContest(result, NOW);
+    expect(view).toMatchObject({ status: "available", history_page: { total: 10_407, limit: 2, next_offset: 2 } });
+    if (view?.status === "available") {
+      const intent = view.candidates[0].tracks.intent;
+      expect(intent.state).toBe("conflict");
+      if (intent.state === "conflict") expect(intent.assertions).toHaveLength(10_400);
+    }
+    const secondPage = await repository.readContest(initial.graph.contest_id, { offset: 2, limit: 2 });
+    expect(secondPage && projectContest(secondPage, NOW)).toMatchObject({ history_page: { offset: 2, total: 10_407, next_offset: 4 } });
+  }, 60_000);
 });
