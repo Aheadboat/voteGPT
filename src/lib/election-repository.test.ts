@@ -1,10 +1,12 @@
 // @vitest-environment node
 
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewElectionPackage } from "./election-repository";
-import { serializeElectionPackage, type ApprovedElectionReceipt } from "./elections";
+import { createDatabase } from "../db";
+import { createElectionRepository, reviewElectionPackage } from "./election-repository";
+import { projectContest, serializeElectionPackage, type ApprovedElectionReceipt } from "./elections";
 import { fixtureGraph, NOW, VERIFIED_AT, type Mutable } from "../../tests/fixtures/elections/domain";
 
 function reviewedFixture(graph = fixtureGraph()) {
@@ -103,5 +105,34 @@ describe("protected election package review", () => {
     graph.package.evidence[0].original_term = "Changed later";
     if (result.status === "valid") expect(result.package.evidence[0].original_term).toBe("Synthetic official term");
     expect(reviewElectionPackage({ ...graph.package, latitude: 37 }, receipt.id, options).status).toBe("rejected");
+  });
+});
+
+describe("immutable election persistence", () => {
+  let database: Awaited<ReturnType<typeof createDatabase>>;
+  beforeEach(async () => { database = await createDatabase("pglite://memory"); });
+  afterEach(async () => {
+    const client = database.$client;
+    if ("close" in client) await client.close();
+  });
+
+  it("migrates all eight election ledger relations", async () => {
+    const result = await database.execute(sql`select name, to_regclass(name)::text as relation from unnest(array[
+      'election', 'election_stage', 'election_contest', 'election_candidacy', 'election_ballot_line',
+      'election_import_batch', 'election_evidence', 'election_evidence_supersession'
+    ]) name`);
+    expect(result.rows).toHaveLength(8);
+    for (const row of result.rows) expect(row.relation).toBe(row.name);
+  });
+
+  it("imports a reviewed complete package and reads a coherent source-backed graph", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect(await repository.importReviewedPackage(graph.package, receipt.id)).toEqual({ status: "imported", package_sha256: receipt.package_sha256 });
+    const result = await repository.readContest(graph.contest_id);
+    expect(result).not.toBeNull();
+    expect(result?.completeness).toEqual({ current: "complete", supersession: "complete", history: "complete" });
+    expect(result?.history_page).toEqual({ offset: 0, limit: 100 });
+    expect(result && projectContest(result, NOW)).toMatchObject({ status: "available", verification: "current", candidates: [{ id: "candidate-avery" }, { id: "candidate-blair" }] });
   });
 });
