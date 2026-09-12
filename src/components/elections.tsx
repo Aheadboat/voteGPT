@@ -41,6 +41,16 @@ function Source({ source, shownTerm }: { source: SourceReference; shownTerm?: st
       `Effective ${source.effective.start ?? "start unknown"} to ${source.effective.end ?? "end unspecified"}${source.effective.precision === "date" ? " (source-stated civil dates)" : ""}.`}
       {" "}Verification expires <Time value={source.current_until} />.</p>
     </details>
+    {source.calendar_basis && <details><summary>Calendar normalization</summary>
+      <p>References used to interpret the election date in time zone {source.calendar_basis.time_zone}.</p>
+      {source.calendar_basis.references.map((reference, index) => <div key={`${reference.source_url}-${reference.locator}-${index}`}>
+        <a href={reference.source_url}>{reference.source_label}</a>
+        <p>Original source term: {reference.original_term}. Location: {reference.locator}.</p>
+        <p>Retrieved <Time value={reference.retrieved_at} />.</p>
+        <p>Reviewed <Time value={reference.verified_at} />.</p>
+        <p>Verification expires <Time value={reference.current_until} />.</p>
+      </div>)}
+    </details>}
   </div>;
 }
 function Sources({ evidence, shownTerm }: { evidence: readonly SourceReference[]; shownTerm?: string }) {

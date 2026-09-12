@@ -31,10 +31,11 @@ function reviewedFixture(graph = fixtureGraph()) {
   return { graph, receipt, options: { policy: graph.policy, approvedReceipts: [receipt], now: () => NOW } };
 }
 
-function reviewedCalendarFixture() {
-  const fixture = reviewedFixture(fixtureCalendarGraph());
-  fixture.receipt.documents.find((document) => document.id === "calendar-zone-reference")!.locators = ["Synthetic California zone entry"];
-  fixture.receipt.documents.find((document) => document.id === "calendar-boundary-reference")!.locators = ["Synthetic Pacific boundary paragraph"];
+function reviewedCalendarFixture(graph = fixtureCalendarGraph()) {
+  const fixture = reviewedFixture(graph);
+  for (const document of graph.package.documents) {
+    if (document.calendar_reference) fixture.receipt.documents.find((entry) => entry.id === document.id)!.locators = [document.calendar_reference.locator];
+  }
   return fixture;
 }
 
@@ -44,6 +45,57 @@ describe("protected election package review", () => {
     expect(reviewElectionPackage(graph.package, receipt.id, options)).toMatchObject({
       status: "valid", package_sha256: receipt.package_sha256, receipt_id: receipt.id,
     });
+  });
+
+  it.each(["missing_locator", "altered_locator", "receipt_digest", "document_digest", "reference_locator", "reference_term", "reference_review", "reference_expiry", "reference_retrieval"] as const)(
+    "binds calendar %s to the exact approved normalized package", (change) => {
+      const { graph, receipt, options } = reviewedCalendarFixture();
+      expect(reviewElectionPackage(graph.package, receipt.id, options).status).toBe("valid");
+      const document = graph.package.documents.find((entry) => entry.id === "calendar-zone-reference")!;
+      const recorded = receipt.documents.find((entry) => entry.id === document.id)!;
+      if (change === "missing_locator") recorded.locators = [];
+      if (change === "altered_locator") recorded.locators = ["Synthetic unreviewed locator"];
+      if (change === "receipt_digest") recorded.sha256 = "f".repeat(64);
+      if (change === "document_digest") document.sha256 = "f".repeat(64);
+      if (change === "reference_locator") document.calendar_reference!.locator = "Synthetic corrected paragraph";
+      if (change === "reference_term") document.calendar_reference!.original_term = "Synthetic changed reference term";
+      if (change === "reference_review") document.calendar_reference!.verified_at = "2026-09-12T11:46:00.000Z";
+      if (change === "reference_expiry") document.calendar_reference!.current_until = "2026-09-13T11:44:00.000Z";
+      if (change === "reference_retrieval") document.calendar_reference!.retrieved_at = "2026-09-12T10:01:00.000Z";
+      expect(reviewElectionPackage(graph.package, receipt.id, options)).toEqual({ status: "rejected", reason: "receipt_mismatch" });
+    },
+  );
+
+  it("requires the calendar receipt review to follow every required reference review", () => {
+    const graph = fixtureCalendarGraph();
+    graph.package.documents.find((document) => document.calendar_reference)!.calendar_reference!.verified_at = "2026-09-12T12:30:00.000Z";
+    const { receipt, options } = reviewedCalendarFixture(graph);
+    receipt.verified_at = "2026-09-12T12:30:00.000Z";
+    expect(reviewElectionPackage(graph.package, receipt.id, options).status).toBe("valid");
+    receipt.verified_at = "2026-09-12T12:15:00.000Z";
+    expect(reviewElectionPackage(graph.package, receipt.id, options)).toEqual({ status: "rejected", reason: "receipt_mismatch" });
+  });
+
+  it("counts calendar references within the existing 20-document import bound", () => {
+    const graph = fixtureCalendarGraph();
+    while (graph.package.documents.length < 20) graph.package.documents.push({ ...graph.package.documents[0], id: "extra-source-" + graph.package.documents.length });
+    const complete = reviewedCalendarFixture(graph);
+    expect(reviewElectionPackage(graph.package, complete.receipt.id, complete.options).status).toBe("valid");
+    graph.package.documents.push({ ...graph.package.documents[0], id: "twenty-first-source" });
+    const oversized = reviewedCalendarFixture(graph);
+    expect(reviewElectionPackage(graph.package, oversized.receipt.id, oversized.options)).toEqual({ status: "rejected", reason: "limit_exceeded" });
+  });
+
+  it("keeps the canonical 2 MiB import bound for calendar packages with otherwise valid evidence", () => {
+    const graph = fixtureCalendarGraph();
+    const complete = reviewedCalendarFixture(graph);
+    expect(reviewElectionPackage(graph.package, complete.receipt.id, complete.options).status).toBe("valid");
+    for (let index = 0; index < 2_500; index++) graph.package.evidence.push(evidence("filing", "filed", {
+      id: "calendar-bound-" + index, locator: "L".repeat(500), original_term: "T".repeat(500),
+    }));
+    expect(Buffer.byteLength(serializeElectionPackage(graph.package), "utf8")).toBeGreaterThan(2 * 1_024 * 1_024);
+    const oversized = reviewedCalendarFixture(graph);
+    expect(reviewElectionPackage(graph.package, oversized.receipt.id, oversized.options)).toEqual({ status: "rejected", reason: "limit_exceeded" });
   });
 
   it("admits exactly the synthetic package bound by an injected reviewed receipt without a database", () => {
@@ -149,6 +201,84 @@ describe("immutable election persistence", () => {
     expect(retained && projectContest(retained, NOW)).toMatchObject({
       status: "available", stage: { state: "verified", verified_at: "2026-09-12T11:45:00.000Z" },
     });
+  });
+
+  it.each(["missing_locator", "altered_locator", "altered_digest", "premature_receipt"] as const)(
+    "rejects calendar %s without writing identities, evidence, or a batch", async (change) => {
+      const graph = fixtureCalendarGraph();
+      graph.package.documents.find((document) => document.calendar_reference)!.calendar_reference!.verified_at = "2026-09-12T12:30:00.000Z";
+      const { receipt, options } = reviewedCalendarFixture(graph);
+      receipt.verified_at = "2026-09-12T12:30:00.000Z";
+      expect(reviewElectionPackage(graph.package, receipt.id, options).status).toBe("valid");
+      const recorded = receipt.documents.find((document) => document.id === "calendar-zone-reference")!;
+      if (change === "missing_locator") recorded.locators = [];
+      if (change === "altered_locator") recorded.locators = ["Synthetic unreviewed paragraph"];
+      if (change === "altered_digest") recorded.sha256 = "f".repeat(64);
+      if (change === "premature_receipt") receipt.verified_at = "2026-09-12T12:15:00.000Z";
+      const repository = createElectionRepository(database, options);
+      expect(await repository.importReviewedPackage(graph.package, receipt.id)).toEqual({ status: "rejected", reason: "receipt_mismatch" });
+      for (const table of relations) expect((await database.execute(sql.raw(`select count(*)::int as count from ${table}`))).rows[0].count).toBe(0);
+    },
+  );
+
+  it.each(["digest", "locator", "review"] as const)(
+    "rejects a reviewed calendar %s change under a retained reference document ID", async (change) => {
+      const first = reviewedCalendarFixture();
+      const repository = createElectionRepository(database, first.options);
+      expect((await repository.importReviewedPackage(first.graph.package, first.receipt.id)).status).toBe("imported");
+      const original = await repository.readContest(first.graph.contest_id);
+      const nextGraph = structuredClone(first.graph);
+      const reference = nextGraph.package.documents.find((document) => document.id === "calendar-zone-reference")!;
+      if (change === "digest") reference.sha256 = "f".repeat(64);
+      if (change === "locator") reference.calendar_reference!.locator = "Synthetic revised reference paragraph";
+      if (change === "review") reference.calendar_reference!.verified_at = "2026-09-12T11:46:00.000Z";
+      const next = reviewedCalendarFixture(nextGraph);
+      next.receipt.id = "synthetic-reference-change";
+      first.options.approvedReceipts.push(next.receipt);
+      expect(reviewElectionPackage(next.graph.package, next.receipt.id, first.options).status).toBe("valid");
+      expect((await repository.importReviewedPackage(next.graph.package, next.receipt.id)).status).toBe("unavailable");
+      expect((await repository.readContest(first.graph.contest_id))?.ledger.documents).toEqual(original?.ledger.documents);
+      expect((await database.execute(sql`select count(*)::int as count from election_import_batch`)).rows[0].count).toBe(1);
+    },
+  );
+
+  it("replays a calendar package without renewing its review or losing expired history", async () => {
+    const { graph, receipt, options } = reviewedCalendarFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const originalBatch = (await database.execute(sql`select * from election_import_batch`)).rows;
+    options.now = () => new Date("2026-09-14T13:00:00.000Z");
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("unchanged");
+    expect((await database.execute(sql`select * from election_import_batch`)).rows).toEqual(originalBatch);
+    const retained = await repository.readContest(graph.contest_id);
+    expect(retained && projectContest(retained, options.now())).toMatchObject({ status: "available", stage: { state: "stale" } });
+    expect(retained?.ledger.documents.find((document) => document.id === "calendar-zone-reference")?.calendar_reference).toMatchObject({
+      verified_at: "2026-09-12T11:45:00.000Z", current_until: "2026-09-13T11:45:00.000Z",
+    });
+  });
+
+  it("retains calendar reference bytes across a policy update and display revocation", async () => {
+    const { graph, receipt, options } = reviewedCalendarFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const original = await repository.readContest(graph.contest_id);
+    options.policy.version = "fixture-policy-v2";
+    options.policy.authorities[0].mappings.find((mapping) => mapping.stage_calendar)!.stage_calendar!.enabled = false;
+    const retained = await repository.readContest(graph.contest_id);
+    expect(retained?.ledger.documents).toEqual(original?.ledger.documents);
+    expect(retained && projectContest(retained, NOW)).toMatchObject({ status: "available", stage: { state: "stale" } });
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("rejected");
+  });
+
+  it("fails closed when retained calendar-reference bytes are altered outside immutable write guards", async () => {
+    const { graph, receipt, options } = reviewedCalendarFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const changed = structuredClone(graph.package);
+    changed.documents.find((document) => document.id === "calendar-zone-reference")!.calendar_reference!.locator = "Synthetic altered paragraph";
+    await database.execute(sql`alter table election_import_batch disable trigger user`);
+    await database.execute(sql`update election_import_batch set canonical_package = ${serializeElectionPackage(changed)}`);
+    await expect(repository.readContest(graph.contest_id)).rejects.toThrow("Election read is not verified");
   });
 
   it("migrates all eight election ledger relations", async () => {

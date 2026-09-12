@@ -47,7 +47,10 @@ function bindReviewedPackage(value: ElectionPackage, receiptId: string, options:
     }
     for (const document of value.documents) {
       const reviewed = receipt.documents.find((item) => item.id === document.id);
-      const locators = [...new Set(sources.filter((source) => source.document_id === document.id).map((source) => source.locator))];
+      const locators = [...new Set([
+        ...sources.filter((source) => source.document_id === document.id).map((source) => source.locator),
+        ...(document.calendar_reference ? [document.calendar_reference.locator] : []),
+      ])];
       if (!reviewed || reviewed.sha256 !== document.sha256 || !sameSet(reviewed.locators, locators)) {
         return { status: "rejected", reason: "receipt_mismatch" };
       }
