@@ -7,6 +7,8 @@ import { FederalOfficials } from "@/components/federal-officials";
 import { GovernmentNavigation } from "@/components/government-navigation";
 import { ResidencePreview } from "@/components/residence-preview";
 import { StateOfficials } from "@/components/state-officials";
+import { ElectionIndex } from "@/components/elections";
+import { getRuntimeElectionService, getStatewideElections } from "@/lib/election-service";
 import { fetchCongressRoster } from "@/lib/congress-gov";
 import { federalJurisdictionFromDivisions } from "@/lib/federal-officials";
 import {
@@ -87,12 +89,7 @@ async function selectedGovernmentPanel(
   userId: string,
 ) {
   if (navigation.mode === "elections") {
-    return (
-      <p role="status">
-        Election information is unavailable until F7. Choose In office for
-        current officials.
-      </p>
-    );
+    return electionsFor(userId, navigation.level);
   }
   if (navigation.level === "local") {
     return (
@@ -112,6 +109,29 @@ async function selectedGovernmentPanel(
       {officials}
     </section>
   );
+}
+
+async function electionsFor(userId: string, level: GovernmentNavigationState["level"]) {
+  const browse = <a href="/elections">Browse elections</a>;
+  if (level === "local") return <><p role="status">Local election coverage is unavailable. Public California contests can be browsed separately.</p>{browse}</>;
+  const explanation = <p>District matching is not verified. Saved district identifiers do not include the boundary provenance needed for this election. Statewide contests alone may be selected from your saved state. <a href="https://www.sos.ca.gov/elections/california-redistricting">California district boundary information</a>.</p>;
+  let content;
+  try {
+    const divisions = await getSavedResidenceDivisions(userId);
+    if (divisions.length === 0) content = <p>Save a voting residence below to see statewide elections for your saved state.</p>;
+    else {
+      const service = await getRuntimeElectionService();
+      const result = service ? await getStatewideElections(service, divisions, level) : { status: "unavailable" as const };
+      if (result.status === "missing") content = <p>Save a voting residence below to see statewide elections for your saved state.</p>;
+      else if (result.status === "invalid") content = <p>Your saved state could not be verified. Preview and save your residence again, or browse public elections.</p>;
+      else if (result.status === "unsupported") content = <p>Election coverage is unavailable for your saved state or selected level. Public California contests remain browsable.</p>;
+      else if (result.status === "unavailable") content = <p role="status">Election information is temporarily unavailable. Try again later or browse public elections.</p>;
+      else content = <ElectionIndex result={result} />;
+    }
+  } catch {
+    content = <p role="status">Election information is temporarily unavailable. Try again later or browse public elections.</p>;
+  }
+  return <section aria-labelledby="elections-heading"><h2 id="elections-heading">Elections</h2>{explanation}{content}<p>{browse}</p><p><a href="https://www.sos.ca.gov/elections">California official election office</a></p></section>;
 }
 
 async function federalOfficialsFor(userId: string) {

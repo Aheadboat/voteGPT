@@ -12,6 +12,7 @@ vi.mock("@/lib/saved-residence", () => ({ getSavedResidenceDivisions: vi.fn(() =
 
 describe("anonymous public election index", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     getRuntimeElectionService.mockResolvedValue({ getUpcoming });
     getUpcoming.mockResolvedValue({ status: "available", contests: [], unverified_count: 0 });
   });

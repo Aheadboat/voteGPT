@@ -9,6 +9,7 @@ vi.mock("@/lib/saved-residence", () => ({ getSavedResidenceDivisions: vi.fn(() =
 
 describe("anonymous contest route", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     getRuntimeElectionService.mockResolvedValue({ getContest });
     getContest.mockResolvedValue({ status: "missing" });
   });
@@ -24,7 +25,7 @@ describe("anonymous contest route", () => {
     await ContestPage({ params: Promise.resolve({ contestId: "contest-house" }), searchParams: Promise.resolve({ history: "100" }) });
     expect(getContest).toHaveBeenCalledWith("contest-house", { offset: 100, limit: 100 });
   });
-  it.each(["-1", "1.5", "1e2", "address sentinel", ["0", "100"]])("rejects invalid history %j without querying a contest", async (history) => {
+  it.each([["-1"], ["1.5"], ["1e2"], ["address sentinel"], [["0", "100"]]])("rejects invalid history %j without querying a contest", async (history) => {
     render(await ContestPage({ params: Promise.resolve({ contestId: "contest-house" }), searchParams: Promise.resolve({ history }) }));
     expect(getContest).not.toHaveBeenCalled();
     expect(screen.getByRole("link", { name: "Browse elections" })).toBeInTheDocument();

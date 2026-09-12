@@ -22,10 +22,11 @@ export function createElectionService(options: { repository: ElectionRepository;
       try {
         const now = options.now();
         const graphs = await options.repository.readUpcoming(scope, now);
+        const projectedAt = options.now();
         const contests: ContestView[] = [];
         let unverified_count = 0;
         for (const graph of graphs) {
-          const contest = projectContest(graph, now);
+          const contest = projectContest(graph, projectedAt);
           if (contest.status !== "available" || contest.upcoming === null) unverified_count++;
           else if (contest.upcoming) contests.push(contest);
         }
@@ -58,4 +59,19 @@ export async function getStatewideElections(
   return { ...result, contests: result.contests.filter((contest) => contest.contest.state === "verified" &&
     contest.contest.value.level === level && contest.contest.value.jurisdiction_id === state &&
     contest.contest.value.division_ids.length === 1 && contest.contest.value.division_ids[0] === state) };
+}
+
+export async function getRuntimeElectionService(): Promise<ElectionService | null> {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) return null;
+  try {
+    const [{ createDatabase }, { createElectionRepository }, { getElectionSourceOptions }] = await Promise.all([
+      import("@/db"), import("./election-repository"), import("./election-source-policy"),
+    ]);
+    const options = getElectionSourceOptions();
+    const database = await createDatabase(connectionString);
+    return createElectionService({ repository: createElectionRepository(database, options), now: options.now });
+  } catch {
+    return null;
+  }
 }

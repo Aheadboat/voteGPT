@@ -195,9 +195,11 @@ export function ElectionIndex({ result }: { result: ElectionIndexResult }) {
         <Claim state={first.stage} renderValue={(stage) => <>Election date: {stage.date ?? "Unknown"}. Time zone: {stage.time_zone ?? "Unknown"}. This date does not establish polling hours.</>} />
         <ul>{group.map((contest) => {
           const metadata = historicalValue(contest.contest);
-          const evidence = contest.contest.state === "verified" ? contest.contest.evidence : [];
+          const evidence = contest.contest.state === "verified" ? contest.contest.evidence :
+            contest.contest.state === "stale" ? contest.contest.previous.map((entry) => entry.evidence) : [];
           return <li key={contest.contest_id} className={styles.fact}>
             <h4><a href={`/elections/contests/${encodeURIComponent(contest.contest_id)}`}>{metadata?.name ?? "Contest information"}</a></h4>
+            {contest.verification === "historical" && <p className={styles.notice}>Historical contest — previous facts are not current verification.</p>}
             <Sources evidence={evidence.flatMap((entry) => entry.field_sources?.name ?? [])} />
             <p>Office: {metadata?.office ?? "Not verified"}.</p>
             <Sources evidence={evidence.flatMap((entry) => entry.field_sources?.office ?? [])} />
