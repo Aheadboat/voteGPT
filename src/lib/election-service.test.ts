@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ElectionGraph, ElectionRepository, ElectionReadScope } from "./elections";
-import { createElectionService, getStatewideElections } from "./election-service";
+import { createElectionService, getRuntimeElectionService, getStatewideElections } from "./election-service";
 import { DISTRICT, fixturePackage, fixturePolicy, NOW, STATE } from "../../tests/fixtures/elections/domain";
 
 function graph(): ElectionGraph {
@@ -20,6 +20,11 @@ function setup(records: readonly ElectionGraph[] = [graph()]) {
   return { repository, service: createElectionService({ repository, now: () => NOW }) };
 }
 describe("election reads", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("returns unavailable runtime when no database is configured", async () => {
+    vi.stubEnv("DATABASE_URL", "");
+    expect(await getRuntimeElectionService()).toBeNull();
+  });
   it("returns source-backed district contests for public jurisdiction browsing without providers or AI", async () => {
     const { service, repository } = setup();
     const result = await service.getUpcoming(scope);

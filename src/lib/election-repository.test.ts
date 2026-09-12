@@ -266,4 +266,20 @@ describe("immutable election persistence", () => {
     expect(stale).toHaveLength(1);
     expect(projectContest(stale[0], options.now())).toMatchObject({ status: "available", verification: "historical" });
   });
+
+  it("binds original receipt policy versions while validating retained history under current source rules", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    expect(await repository.readContest(graph.contest_id)).not.toBeNull();
+    options.policy.version = "fixture-policy-v2";
+    options.now = () => new Date("2026-09-14T13:00:00.000Z");
+    const retained = await repository.readContest(graph.contest_id);
+    expect(retained?.policy.version).toBe("fixture-policy-v2");
+    expect(retained && projectContest(retained, options.now())).toMatchObject({ status: "available", verification: "historical" });
+    expect((await database.execute(sql`select policy_version from election_import_batch`)).rows[0].policy_version).toBe("fixture-policy-v1");
+    expect(await repository.importReviewedPackage(graph.package, receipt.id)).toMatchObject({ status: "rejected", reason: "source_not_admitted" });
+    options.policy.authorities[0].urls = ["https://elections.example.test/unrelated"];
+    await expect(repository.readContest(graph.contest_id)).rejects.toThrow("Election read is not verified");
+  });
 });

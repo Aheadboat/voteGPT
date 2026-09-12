@@ -173,4 +173,9 @@ describe("source-backed election contest", () => {
     } }] }] }} />);
     for (const label of ["Listed source", "Removed source"]) expect(screen.getByRole("link", { name: label }).closest("details")).toBeNull();
   });
+
+  it("links the separate ballot-access explanation to the official source", () => {
+    render(<ElectionContest result={view()} />);
+    expect(screen.getByRole("link", { name: "FEC ballot access guidance" })).toHaveAttribute("href", "https://www.fec.gov/help-candidates-and-committees/registering-candidate/gaining-ballot-access/");
+  });
 });
