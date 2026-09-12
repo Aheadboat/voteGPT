@@ -872,3 +872,175 @@ describe("accumulated ledger reads and bounded history display", () => {
     expect(projectContest(graph as unknown as ElectionGraph, NOW).status).toBe("unverified");
   });
 });
+
+function withRunoffStage() {
+  const graph = fixtureGraph();
+  graph.package.stages.push({ ...graph.package.stages[0], id: "stage-runoff", official_key: "runoff" });
+  graph.package.evidence.push(evidence("stage_metadata", {
+    ...metadata(graph, "stage_metadata").value, name: "Synthetic runoff", kind: "runoff", successor_stage_ids: [],
+  }, { subject: { kind: "stage", id: "stage-runoff" } }));
+  return graph;
+}
+
+describe("independent review regressions", () => {
+  it.each([1, 2, 3, 4])("accepts the admitted canonical California board division %s", (district) => {
+    const graph = fixtureGraph();
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    const contest = metadata(graph, "contest_metadata").value;
+    contest.office = "Synthetic board office";
+    contest.district = String(district);
+    contest.level = "state";
+    contest.division_ids = [STATE + "/board_of_equalization:" + district];
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    expect(view(graph).contest).toMatchObject({ state: "verified", value: { division_ids: contest.division_ids } });
+  });
+
+  it.each(["boe:1", "board_of_equalization:0", "board_of_equalization:5", "board_of_equalization:first"])(
+    "rejects unsupported board division alias/value %s", (division) => {
+      const graph = fixtureGraph();
+      expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+      metadata(graph, "contest_metadata").value.division_ids = [STATE + "/" + division];
+      expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("rejected");
+      expect(projectContest(readGraph(graph), NOW).status).toBe("unverified");
+    },
+  );
+
+  it.each(["import", "read"] as const)("rejects wrong-jurisdiction status authority at the %s boundary", (boundary) => {
+    const graph = fixtureGraph();
+    const authority = structuredClone(graph.policy.authorities[0]);
+    authority.id = "second-election-authority";
+    graph.policy.authorities.push(authority);
+    graph.package.documents.push({ ...graph.package.documents[0], id: "second-document", authority_id: authority.id });
+    graph.package.evidence.push(evidence("ballot_qualification", "certified", { document_id: "second-document" }));
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    expect(view(graph).candidates[0].tracks.ballot_qualification.state).toBe("verified");
+    authority.jurisdiction_id = "ocd-division/country:us/state:ny";
+    if (boundary === "import") {
+      expect(validateElectionPackage(graph.package, graph.policy, NOW)).toEqual({ status: "rejected", reason: "source_not_admitted" });
+    } else {
+      expect(projectContest(readGraph(graph), NOW)).toEqual({ status: "unverified", reason: "invalid_graph" });
+    }
+  });
+
+  it.each(["division_ids", "contest_ids", "successor_stage_ids"] as const)(
+    "corroborates equivalent %s sets while retaining each assertion's original order", (field) => {
+      const graph = withRunoffStage();
+      graph.package.stages.push({ ...graph.package.stages[0], id: "stage-primary", official_key: "primary" });
+      graph.package.evidence.push(evidence("stage_metadata", {
+        ...metadata(graph, "stage_metadata").value, name: "Synthetic primary", kind: "primary", successor_stage_ids: [],
+      }, { subject: { kind: "stage", id: "stage-primary" } }));
+      graph.package.contests.push({ ...graph.package.contests[0], id: "contest-other", official_key: "other-contest" });
+      graph.package.evidence.push(evidence("contest_metadata", metadata(graph, "contest_metadata").value,
+        { subject: { kind: "contest", id: "contest-other" } }));
+      const original = field === "division_ids" ? metadata(graph, "contest_metadata") :
+        field === "contest_ids" ? metadata(graph, "election_metadata") : metadata(graph, "stage_metadata");
+      if (original.kind === "contest_metadata") original.value.division_ids = [STATE, DISTRICT];
+      if (original.kind === "election_metadata") original.value.coverage.contest_ids = ["contest-house", "contest-other"];
+      if (original.kind === "stage_metadata") original.value.successor_stage_ids = ["stage-primary", "stage-runoff"];
+      const duplicate = structuredClone(original);
+      duplicate.id = "equivalent-reversed-set";
+      if (duplicate.kind === "contest_metadata") duplicate.value.division_ids.reverse();
+      if (duplicate.kind === "election_metadata") duplicate.value.coverage.contest_ids.reverse();
+      if (duplicate.kind === "stage_metadata") duplicate.value.successor_stage_ids.reverse();
+      const originalValue = structuredClone(original.value);
+      const reversedValue = structuredClone(duplicate.value);
+      expect(view(graph).status).toBe("available");
+      graph.package.evidence.push(duplicate);
+      const result = view(graph);
+      const state = field === "division_ids" ? result.contest : field === "contest_ids" ? result.election : result.stage;
+      expect(state).toMatchObject({ state: "verified", evidence: expect.arrayContaining([
+        expect.objectContaining({ id: original.id }), expect.objectContaining({ id: duplicate.id }),
+      ]) });
+      expect(result.history.find((entry) => entry.evidence.id === original.id)?.value).toEqual(originalValue);
+      expect(result.history.find((entry) => entry.evidence.id === duplicate.id)?.value).toEqual(reversedValue);
+      expect(original.value).toEqual(originalValue);
+      expect(duplicate.value).toEqual(reversedValue);
+    },
+  );
+
+  it.each([false, true])("exposes every candidate and line metadata conflict with stable order (reversed=%s)", (reversed) => {
+    const graph = fixtureGraph();
+    view(graph);
+    const conflicts = graph.package.evidence.filter((entry) => entry.kind === "candidacy_metadata" ||
+      (entry.kind === "ballot_line_metadata" && entry.subject.id === "line-a-one"));
+    for (const entry of conflicts) {
+      const alternative = structuredClone(entry);
+      alternative.id = "conflict:" + entry.id;
+      if (alternative.kind === "candidacy_metadata" || alternative.kind === "ballot_line_metadata") {
+        alternative.value.name += " alternate";
+      }
+      graph.package.evidence.push(alternative);
+    }
+    const expectedIds = conflicts.flatMap((entry) => [entry.id, "conflict:" + entry.id]).sort();
+    if (reversed) {
+      graph.package.candidacies.reverse();
+      graph.package.ballot_lines.reverse();
+      graph.package.evidence.reverse();
+    }
+    const result = projectContest(readGraph(graph, 0, 1), NOW);
+    expect(result.status).toBe("unverified");
+    if (result.status !== "unverified") throw new Error("Expected metadata recovery");
+    expect(result.metadata_conflicts?.map((entry) => entry.evidence.id)).toEqual(expectedIds);
+    expect(result.history).toHaveLength(1);
+    expect(result.metadata_conflicts?.every((entry) => entry.evidence.source_url === "https://elections.example.test/2026/candidates" &&
+      entry.evidence.locator === "Synthetic row 1")).toBe(true);
+  });
+
+  it("does not reapply the generic 10,000-array import bound to retained source policy URLs", () => {
+    const graph = readGraph();
+    graph.policy.authorities[0].urls.push(...Array.from({ length: 9_999 }, (_, index) =>
+      "https://elections.example.test/retained-policy-" + index));
+    expect(graph.policy.authorities[0].urls).toHaveLength(10_000);
+    ledgerView(graph);
+    const url = "https://elections.example.test/retained-policy-final";
+    graph.policy.authorities[0].urls.push(url);
+    graph.ledger.documents.push({ ...graph.ledger.documents[0], id: "retained-policy-final", url });
+    expect(ledgerView(graph).status).toBe("available");
+  });
+
+  it.each(["import", "read"] as const)("allows corrected operative stage edges at the %s boundary without erasing history", (boundary) => {
+    const graph = withRunoffStage();
+    const general = metadata(graph, "stage_metadata");
+    general.value.successor_stage_ids = ["stage-runoff"];
+    const runoff = graph.package.evidence.find((entry) => entry.kind === "stage_metadata" && entry.subject.id === "stage-runoff")!;
+    if (runoff.kind !== "stage_metadata") throw new Error("Expected runoff metadata");
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    view(graph);
+    graph.package.evidence.push(
+      evidence("stage_metadata", { ...general.value, successor_stage_ids: [] }, {
+        id: "general-revised", subject: general.subject,
+        effective: { precision: "instant", start: "2026-09-12T12:30:00.000Z", end: null },
+      }),
+      evidence("stage_metadata", { ...runoff.value, successor_stage_ids: ["stage-general"] }, {
+        id: "runoff-revised", subject: runoff.subject,
+        effective: { precision: "instant", start: "2026-09-12T12:30:00.000Z", end: null },
+      }),
+    );
+    graph.package.supersessions.push(
+      { predecessor_id: general.id, replacement_id: "general-revised", reason: "Synthetic stage correction" },
+      { predecessor_id: runoff.id, replacement_id: "runoff-revised", reason: "Synthetic stage correction" },
+    );
+    if (boundary === "import") {
+      expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    } else {
+      const result = view(graph);
+      expect(result.stage).toMatchObject({ state: "verified", value: { successor_stage_ids: [] } });
+      expect(result.history.find((entry) => entry.evidence.id === general.id)).toMatchObject({
+        superseded: true, value: { successor_stage_ids: ["stage-runoff"] },
+      });
+      expect(view(graph, new Date("2026-09-12T12:29:59.999Z")).stage)
+        .toMatchObject({ state: "verified", value: { successor_stage_ids: ["stage-runoff"] } });
+    }
+  });
+
+  it("still rejects genuinely operative multi-stage cycles", () => {
+    const graph = withRunoffStage();
+    metadata(graph, "stage_metadata").value.successor_stage_ids = ["stage-runoff"];
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    const runoff = graph.package.evidence.find((entry) => entry.kind === "stage_metadata" && entry.subject.id === "stage-runoff")!;
+    if (runoff.kind !== "stage_metadata") throw new Error("Expected runoff metadata");
+    runoff.value.successor_stage_ids = ["stage-general"];
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("rejected");
+    expect(projectContest(readGraph(graph), NOW).status).toBe("unverified");
+  });
+});
