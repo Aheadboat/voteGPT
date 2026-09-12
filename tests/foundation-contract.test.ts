@@ -54,14 +54,17 @@ function readHistoricalFile(revision: string, path: string): string {
   })
 }
 
-function expectF7DesignActivation(roadmap: string, readme: string, paths: string[]): void {
+function expectF7DesignActivation(roadmap: string, readme: string, paths: string[], plan = readRepositoryFile("F7-DESIGN-PLAN.md")): void {
   const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
   const normalizedReadme = normalizeGovernanceDocument(readme)
   const baseRoadmap = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "ROADMAP.md"))
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 design-only activation record").toBe(
-    "787217408825d484ede656a9d16afdec7e1225da6241388a49e3e19f8e8d52bc",
+    "9d171bb36af45c7aacbbdf97844fa6f7eda4095f8aa077501449767f5a9bc3ad",
+  )
+  expect(governanceSha256(plan), "exact F7 Gate A candidate, approval still pending").toBe(
+    "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
   )
   expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
   expect(normalizedReadme).toBe(replaceExactlyOnce(
@@ -71,7 +74,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "tests/foundation-contract.test.ts"], "F7 pre-Gate-A changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts"], "F7 pre-Gate-A changed path: " + path).toContain(path)
   }
 }
 
@@ -2004,6 +2007,7 @@ describe("concurrent roadmap delivery contract", () => {
     const roadmap = readRepositoryFile("ROADMAP.md")
     const readme = readRepositoryFile("README.md")
     expectF7DesignActivation(roadmap, readme, changed)
+    expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md") + "\nHuman Gate A approved.\n")).toThrow()
     for (const [before, after] of [
       ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
       ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[IN PROGRESS (RED)]"],
