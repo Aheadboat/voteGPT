@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  electionScopeFromDivisions, projectContest, validateElectionPackage,
-  type ContestView, type ElectionGraph, type ElectionEvidence, type EvidenceKind,
+  electionScopeFromDivisions, projectContest, serializeElectionPackage, validateElectionPackage,
+  type ContestField, type ContestView, type ElectionGraph, type ElectionEvidence, type EvidenceKind,
 } from "./elections";
 import {
   evidence, fixtureGraph, NOW, VERIFIED_AT, CURRENT_UNTIL, STATE, DISTRICT,
@@ -683,14 +683,14 @@ describe("linked stages and bounded input", () => {
 
   it("admits exactly 2 MiB and rejects one additional permitted text byte", () => {
     const graph = fixtureGraph();
-    const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
+    const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value) + "\n", "utf8");
     const maximum = 2 * 1_024 * 1_024;
     let bytes = size(graph.package);
     for (let index = 0; ; index += 1) {
       const entry = evidence("intent", "declared", {
         id: "bounded-" + index, original_term: "x".repeat(500), locator: "y".repeat(500),
       });
-      const added = size(entry) + 1;
+      const added = Buffer.byteLength(JSON.stringify(entry), "utf8") + 1;
       if (bytes + added > maximum) break;
       graph.package.evidence.push(entry);
       bytes += added;
@@ -709,7 +709,9 @@ describe("linked stages and bounded input", () => {
     const expandable = graph.package.evidence.find((entry) => entry.locator.length < 500)!;
     expandable.locator += "z";
     expect(size(graph.package)).toBe(2_097_153);
-    expect(validateElectionPackage(graph.package, graph.policy, NOW)).toEqual({ status: "rejected", reason: "limit_exceeded" });
+    const oversized = validateElectionPackage(graph.package, graph.policy, NOW);
+    expect(oversized.status).toBe("rejected");
+    if (oversized.status === "rejected") expect(oversized.reason).toBe("limit_exceeded");
   });
 
   it("rejects 10,001 distinct assertions without treating duplicate IDs as the reason", () => {
@@ -1045,7 +1047,7 @@ describe("independent review regressions", () => {
   });
 });
 
-const CONTEST_FIELDS = ["name", "office", "district", "term", "seats", "form", "level", "jurisdiction_id", "division_ids", "partisanship"];
+const CONTEST_FIELDS: ContestField[] = ["name", "office", "district", "term", "seats", "form", "level", "jurisdiction_id", "division_ids", "partisanship"];
 
 function compositeFixture() {
   const graph = fixtureGraph();
@@ -1085,7 +1087,7 @@ function compositeFixture() {
       { ...structuredClone(source), id: "registry", fields: ["division_ids"], document_id: "registry-document",
         mapping_id: "registry-fields", locator: "Synthetic registry row 1", original_term: DISTRICT },
     ],
-  });
+  }) as Mutable<ElectionEvidence<"contest_metadata">>;
   return { graph, snapshot, statute, registry };
 }
 
@@ -1150,7 +1152,7 @@ describe("complete metadata snapshots with field-specific supporting sources", (
       expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
       if (change === "primary_fields") Object.assign(snapshot, { fields: undefined });
       if (change === "missing_field") snapshot.supporting_sources[0].fields = ["seats", "form"];
-      if (change === "unknown_field") snapshot.supporting_sources[0].fields.push("invented_field");
+      if (change === "unknown_field") Object.assign(snapshot.supporting_sources[0], { fields: ["term", "seats", "form", "invented_field"] });
       if (change === "unknown_document") snapshot.supporting_sources[0].document_id = "unknown";
       if (change === "unknown_mapping") snapshot.supporting_sources[0].mapping_id = "unknown";
       if (change === "duplicate_group") snapshot.supporting_sources[1].id = snapshot.supporting_sources[0].id;
@@ -1244,5 +1246,101 @@ describe("complete metadata snapshots with field-specific supporting sources", (
     const first = view(fixture.graph);
     fixture.snapshot.supporting_sources.reverse();
     expect(view(fixture.graph)).toEqual(first);
+  });
+
+  it("uses the oldest required support review as the whole snapshot's last verification", () => {
+    const fixture = compositeFixture();
+    expect(view(fixture.graph).contest).toMatchObject({ state: "verified", verified_at: VERIFIED_AT });
+    fixture.snapshot.supporting_sources[0].verified_at = "2026-09-12T11:30:00.000Z";
+    fixture.snapshot.supporting_sources[0].current_until = "2026-09-13T11:30:00.000Z";
+    const result = view(fixture.graph);
+    expect(result.contest).toMatchObject({ state: "verified", verified_at: "2026-09-12T11:30:00.000Z" });
+    expect(result.contest.state === "verified" && result.contest.evidence[0].field_sources?.term[0].verified_at)
+      .toBe("2026-09-12T11:30:00.000Z");
+  });
+
+  it("intersects reviewed civil-date support with an instant interval across a daylight-saving boundary", () => {
+    const fixture = compositeFixture();
+    previousCompositeSnapshot(fixture);
+    const before = new Date("2026-11-01T06:59:59.999Z");
+    for (const entry of fixture.graph.package.evidence) {
+      const groups = entry.kind === "contest_metadata" ? [entry, ...entry.supporting_sources] : [entry];
+      for (const group of groups) Object.assign(group, {
+        retrieved_at: "2026-11-01T05:00:00.000Z", verified_at: "2026-11-01T06:00:00.000Z",
+        current_until: "2026-11-02T06:00:00.000Z",
+      });
+    }
+    fixture.snapshot.supporting_sources[0].effective = { precision: "date", start: "2026-10-31", end: "2026-11-02" };
+    fixture.snapshot.supporting_sources[1].effective = { precision: "instant", start: "2026-11-01T07:00:00.000Z", end: null };
+    expect(view(fixture.graph, before).contest).toMatchObject({ state: "verified", value: { term: "2027-2029" } });
+    const result = view(fixture.graph, new Date("2026-11-01T07:00:00.000Z"));
+    expect(result.contest).toMatchObject({ state: "verified", value: { term: "Synthetic revised term" } });
+    expect(result.contest.state === "verified" && result.contest.evidence[0].field_sources?.term[0].effective)
+      .toEqual({ precision: "date", start: "2026-10-31", end: "2026-11-02" });
+  });
+
+  it("does not supersede through disjoint reviewed dates in different time zones", () => {
+    const fixture = compositeFixture();
+    previousCompositeSnapshot(fixture);
+    fixture.statute.mappings[0].date_rule = { time_zone: "America/New_York", start: "start_of_day", end: "start_of_day" };
+    fixture.snapshot.supporting_sources[0].effective = { precision: "date", start: "2026-09-01", end: "2026-09-12" };
+    fixture.registry.mappings[0].date_rule = { time_zone: "America/Los_Angeles", start: "start_of_day", end: "end_of_day" };
+    fixture.snapshot.supporting_sources[1].effective = { precision: "date", start: "2026-09-12", end: null };
+    const result = view(fixture.graph);
+    expect(result.contest).toMatchObject({ state: "verified", value: { term: "2027-2029" } });
+    expect(result.history.find((entry) => entry.evidence.id === "contest-before")?.superseded).toBe(false);
+  });
+
+  it("expires on a supporting authority's display cutoff while preserving field-specific history", () => {
+    const fixture = compositeFixture();
+    expect(view(fixture.graph).contest.state).toBe("verified");
+    fixture.registry.current_display_until = NOW.toISOString();
+    const result = view(fixture.graph);
+    expect(result.contest.state).toBe("stale");
+    if (result.contest.state !== "stale") throw new Error("Expected stale complete snapshot");
+    expectFieldSources(result.contest.previous[0].evidence);
+  });
+
+  it.each(["future_review", "retrieval_after_review", "overlong_freshness", "zero_freshness", "invalid_effect", "duplicate_field", "reserved_group_id", "unmapped_primary_field"] as const)(
+    "rejects %s supporting provenance after an admitted control", (change) => {
+      const fixture = compositeFixture();
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("valid");
+      const support = fixture.snapshot.supporting_sources[0];
+      if (change === "future_review") Object.assign(support, { verified_at: "2026-09-12T14:00:00.000Z", current_until: "2026-09-13T14:00:00.000Z" });
+      if (change === "retrieval_after_review") support.retrieved_at = "2026-09-12T12:30:00.000Z";
+      if (change === "overlong_freshness") support.current_until = "2026-09-13T12:00:00.001Z";
+      if (change === "zero_freshness") support.current_until = support.verified_at;
+      if (change === "invalid_effect") support.effective = { precision: "instant", start: "2026-09-31T00:00:00.000Z", end: null };
+      if (change === "duplicate_field") support.fields.push("term");
+      if (change === "reserved_group_id") support.id = "primary";
+      if (change === "unmapped_primary_field") fixture.graph.policy.authorities[0].mappings.find((mapping) => mapping.kind === "contest_metadata")!.allowed_fields = ["term"];
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("rejected");
+      expect(projectContest(readGraph(fixture.graph), NOW).status).toBe("unverified");
+    },
+  );
+});
+
+describe("reviewed normalized package representation", () => {
+  it("has one object-key-order-independent UTF-8 representation with preserved arrays, values and one LF", () => {
+    const graph = fixtureGraph();
+    metadata(graph, "contest_metadata").value.division_ids = [DISTRICT, STATE];
+    const reverseKeys = (value: unknown): unknown => Array.isArray(value) ? value.map(reverseKeys) :
+      value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverseKeys(item)])) : value;
+    const source = serializeElectionPackage(graph.package);
+    expect(source.startsWith('{"ballot_lines":')).toBe(true);
+    expect(source.endsWith("}\n")).toBe(true);
+    expect(source.split("\n")).toHaveLength(2);
+    const reordered = JSON.parse(JSON.stringify(reverseKeys(graph.package), null, 2).replaceAll("\n", "\r\n"));
+    expect(serializeElectionPackage(reordered)).toBe(source);
+    expect(JSON.parse(source)).toEqual(graph.package);
+    reordered.candidacies.reverse();
+    expect(serializeElectionPackage(reordered)).not.toBe(source);
+    const reversedDivisions = structuredClone(graph.package);
+    reversedDivisions.evidence.find((entry) => entry.kind === "contest_metadata")!.value.division_ids.reverse();
+    expect(serializeElectionPackage(reversedDivisions)).not.toBe(source);
+    const changed = structuredClone(graph.package);
+    changed.evidence[0].original_term = "Synthetic changed source term";
+    expect(serializeElectionPackage(changed)).not.toBe(source);
+    expect(graph.package.documents[0].sha256).toBe("a".repeat(64));
   });
 });
