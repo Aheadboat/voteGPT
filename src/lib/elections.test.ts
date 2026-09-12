@@ -7,7 +7,7 @@ import {
   type ContestField, type ContestView, type ElectionGraph, type ElectionEvidence, type EvidenceKind,
 } from "./elections";
 import {
-  evidence, fixtureGraph, NOW, VERIFIED_AT, CURRENT_UNTIL, STATE, DISTRICT,
+  evidence, fixtureGraph, fixtureCalendarGraph, NOW, VERIFIED_AT, CURRENT_UNTIL, STATE, DISTRICT,
   type Mutable, type FixtureGraph,
 } from "../../tests/fixtures/elections/domain";
 
@@ -1342,5 +1342,50 @@ describe("reviewed normalized package representation", () => {
     changed.evidence[0].original_term = "Synthetic changed source term";
     expect(serializeElectionPackage(changed)).not.toBe(source);
     expect(graph.package.documents[0].sha256).toBe("a".repeat(64));
+  });
+});
+
+describe("package-held calendar provenance", () => {
+  it("preserves literal-source behavior and attributes a derived stage calendar to its reviewed references", () => {
+    const literal = view();
+    expect(literal.stage.state).toBe("verified");
+    if (literal.stage.state !== "verified") throw new Error("Expected literal stage control");
+    expect(literal.stage.evidence[0]).not.toHaveProperty("calendar_basis");
+
+    const graph = fixtureCalendarGraph();
+    expect(validateElectionPackage(graph.package, graph.policy, NOW).status).toBe("valid");
+    const result = view(graph);
+    if (result.stage.state !== "verified") throw new Error("Expected derived stage calendar");
+    expect(result.stage).toMatchObject({
+      state: "verified", verified_at: "2026-09-12T11:45:00.000Z",
+      value: { date: "2026-11-03", time_zone: "America/Los_Angeles" },
+      evidence: [{
+        source_url: "https://elections.example.test/2026/candidates",
+        original_term: "Synthetic November 3 election date in California", verified_at: VERIFIED_AT,
+        calendar_basis: {
+          basis_id: "synthetic-california-calendar-v1", mapping_id: "stage_metadata:stage",
+          jurisdiction_id: STATE, time_zone: "America/Los_Angeles",
+          references: [
+            {
+              source_url: "https://time.example.test/northamerica", kind: "iana_tzdb",
+              source_label: "Synthetic timezone reference", document_sha256: "c".repeat(64),
+              locator: "Synthetic California zone entry", original_term: "Synthetic America/Los_Angeles zone",
+              retrieved_at: "2026-09-12T10:00:00.000Z", verified_at: "2026-09-12T11:45:00.000Z",
+              current_until: "2026-09-13T11:45:00.000Z",
+            },
+            {
+              source_url: "https://time.example.test/pacific-boundary", kind: "time_zone_regulation",
+              source_label: "Synthetic civil boundary reference", document_sha256: "d".repeat(64),
+              locator: "Synthetic Pacific boundary paragraph", original_term: "Synthetic California civil boundary",
+              retrieved_at: "2026-09-12T10:00:00.000Z", verified_at: "2026-09-12T11:45:00.000Z",
+              current_until: "2026-09-13T11:45:00.000Z",
+            },
+          ],
+        },
+      }],
+    });
+    expect(result.stage.evidence[0]).not.toHaveProperty("date_interpretation");
+    expect(JSON.stringify(result)).not.toContain("synthetic-calendar-access-only");
+    expect(JSON.stringify(result)).not.toContain("synthetic-calendar-retention-only");
   });
 });

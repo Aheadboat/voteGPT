@@ -145,3 +145,38 @@ export type FixtureGraph = Mutable<{
 export function fixtureGraph(): FixtureGraph {
   return { package: fixturePackage(), policy: fixturePolicy(), contest_id: "contest-house" };
 }
+
+export function fixtureCalendarGraph(): FixtureGraph {
+  const graph = fixtureGraph();
+  const basisId = "synthetic-california-calendar-v1";
+  const primary = {
+    ...graph.package.documents[0], id: "calendar-date-document",
+    label: "Synthetic election date notice", calendar_basis_id: basisId,
+  };
+  const references = [
+    { id: "calendar-zone-reference", authority_id: "synthetic-zone-reference", url: "https://time.example.test/northamerica", kind: "iana_tzdb", label: "Synthetic timezone reference", sha256: "c".repeat(64), locator: "Synthetic California zone entry", original_term: "Synthetic America/Los_Angeles zone" },
+    { id: "calendar-boundary-reference", authority_id: "synthetic-boundary-reference", url: "https://time.example.test/pacific-boundary", kind: "time_zone_regulation", label: "Synthetic civil boundary reference", sha256: "d".repeat(64), locator: "Synthetic Pacific boundary paragraph", original_term: "Synthetic California civil boundary" },
+  ];
+  graph.package.documents.push(primary, ...references.map(({ kind, locator, original_term, ...document }) => ({
+    ...document,
+    calendar_reference: {
+      basis_id: basisId, kind, locator, original_term,
+      retrieved_at: "2026-09-12T10:00:00.000Z", verified_at: "2026-09-12T11:45:00.000Z",
+      current_until: "2026-09-13T11:45:00.000Z",
+    },
+  })));
+  const stage = graph.package.evidence.find((entry) => entry.kind === "stage_metadata")!;
+  stage.document_id = primary.id;
+  stage.original_term = "Synthetic November 3 election date in California";
+  Object.assign(graph.policy.authorities[0].mappings.find((entry) => entry.kind === "stage_metadata")!, {
+    stage_calendar: {
+      basis_id: basisId, jurisdiction_id: STATE, time_zone: "America/Los_Angeles",
+      references: references.map(({ id, authority_id, url, kind }) => ({
+        id, authority_id, url, kind, access_approval: "synthetic-calendar-access-only",
+        retention_approval: "synthetic-calendar-retention-only", retention: "indefinite",
+      })),
+      enabled: true, current_display_until: null,
+    },
+  });
+  return graph;
+}
