@@ -54,27 +54,30 @@ function readHistoricalFile(revision: string, path: string): string {
   })
 }
 
-function expectF7DesignActivation(roadmap: string, readme: string, paths: string[], plan = readRepositoryFile("F7-DESIGN-PLAN.md")): void {
+function expectF7DesignActivation(roadmap: string, readme: string, paths: string[], plan = readRepositoryFile("F7-DESIGN-PLAN.md"), sourceDecision = readRepositoryFile("F7-SOURCE-DECISION.md")): void {
   const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
   const normalizedReadme = normalizeGovernanceDocument(readme)
   const baseRoadmap = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "ROADMAP.md"))
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "6400958fcf537c846aaee7bfbae5ec8875be28cf1907fb3f8ae7628923ef0c99",
+    "2ecda80170fe3b75ec9e3b1ff494379575b1b18dac9c720e9a6f2f8b4b592fb8",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
+  )
+  expect(governanceSha256(sourceDecision), "exact limited F7 source approval, publication pending").toBe(
+    "000eead0dd267144924179281c9c6d337af784fe3cdd36c00ff893f892a77236",
   )
   expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
   expect(normalizedReadme).toBe(replaceExactlyOnce(
     baseReadme,
     "F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-    "F7 — Elections and Deterministic Candidate Validity is active in `RED` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Source-specific rights and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 — Elections and Deterministic Candidate Validity is active in `RED` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Limited California factual source use is approved; document checks and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
   }
 }
 
@@ -2008,6 +2011,7 @@ describe("concurrent roadmap delivery contract", () => {
     const readme = readRepositoryFile("README.md")
     expectF7DesignActivation(roadmap, readme, changed)
     expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md") + "\nHuman Gate A approved.\n")).toThrow()
+    expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md"), readRepositoryFile("F7-SOURCE-DECISION.md") + "\nProduction publication approved.\n")).toThrow()
     for (const [before, after] of [
       ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
       ["[IN PROGRESS (RED)]", "[IN PROGRESS (GREEN)]"],
