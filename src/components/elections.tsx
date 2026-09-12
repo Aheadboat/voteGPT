@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type {
-  BallotLineView, CandidateTracks, CandidacyView, ContestField, ContestMetadata, ContestResult,
+  BallotLineView, CandidateTracks, CandidacyView, ContestField, ContestMetadata, ContestResult, ContestView, ElectionIndexResult,
   EvidenceHistory, EvidenceRef, EvidenceState, HistoryPage, SourceReference,
 } from "@/lib/elections";
 import styles from "./elections.module.css";
@@ -157,5 +157,53 @@ export function ElectionContest({ result }: { result: ContestResult }) {
     </section>
     {!!result.retired_candidates.length && <section aria-label="Retired candidate identities"><h2>Retired candidate identities</h2>{[...result.retired_candidates].sort(compareNames).map((candidate) => <Candidate key={candidate.id} candidate={candidate} retired />)}</section>}
     <History entries={history} page={result.history_page} contestId={result.contest_id} />
+  </section>;
+}
+
+export function ElectionIndex({ result }: { result: ElectionIndexResult }) {
+  if (result.status !== "available") return <section className={styles.shell}>
+    <p role="status">{result.status === "unavailable" ? "Election information is temporarily unavailable. Try again later." : "Election coverage is unavailable for this scope."}</p>
+    <a href="https://www.sos.ca.gov/elections">California official election office</a>
+  </section>;
+  const contests = [...new Map(result.contests.map((contest) => [contest.contest_id, contest])).values()];
+  contests.sort((a, b) => {
+    const stageA = historicalValue(a.stage);
+    const stageB = historicalValue(b.stage);
+    return (stageA?.date ?? "").localeCompare(stageB?.date ?? "", "en") ||
+      (historicalValue(a.contest)?.office ?? "").localeCompare(historicalValue(b.contest)?.office ?? "", "en") || a.contest_id.localeCompare(b.contest_id, "en");
+  });
+  const groups = new Map<string, ContestView[]>();
+  for (const contest of contests) {
+    const election = historicalValue(contest.election);
+    const stage = historicalValue(contest.stage);
+    const key = JSON.stringify([
+      contest.election.state === "verified" ? contest.election.evidence.map((entry) => entry.id) : [],
+      contest.stage.state === "verified" ? contest.stage.evidence.map((entry) => entry.id) : [],
+      election?.name, stage?.name, stage?.date, stage?.time_zone,
+    ]);
+    groups.set(key, [...(groups.get(key) ?? []), contest]);
+  }
+  return <section aria-label="Upcoming contests" className={styles.shell}>
+    {result.unverified_count > 0 && <p className={styles.notice}>{result.unverified_count} contest records are not verified for upcoming display. Dates, coverage or evidence need review.</p>}
+    {contests.length === 0 && <p>No currently verified upcoming contest records are available for this scope. This does not mean there are no elections or candidates. Check the official election office.</p>}
+    {[...groups].map(([key, group]) => {
+      const first = group[0];
+      return <section key={key}>
+        <h2>{historicalValue(first.election)?.name ?? "Election information"}</h2>
+        <Claim state={first.election} renderValue={(election) => <>Coverage: {election.coverage.state === "partial" ? "Partial" : "Complete only within admitted contests"}. {election.coverage.notes.join(" ")}</>} />
+        <h3>{historicalValue(first.stage)?.name ?? "Election stage"}</h3>
+        <Claim state={first.stage} renderValue={(stage) => <>Election date: {stage.date ?? "Unknown"}. Time zone: {stage.time_zone ?? "Unknown"}. This date does not establish polling hours.</>} />
+        <ul>{group.map((contest) => {
+          const metadata = historicalValue(contest.contest);
+          const evidence = contest.contest.state === "verified" ? contest.contest.evidence : [];
+          return <li key={contest.contest_id} className={styles.fact}>
+            <h4><a href={`/elections/contests/${encodeURIComponent(contest.contest_id)}`}>{metadata?.name ?? "Contest information"}</a></h4>
+            <Sources evidence={evidence.flatMap((entry) => entry.field_sources?.name ?? [])} />
+            <p>Office: {metadata?.office ?? "Not verified"}.</p>
+            <Sources evidence={evidence.flatMap((entry) => entry.field_sources?.office ?? [])} />
+          </li>;
+        })}</ul>
+      </section>;
+    })}
   </section>;
 }

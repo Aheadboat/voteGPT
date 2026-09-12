@@ -6,15 +6,20 @@ import { projectContest, type ContestField, type ContestResult, type ContestView
 import { evidence, fixturePackage, fixturePolicy, NOW, VERIFIED_AT } from "../../tests/fixtures/elections/domain";
 import { ElectionContest, ElectionIndex } from "./elections";
 
-function view(): ContestView {
+function view(now = NOW, corroborate = false): ContestView {
   const { schema_version, policy_version, ...ledger } = fixturePackage();
   void schema_version;
   void policy_version;
+  if (corroborate) {
+    const metadata = ledger.evidence.find((entry) => entry.kind === "contest_metadata");
+    if (!metadata) throw new Error("Invalid test setup");
+    ledger.evidence.push({ ...metadata, id: "corroborating-contest-metadata", locator: "Synthetic row 2", original_term: "Corroborating original term" });
+  }
   const result = projectContest({
     ledger, policy: fixturePolicy(), contest_id: "contest-house",
     completeness: { current: "complete", supersession: "complete", history: "complete" },
     history_page: { offset: 0, limit: 100 },
-  }, NOW);
+  }, now);
   if (result.status !== "available") throw new Error("Invalid test setup");
   return result;
 }
@@ -181,6 +186,17 @@ describe("source-backed election contest", () => {
 });
 
 describe("public election index display", () => {
+  it.each([false, true])("keeps all corroborating field sources on an index row (expired: %s)", (expired) => {
+    const contest = view(expired ? new Date("2026-09-13T12:00:00.000Z") : NOW, true);
+    expect(contest.contest.state).toBe(expired ? "stale" : "verified");
+    render(<ElectionIndex result={{ status: "available", contests: [contest], unverified_count: 0 }} />);
+    const row = screen.getByRole("link", { name: "Synthetic House contest" }).closest("li") as HTMLElement;
+    expect(within(row).getAllByRole("link", { name: "Synthetic election office list" })).toHaveLength(4);
+    expect(within(row).getAllByText("Corroborating original term", { exact: true })).toHaveLength(2);
+    expect(row.querySelectorAll(`time[datetime="${VERIFIED_AT}"]`)).toHaveLength(4);
+    if (expired) expect(within(row).getByText(/Historical contest.*not current/i)).toBeInTheDocument();
+    else expect(within(row).queryByText(/Historical contest/)).not.toBeInTheDocument();
+  });
   it("groups native contest links under sourced election and stage facts", () => {
     const contest = view();
     render(<ElectionIndex result={{ status: "available", contests: [contest], unverified_count: 0 }} />);

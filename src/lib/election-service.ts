@@ -17,6 +17,8 @@ export function createElectionService(options: { repository: ElectionRepository;
       }
     },
     async getUpcoming(scope) {
+      if (scope.jurisdiction_id !== "ocd-division/country:us/state:ca" ||
+        !["state", "federal"].includes(scope.level)) return { status: "unsupported" };
       try {
         const now = options.now();
         const graphs = await options.repository.readUpcoming(scope, now);
