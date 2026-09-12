@@ -43,7 +43,16 @@ CREATE TABLE "election_evidence" (
 	"contest_id" text,
 	"candidacy_id" text,
 	"ballot_line_id" text,
-	"assertion" jsonb NOT NULL
+	"assertion" jsonb NOT NULL,
+	CONSTRAINT "election_evidence_one_subject" CHECK (num_nonnulls("election_evidence"."election_id", "election_evidence"."stage_id", "election_evidence"."contest_id", "election_evidence"."candidacy_id", "election_evidence"."ballot_line_id") = 1),
+	CONSTRAINT "election_evidence_subject_binding" CHECK (coalesce(
+    jsonb_typeof("election_evidence"."assertion") = 'object' and "election_evidence"."assertion"->>'id' = "election_evidence"."id" and "election_evidence"."assertion"->>'kind' = "election_evidence"."kind"
+    and "election_evidence"."assertion"->'subject'->>'id' = coalesce("election_evidence"."election_id", "election_evidence"."stage_id", "election_evidence"."contest_id", "election_evidence"."candidacy_id", "election_evidence"."ballot_line_id")
+    and "election_evidence"."assertion"->'subject'->>'kind' = case when "election_evidence"."election_id" is not null then 'election' when "election_evidence"."stage_id" is not null then 'stage'
+      when "election_evidence"."contest_id" is not null then 'contest' when "election_evidence"."candidacy_id" is not null then 'candidacy' else 'ballot_line' end, false)),
+	CONSTRAINT "election_evidence_required_provenance" CHECK (coalesce(
+    "election_evidence"."assertion" ?& array['document_id','mapping_id','locator','original_term','retrieved_at','verified_at','effective','current_until']
+    and jsonb_typeof("election_evidence"."assertion"->'locator') = 'string' and length("election_evidence"."assertion"->>'locator') between 1 and 500, false))
 );
 --> statement-breakpoint
 CREATE TABLE "election_evidence_supersession" (
@@ -51,7 +60,8 @@ CREATE TABLE "election_evidence_supersession" (
 	"predecessor_id" text NOT NULL,
 	"batch_sha256" text NOT NULL,
 	"reason" text NOT NULL,
-	CONSTRAINT "election_evidence_supersession_pk" PRIMARY KEY("replacement_id","predecessor_id")
+	CONSTRAINT "election_evidence_supersession_pk" PRIMARY KEY("replacement_id","predecessor_id"),
+	CONSTRAINT "election_supersession_not_self" CHECK ("election_evidence_supersession"."replacement_id" <> "election_evidence_supersession"."predecessor_id")
 );
 --> statement-breakpoint
 CREATE TABLE "election_import_batch" (
@@ -97,4 +107,45 @@ CREATE UNIQUE INDEX "election_ballot_line_official_revision_unique" ON "election
 CREATE UNIQUE INDEX "election_candidacy_official_revision_unique" ON "election_candidacy" USING btree ("contest_id","issuer","official_key","revision");--> statement-breakpoint
 CREATE UNIQUE INDEX "election_contest_official_revision_unique" ON "election_contest" USING btree ("stage_id","issuer","official_key","revision");--> statement-breakpoint
 CREATE UNIQUE INDEX "election_import_receipt_unique" ON "election_import_batch" USING btree ("receipt_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "election_stage_official_revision_unique" ON "election_stage" USING btree ("election_id","issuer","official_key","revision");
+CREATE UNIQUE INDEX "election_stage_official_revision_unique" ON "election_stage" USING btree ("election_id","issuer","official_key","revision");--> statement-breakpoint
+CREATE FUNCTION election_history_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'Election history is immutable';
+END
+$$;
+--> statement-breakpoint
+DO $$
+DECLARE relation_name text;
+BEGIN
+  FOREACH relation_name IN ARRAY ARRAY['election', 'election_stage', 'election_contest', 'election_candidacy', 'election_ballot_line', 'election_import_batch', 'election_evidence', 'election_evidence_supersession'] LOOP
+    EXECUTE format('CREATE TRIGGER election_no_mutation BEFORE UPDATE OR DELETE OR TRUNCATE ON %I FOR EACH STATEMENT EXECUTE FUNCTION election_history_immutable()', relation_name);
+  END LOOP;
+END
+$$;
+--> statement-breakpoint
+CREATE FUNCTION election_supersession_scope() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE replacement election_evidence%ROWTYPE;
+DECLARE predecessor election_evidence%ROWTYPE;
+BEGIN
+  SELECT * INTO STRICT replacement FROM election_evidence WHERE id = NEW.replacement_id;
+  SELECT * INTO STRICT predecessor FROM election_evidence WHERE id = NEW.predecessor_id;
+  IF replacement.kind <> predecessor.kind OR
+    ROW(replacement.election_id, replacement.stage_id, replacement.contest_id, replacement.candidacy_id, replacement.ballot_line_id)
+    IS DISTINCT FROM ROW(predecessor.election_id, predecessor.stage_id, predecessor.contest_id, predecessor.candidacy_id, predecessor.ballot_line_id) THEN
+    RAISE EXCEPTION 'Election correction crosses subject or claim scope';
+  END IF;
+  PERFORM 1 FROM election WHERE id = (SELECT election_id FROM election_import_batch WHERE package_sha256 = NEW.batch_sha256) FOR UPDATE;
+  IF EXISTS (
+    WITH RECURSIVE predecessors(id) AS (
+      SELECT NEW.predecessor_id
+      UNION
+      SELECT link.predecessor_id FROM election_evidence_supersession link JOIN predecessors prior ON link.replacement_id = prior.id
+    ) SELECT 1 FROM predecessors WHERE id = NEW.replacement_id
+  ) THEN
+    RAISE EXCEPTION 'Election correction is cyclic';
+  END IF;
+  RETURN NEW;
+END
+$$;
+--> statement-breakpoint
+CREATE TRIGGER election_supersession_scope_check BEFORE INSERT ON election_evidence_supersession FOR EACH ROW EXECUTE FUNCTION election_supersession_scope();

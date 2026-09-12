@@ -300,14 +300,27 @@ export const electionEvidence = pgTable("election_evidence", {
   candidacy_id: text("candidacy_id").references(() => electionCandidacy.id),
   ballot_line_id: text("ballot_line_id").references(() => electionBallotLine.id),
   assertion: jsonb("assertion").$type<unknown>().notNull(),
-});
+}, (table) => [
+  check("election_evidence_one_subject", sql`num_nonnulls(${table.election_id}, ${table.stage_id}, ${table.contest_id}, ${table.candidacy_id}, ${table.ballot_line_id}) = 1`),
+  check("election_evidence_subject_binding", sql`coalesce(
+    jsonb_typeof(${table.assertion}) = 'object' and ${table.assertion}->>'id' = ${table.id} and ${table.assertion}->>'kind' = ${table.kind}
+    and ${table.assertion}->'subject'->>'id' = coalesce(${table.election_id}, ${table.stage_id}, ${table.contest_id}, ${table.candidacy_id}, ${table.ballot_line_id})
+    and ${table.assertion}->'subject'->>'kind' = case when ${table.election_id} is not null then 'election' when ${table.stage_id} is not null then 'stage'
+      when ${table.contest_id} is not null then 'contest' when ${table.candidacy_id} is not null then 'candidacy' else 'ballot_line' end, false)`),
+  check("election_evidence_required_provenance", sql`coalesce(
+    ${table.assertion} ?& array['document_id','mapping_id','locator','original_term','retrieved_at','verified_at','effective','current_until']
+    and jsonb_typeof(${table.assertion}->'locator') = 'string' and length(${table.assertion}->>'locator') between 1 and 500, false)`),
+]);
 
 export const electionEvidenceSupersession = pgTable("election_evidence_supersession", {
   replacement_id: text("replacement_id").notNull().references(() => electionEvidence.id),
   predecessor_id: text("predecessor_id").notNull().references(() => electionEvidence.id),
   batch_sha256: text("batch_sha256").notNull().references(() => electionImportBatch.package_sha256),
   reason: text("reason").notNull(),
-}, (table) => [primaryKey({ columns: [table.replacement_id, table.predecessor_id], name: "election_evidence_supersession_pk" })]);
+}, (table) => [
+  primaryKey({ columns: [table.replacement_id, table.predecessor_id], name: "election_evidence_supersession_pk" }),
+  check("election_supersession_not_self", sql`${table.replacement_id} <> ${table.predecessor_id}`),
+]);
 
 export const authSchema = { account, session, user, verification };
 export const databaseSchema = {

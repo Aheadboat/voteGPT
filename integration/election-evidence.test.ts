@@ -147,8 +147,10 @@ describe("PostgreSQL append-only election ledger", () => {
     // The repository uses only Drizzle transaction/query behavior; this client pins a physical connection for the probe.
     const reader = createElectionRepository(drizzle(observedClient, { schema: databaseSchema }) as unknown as typeof database, initial.options);
     const pending = reader.readContest(initial.graph.contest_id);
+    void pending.then(reached, reached);
     try {
       await firstRead;
+      expect(paused).toBe(true);
       expect((await writer.importReviewedPackage(changedGraph.package, changed.receipt.id)).status).toBe("imported");
       release();
       expect((await pending)?.ledger.evidence).toHaveLength(7);
