@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
+import { eq } from "drizzle-orm";
+
+import type { createDatabase } from "../db";
+import {
+  election, electionStage, electionContest, electionCandidacy, electionBallotLine,
+  electionImportBatch, electionEvidence, electionEvidenceSupersession,
+} from "../db/schema";
 
 import {
   serializeElectionPackage, validateElectionPackage,
-  type ApprovedElectionReceipt, type ElectionPackage, type ElectionRepositoryOptions, type EvidenceProvenance, type PackageRejection,
+  type ApprovedElectionReceipt, type ElectionGraph, type ElectionPackage, type ElectionRepository,
+  type ElectionRepositoryOptions, type EvidenceProvenance, type PackageRejection,
 } from "./elections";
 
 export type ElectionPackageReview =
@@ -49,6 +57,59 @@ export function reviewElectionPackage(
   } catch {
     return { status: "rejected", reason: "invalid_receipt" };
   }
+}
+
+type Database = Awaited<ReturnType<typeof createDatabase>>;
+
+export function createElectionRepository(database: Database, options: ElectionRepositoryOptions): ElectionRepository {
+  return {
+    async importReviewedPackage(input, receiptId) {
+      try {
+        return await database.transaction(async (transaction) => {
+          const reviewed = reviewElectionPackage(input, receiptId, options);
+          if (reviewed.status === "rejected") return reviewed;
+          const value = reviewed.package;
+          await transaction.insert(election).values({ ...value.election, dataset_kind: value.dataset_kind });
+          if (value.stages.length) await transaction.insert(electionStage).values([...value.stages]);
+          if (value.contests.length) await transaction.insert(electionContest).values([...value.contests]);
+          if (value.candidacies.length) await transaction.insert(electionCandidacy).values([...value.candidacies]);
+          if (value.ballot_lines.length) await transaction.insert(electionBallotLine).values([...value.ballot_lines]);
+          await transaction.insert(electionImportBatch).values({
+            package_sha256: reviewed.package_sha256, election_id: value.election.id,
+            schema_version: value.schema_version, policy_version: value.policy_version,
+            receipt_id: reviewed.receipt_id, canonical_package: serializeElectionPackage(value), accepted_at: options.now(),
+          });
+          if (value.evidence.length) await transaction.insert(electionEvidence).values(value.evidence.map((entry) => ({
+            id: entry.id, batch_sha256: reviewed.package_sha256, kind: entry.kind,
+            election_id: null, stage_id: null, contest_id: null, candidacy_id: null, ballot_line_id: null,
+            [entry.subject.kind + "_id"]: entry.subject.id, assertion: entry,
+          })));
+          if (value.supersessions.length) await transaction.insert(electionEvidenceSupersession).values(value.supersessions.map((entry) =>
+            ({ ...entry, batch_sha256: reviewed.package_sha256 })));
+          return { status: "imported" as const, package_sha256: reviewed.package_sha256 };
+        });
+      } catch {
+        return { status: "unavailable" };
+      }
+    },
+    async readContest(id, historyPage = { offset: 0, limit: 100 }) {
+      return database.transaction(async (transaction) => {
+        const [contest] = await transaction.select().from(electionContest).where(eq(electionContest.id, id));
+        if (!contest) return null;
+        const [stage] = await transaction.select().from(electionStage).where(eq(electionStage.id, contest.stage_id));
+        const batches = await transaction.select().from(electionImportBatch).where(eq(electionImportBatch.election_id, stage.election_id));
+        if (batches.length !== 1) throw new Error("Election read is not complete");
+        const reviewed = reviewElectionPackage(JSON.parse(batches[0].canonical_package), batches[0].receipt_id, options);
+        if (reviewed.status !== "valid") throw new Error("Election read is not verified");
+        const { schema_version: _schema, policy_version: _policy, ...ledger } = reviewed.package;
+        return {
+          ledger, policy: options.policy, contest_id: id,
+          completeness: { current: "complete", supersession: "complete", history: "complete" }, history_page: historyPage,
+        } satisfies ElectionGraph;
+      }, { isolationLevel: "repeatable read", accessMode: "read only" });
+    },
+    async readUpcoming() { return []; },
+  };
 }
 
 function validReceipt(value: ApprovedElectionReceipt, now: Date): boolean {

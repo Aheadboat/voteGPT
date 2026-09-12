@@ -11,6 +11,7 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const user = pgTable(
@@ -242,6 +243,72 @@ export const stateOfficialCache = pgTable(
   ],
 );
 
+const electionIdentityColumns = () => ({
+  id: text("id").primaryKey(),
+  issuer: text("issuer").notNull(),
+  official_key: text("official_key").notNull(),
+  revision: text("revision").notNull(),
+});
+
+export const election = pgTable("election", {
+  ...electionIdentityColumns(),
+  revision_of: text("revision_of").references((): AnyPgColumn => election.id),
+  dataset_kind: text("dataset_kind").notNull(),
+}, (table) => [uniqueIndex("election_official_revision_unique").on(table.issuer, table.official_key, table.revision)]);
+
+export const electionStage = pgTable("election_stage", {
+  ...electionIdentityColumns(),
+  revision_of: text("revision_of").references((): AnyPgColumn => electionStage.id),
+  election_id: text("election_id").notNull().references(() => election.id),
+}, (table) => [uniqueIndex("election_stage_official_revision_unique").on(table.election_id, table.issuer, table.official_key, table.revision)]);
+
+export const electionContest = pgTable("election_contest", {
+  ...electionIdentityColumns(),
+  revision_of: text("revision_of").references((): AnyPgColumn => electionContest.id),
+  stage_id: text("stage_id").notNull().references(() => electionStage.id),
+}, (table) => [uniqueIndex("election_contest_official_revision_unique").on(table.stage_id, table.issuer, table.official_key, table.revision)]);
+
+export const electionCandidacy = pgTable("election_candidacy", {
+  ...electionIdentityColumns(),
+  revision_of: text("revision_of").references((): AnyPgColumn => electionCandidacy.id),
+  contest_id: text("contest_id").notNull().references(() => electionContest.id),
+}, (table) => [uniqueIndex("election_candidacy_official_revision_unique").on(table.contest_id, table.issuer, table.official_key, table.revision)]);
+
+export const electionBallotLine = pgTable("election_ballot_line", {
+  ...electionIdentityColumns(),
+  revision_of: text("revision_of").references((): AnyPgColumn => electionBallotLine.id),
+  candidacy_id: text("candidacy_id").notNull().references(() => electionCandidacy.id),
+}, (table) => [uniqueIndex("election_ballot_line_official_revision_unique").on(table.candidacy_id, table.issuer, table.official_key, table.revision)]);
+
+export const electionImportBatch = pgTable("election_import_batch", {
+  package_sha256: text("package_sha256").primaryKey(),
+  election_id: text("election_id").notNull().references(() => election.id),
+  schema_version: text("schema_version").notNull(),
+  policy_version: text("policy_version").notNull(),
+  receipt_id: text("receipt_id").notNull(),
+  canonical_package: text("canonical_package").notNull(),
+  accepted_at: timestamp("accepted_at", { withTimezone: true }).notNull(),
+}, (table) => [uniqueIndex("election_import_receipt_unique").on(table.receipt_id)]);
+
+export const electionEvidence = pgTable("election_evidence", {
+  id: text("id").primaryKey(),
+  batch_sha256: text("batch_sha256").notNull().references(() => electionImportBatch.package_sha256),
+  kind: text("kind").notNull(),
+  election_id: text("election_id").references(() => election.id),
+  stage_id: text("stage_id").references(() => electionStage.id),
+  contest_id: text("contest_id").references(() => electionContest.id),
+  candidacy_id: text("candidacy_id").references(() => electionCandidacy.id),
+  ballot_line_id: text("ballot_line_id").references(() => electionBallotLine.id),
+  assertion: jsonb("assertion").$type<unknown>().notNull(),
+});
+
+export const electionEvidenceSupersession = pgTable("election_evidence_supersession", {
+  replacement_id: text("replacement_id").notNull().references(() => electionEvidence.id),
+  predecessor_id: text("predecessor_id").notNull().references(() => electionEvidence.id),
+  batch_sha256: text("batch_sha256").notNull().references(() => electionImportBatch.package_sha256),
+  reason: text("reason").notNull(),
+}, (table) => [primaryKey({ columns: [table.replacement_id, table.predecessor_id], name: "election_evidence_supersession_pk" })]);
+
 export const authSchema = { account, session, user, verification };
 export const databaseSchema = {
   ...authSchema,
@@ -249,4 +316,6 @@ export const databaseSchema = {
   stateOfficialCache,
   savedResidence,
   savedResidenceDivision,
+  election, electionStage, electionContest, electionCandidacy, electionBallotLine,
+  electionImportBatch, electionEvidence, electionEvidenceSupersession,
 };

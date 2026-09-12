@@ -5,9 +5,10 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createDatabase } from "../db";
+import { electionEvidence, electionEvidenceSupersession } from "../db/schema";
 import { createElectionRepository, reviewElectionPackage } from "./election-repository";
 import { projectContest, serializeElectionPackage, type ApprovedElectionReceipt } from "./elections";
-import { fixtureGraph, NOW, VERIFIED_AT, type Mutable } from "../../tests/fixtures/elections/domain";
+import { evidence, fixtureGraph, NOW, VERIFIED_AT, STATE, DISTRICT, type Mutable } from "../../tests/fixtures/elections/domain";
 
 function reviewedFixture(graph = fixtureGraph()) {
   const package_sha256 = createHash("sha256").update(serializeElectionPackage(graph.package), "utf8").digest("hex");
@@ -134,5 +135,135 @@ describe("immutable election persistence", () => {
     expect(result?.completeness).toEqual({ current: "complete", supersession: "complete", history: "complete" });
     expect(result?.history_page).toEqual({ offset: 0, limit: 100 });
     expect(result && projectContest(result, NOW)).toMatchObject({ status: "available", verification: "current", candidates: [{ id: "candidate-avery" }, { id: "candidate-blair" }] });
+  });
+
+  const relations = ["election", "election_stage", "election_contest", "election_candidacy", "election_ballot_line", "election_import_batch", "election_evidence", "election_evidence_supersession"];
+  it.each(relations.flatMap((table) => ["update", "delete", "truncate"].map((operation) => ({ table, operation }))))(
+    "rejects raw $operation on $table without losing history", async ({ table, operation }) => {
+      const { graph, receipt, options } = reviewedFixture();
+      const repository = createElectionRepository(database, options);
+      expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+      const column = table === "election_import_batch" ? "receipt_id" : table === "election_evidence_supersession" ? "reason" : "id";
+      const statement = operation === "update" ? `update ${table} set ${column} = ${column}` :
+        operation === "delete" ? `delete from ${table}` : `truncate table ${table} cascade`;
+      await expect(database.execute(sql.raw(statement))).rejects.toThrow();
+      const restored = await repository.readContest(graph.contest_id);
+      expect(restored && projectContest(restored, NOW).status).toBe("available");
+    },
+  );
+
+  it("replays exactly the same package without changing stored review or import times", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const before = await database.execute(sql`select * from election_import_batch`);
+    options.now = () => new Date("2026-09-13T15:00:00.000Z");
+    expect(await repository.importReviewedPackage(graph.package, receipt.id)).toEqual({ status: "unchanged", package_sha256: receipt.package_sha256 });
+    expect((await database.execute(sql`select * from election_import_batch`)).rows).toEqual(before.rows);
+    const result = await repository.readContest(graph.contest_id);
+    expect(result && projectContest(result, options.now())).toMatchObject({ status: "available", verification: "historical" });
+  });
+
+  it("retains distinct reviewed imports and every current conflict outside bounded display history", async () => {
+    const firstGraph = fixtureGraph();
+    firstGraph.package.evidence.push(evidence("intent", "declared", { id: "first-intent" }));
+    const first = reviewedFixture(firstGraph);
+    const secondGraph = fixtureGraph();
+    secondGraph.package.evidence.push(evidence("intent", "withdrawn", { id: "second-intent" }));
+    const second = reviewedFixture(secondGraph);
+    second.receipt.id = "synthetic-second-release";
+    const options = { ...first.options, approvedReceipts: [first.receipt, second.receipt] };
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(first.graph.package, first.receipt.id)).status).toBe("imported");
+    expect((await repository.importReviewedPackage(second.graph.package, second.receipt.id)).status).toBe("imported");
+    const result = await repository.readContest(first.graph.contest_id, { offset: 0, limit: 1 });
+    expect(result?.ledger.evidence.filter((entry) => entry.kind === "intent")).toHaveLength(2);
+    const projected = result && projectContest(result, NOW);
+    expect(projected).toMatchObject({ status: "available", candidates: [{ tracks: { intent: { state: "conflict", assertions: [expect.anything(), expect.anything()] } } }], history_page: { limit: 1, total: 9, next_offset: 1 } });
+  });
+
+  it("serializes concurrent distinct imports without dropping either assertion", async () => {
+    const first = reviewedFixture();
+    const repository = createElectionRepository(database, first.options);
+    expect((await repository.importReviewedPackage(first.graph.package, first.receipt.id)).status).toBe("imported");
+    const imports = ["declared", "withdrawn"].map((status, index) => {
+      const graph = fixtureGraph();
+      graph.package.evidence.push(evidence("intent", status as "declared" | "withdrawn", { id: "concurrent-" + index }));
+      const reviewed = reviewedFixture(graph);
+      reviewed.receipt.id += "-" + index;
+      first.options.approvedReceipts.push(reviewed.receipt);
+      return reviewed;
+    });
+    const results = await Promise.all(imports.map((item) => repository.importReviewedPackage(item.graph.package, item.receipt.id)));
+    expect(results.map((result) => result.status)).toEqual(["imported", "imported"]);
+    const graph = await repository.readContest(first.graph.contest_id);
+    expect(graph?.ledger.evidence.filter((entry) => entry.kind === "intent")).toHaveLength(2);
+  });
+
+  it("rolls back every identity and receipt when a later statement fails", async () => {
+    await database.execute(sql`create function synthetic_reject_evidence() returns trigger language plpgsql as $$ begin raise exception 'synthetic failure'; end $$`);
+    await database.execute(sql`create trigger synthetic_failure before insert on election_evidence for each row execute function synthetic_reject_evidence()`);
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("unavailable");
+    for (const table of relations) expect((await database.execute(sql.raw(`select count(*)::int as count from ${table}`))).rows[0].count).toBe(0);
+  });
+
+  it.each(["batch_whitespace", "batch_digest", "assertion_change", "assertion_omission", "unreviewed_assertion"] as const)(
+    "fails closed for %s even after an administrator bypasses write guards", async (corruption) => {
+      const { graph, receipt, options } = reviewedFixture();
+      const repository = createElectionRepository(database, options);
+      expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+      await database.execute(sql`alter table election_import_batch disable trigger user`);
+      await database.execute(sql`alter table election_evidence disable trigger user`);
+      if (corruption === "batch_whitespace") await database.execute(sql`update election_import_batch set canonical_package = canonical_package || ' '`);
+      if (corruption === "batch_digest") await database.execute(sql`update election_import_batch set policy_version = 'different-policy'`);
+      if (corruption === "assertion_change") await database.execute(sql`update election_evidence set assertion = jsonb_set(assertion, '{original_term}', '"Changed source term"') where id = 'candidate-avery:candidacy_metadata'`);
+      if (corruption === "assertion_omission") await database.execute(sql`delete from election_evidence where id = 'candidate-avery:candidacy_metadata'`);
+      if (corruption === "unreviewed_assertion") await database.insert(electionEvidence).values({
+        id: "unreviewed-intent", kind: "intent", batch_sha256: receipt.package_sha256, candidacy_id: "candidate-avery",
+        assertion: evidence("intent", "declared", { id: "unreviewed-intent" }),
+      });
+      await expect(repository.readContest(graph.contest_id)).rejects.toThrow("Election read is not verified");
+    },
+  );
+
+  it.each(["zero_subjects", "two_subjects", "missing_provenance", "changed_identity", "cross_subject_link", "self_link"] as const)(
+    "rejects invalid raw %s independently of import validation", async (invalid) => {
+      const { graph, receipt, options } = reviewedFixture();
+      const repository = createElectionRepository(database, options);
+      expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+      if (invalid === "cross_subject_link" || invalid === "self_link") {
+        await expect(database.insert(electionEvidenceSupersession).values({
+          replacement_id: "candidate-avery:candidacy_metadata",
+          predecessor_id: invalid === "self_link" ? "candidate-avery:candidacy_metadata" : "candidate-blair:candidacy_metadata",
+          batch_sha256: receipt.package_sha256, reason: "Synthetic invalid correction",
+        })).rejects.toThrow();
+      } else {
+        const assertion = evidence("intent", "declared", { id: "raw-invalid" });
+        if (invalid === "missing_provenance") Object.assign(assertion, { locator: null });
+        if (invalid === "changed_identity") assertion.subject.id = "candidate-blair";
+        await expect(database.insert(electionEvidence).values({
+          id: "raw-invalid", kind: "intent", batch_sha256: receipt.package_sha256, assertion,
+          candidacy_id: invalid === "zero_subjects" ? null : "candidate-avery",
+          contest_id: invalid === "two_subjects" ? "contest-house" : null,
+        })).rejects.toThrow();
+      }
+    },
+  );
+
+  it("returns all admitted district contests for public jurisdiction scope and preserves stale recovery", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const scope = { level: "federal" as const, jurisdiction_id: STATE, division_ids: [STATE] };
+    expect((await repository.readUpcoming(scope, NOW)).map((item) => item.contest_id)).toEqual([graph.contest_id]);
+    expect((await repository.readUpcoming({ ...scope, division_ids: [DISTRICT] }, NOW))).toHaveLength(1);
+    expect((await repository.readUpcoming({ ...scope, division_ids: [STATE + "/cd:13"] }, NOW))).toHaveLength(0);
+    expect((await repository.readUpcoming({ ...scope, level: "state" }, NOW))).toHaveLength(0);
+    options.now = () => new Date("2026-09-14T13:00:00.000Z");
+    const stale = await repository.readUpcoming(scope, options.now());
+    expect(stale).toHaveLength(1);
+    expect(projectContest(stale[0], options.now())).toMatchObject({ status: "available", verification: "historical" });
   });
 });
