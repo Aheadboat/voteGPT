@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "c836402127ef333ba3007426a1ca32a50df5d6d850cbb74e899573e2ba77bc53",
+    "280aa294e88ac18b9284c6045c22df693bcf04eae209ddbcc367ec4ce983ce21",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -76,7 +76,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   expect(normalizedReadme).toBe(replaceExactlyOnce(
     baseReadme,
     "F7 plus every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
-    "F7 — Elections and Deterministic Candidate Validity is active in `RED` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. Limited California factual source use is approved; document checks and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
+    "F7 — Elections and Deterministic Candidate Validity is active in `RED` using the documented official-source fallback. Human Gate A is approved; tests-first implementation is authorized. California candidate-list and supporting-source use, bounded roster coverage, and statewide-only initial personalization are approved. Exact-package and real-data release decisions remain pending, and Human Gate B is required before merge. F8 and every later item remain `TODO` and inactive, and G1-T5/T6 external vendor actions remain unapproved.",
     "F7 README activation",
   ))
   for (const path of paths) {
