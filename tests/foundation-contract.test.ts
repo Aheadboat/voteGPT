@@ -74,7 +74,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "tests/foundation-contract.test.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
   }
 }
 
@@ -2026,7 +2026,7 @@ describe("concurrent roadmap delivery contract", () => {
       expect(() => expectF7DesignActivation(roadmap + suffix, readme, changed)).toThrow()
     }
     expect(() => expectF7DesignActivation(roadmap, readme + "\nVendor access authorized.\n", changed)).toThrow()
-    for (const path of ["src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
+    for (const path of ["src/lib/elections.ts", "src/lib/openstates.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "data/elections/ca-2026-general.reviewed.json", "scratch.txt"]) {
       expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
     }
   }, 30_000)
