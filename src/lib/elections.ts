@@ -9,7 +9,8 @@ export type EvidenceKind =
   | "outcome" | "finance" | "ballot_continuation" | "retirement";
 export type SourceType =
   | "official_election_authority" | "official_ballot_feed"
-  | "official_finance" | "official_court_record";
+  | "official_finance" | "official_court_record"
+  | "official_statute" | "division_identifier_registry";
 export type Identity = Readonly<{
   id: string;
   issuer: string;
@@ -53,6 +54,7 @@ export type ContestMetadata = Readonly<{
   division_ids: readonly string[];
   partisanship: "partisan" | "nonpartisan" | "unknown";
 }>;
+export type ContestField = keyof ContestMetadata;
 export type CandidacyMetadata = Readonly<{
   name: string;
   official_person_id: Readonly<{ issuer: string; value: string }> | null;
@@ -97,21 +99,30 @@ export type SourceDocument = Readonly<{
   sha256: string;
   label: string;
 }>;
+export type EvidenceProvenance = Readonly<{
+  document_id: string;
+  mapping_id: string;
+  locator: string;
+  original_term: string;
+  retrieved_at: string;
+  verified_at: string;
+  effective: EffectiveTime;
+  current_until: string;
+}>;
+export type ContestSupportingSource = EvidenceProvenance & Readonly<{
+  id: string;
+  fields: readonly ContestField[];
+}>;
 export type ElectionEvidence<K extends EvidenceKind = EvidenceKind> = {
-  [P in K]: Readonly<{
+  [P in K]: EvidenceProvenance & Readonly<{
     id: string;
     subject: Subject;
     kind: P;
     value: EvidenceValues[P];
-    document_id: string;
-    mapping_id: string;
-    locator: string;
-    original_term: string;
-    retrieved_at: string;
-    verified_at: string;
-    effective: EffectiveTime;
-    current_until: string;
-  }>;
+  }> & (P extends "contest_metadata" ? Readonly<{
+    fields: readonly ContestField[];
+    supporting_sources: readonly ContestSupportingSource[];
+  }> : object);
 }[K];
 export type Supersession = Readonly<{
   replacement_id: string;
@@ -123,6 +134,7 @@ export type ClaimMapping = Readonly<{
   kind: EvidenceKind;
   subject_kind: EntityKind;
   values: readonly string[];
+  allowed_fields: readonly ContestField[];
   allows_supersession: boolean;
   supports_current_snapshot: boolean;
   date_rule: Readonly<{
@@ -209,8 +221,7 @@ export type ElectionGraph = Readonly<{
   }>;
   history_page: HistoryPageRequest;
 }>;
-export type EvidenceRef = Readonly<{
-  id: string;
+export type SourceReference = Readonly<{
   source_url: string;
   source_type: SourceType;
   authority_id: string;
@@ -222,6 +233,12 @@ export type EvidenceRef = Readonly<{
   verified_at: string;
   effective: EffectiveTime;
   current_until: string;
+}>;
+export type FieldSourceReference = SourceReference & Readonly<{ group_id: string }>;
+export type EvidenceRef = SourceReference & Readonly<{
+  id: string;
+  // Contest facts use these exact field sources, never the primary envelope alone.
+  field_sources?: Readonly<Record<ContestField, readonly FieldSourceReference[]>>;
 }>;
 export type SourcedAssertion<T> = Readonly<{ value: T; evidence: EvidenceRef }>;
 export type EvidenceState<T> =
@@ -323,6 +340,13 @@ export function validateElectionPackage(
   } catch (error) {
     return { status: "rejected", reason: error instanceof InvalidPackage ? error.reason : "invalid_package" };
   }
+}
+
+// T2/T3 hash these UTF-8 bytes and write this exact reviewed artifact (including LF).
+// This fixes representation only; callers still validate data, policy, and protected receipts.
+export function serializeElectionPackage(input: ElectionPackage): string {
+  requireRule(plainData(input), "invalid_package");
+  return canonical(input, undefined, false) + "\n";
 }
 
 export function projectContest(graph: ElectionGraph, now: Date): ContestView | UnverifiedContest {
@@ -486,6 +510,12 @@ export function electionScopeFromDivisions(
 }
 
 const DAY = 86_400_000;
+const CONTEST_FIELDS: readonly ContestField[] = ["name", "office", "district", "term", "seats", "form", "level", "jurisdiction_id", "division_ids", "partisanship"];
+const PROVENANCE_FIELDS = ["document_id", "mapping_id", "locator", "original_term", "retrieved_at", "verified_at", "effective", "current_until"];
+const SUPPORT_ONLY_FIELDS: Partial<Record<SourceType, readonly ContestField[]>> = {
+  official_statute: ["term", "seats", "form"],
+  division_identifier_registry: ["division_ids"],
+};
 const STATE_CODES = new Set("al ak az ar ca co ct de fl ga hi id il in ia ks ky la me md ma mi mn ms mo mt ne nv nh nj nm ny nc nd oh ok or pa ri sc sd tn tx ut vt va wa wv wi wy dc".split(" "));
 const ENTITY_KINDS: readonly EntityKind[] = ["election", "stage", "contest", "candidacy", "ballot_line"];
 const STATUS_VALUES = {
@@ -540,7 +570,7 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     requireRule(Array.isArray(input[field]), "invalid_package");
   }
   const data = input as unknown as ElectionLedger;
-  requireRule(!importing || (new TextEncoder().encode(JSON.stringify(input)).byteLength <= 2 * 1_024 * 1_024 &&
+  requireRule(!importing || (new TextEncoder().encode(serializeElectionPackage(input as unknown as ElectionPackage)).byteLength <= 2 * 1_024 * 1_024 &&
     data.candidacies.length <= 1_000 && data.evidence.length <= 10_000 && data.documents.length <= 20 &&
     data.stages.length <= 1_000 && data.contests.length <= 1_000 && data.ballot_lines.length <= 10_000 &&
     data.supersessions.length <= 10_000), "limit_exceeded");
@@ -601,35 +631,37 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     context.documents.set(document.id, document);
   }
   for (const entry of data.evidence) {
-    requireRule(exact(entry, ["id", "subject", "kind", "value", "document_id", "mapping_id", "locator",
-      "original_term", "retrieved_at", "verified_at", "effective", "current_until"]) &&
+    requireRule(exact(entry, ["id", "subject", "kind", "value", ...PROVENANCE_FIELDS,
+      ...(entry.kind === "contest_metadata" ? ["fields", "supporting_sources"] : [])]) &&
       identifier(entry.id) && !context.evidence.has(entry.id) &&
       exact(entry.subject, ["kind", "id"]) && ENTITY_KINDS.includes(entry.subject.kind) &&
       context.identities.get(entry.subject.id)?.kind === entry.subject.kind &&
-      EVIDENCE_KINDS.includes(entry.kind) && validSubjectKind(entry.kind, entry.subject.kind) &&
-      identifier(entry.document_id) && identifier(entry.mapping_id) &&
-      publicText(entry.locator, 500) && publicText(entry.original_term, 500), "invalid_evidence");
-    const document = context.documents.get(entry.document_id);
-    const authority = document ? context.authorities.get(document.authority_id) : undefined;
-    const mapping = authority?.mappings.find((item) => item.id === entry.mapping_id);
-    requireRule(authority && mapping && mapping.kind === entry.kind && mapping.subject_kind === entry.subject.kind,
-      "source_not_admitted");
+      EVIDENCE_KINDS.includes(entry.kind) && validSubjectKind(entry.kind, entry.subject.kind), "invalid_evidence");
+    const { authority, mapping } = inspectProvenance(context, entry, entry, now);
+    requireRule(!SUPPORT_ONLY_FIELDS[authority.source_type], "source_not_admitted");
     requireRule((authority.source_type === "official_finance") === (entry.kind === "finance"), "source_not_admitted");
-    const lineage = ancestors(context, entry.subject.id);
-    const stage = lineage.find((item) => item.kind === "stage");
-    const contest = lineage.find((item) => item.kind === "contest");
-    requireRule((!stage || authority.stage_keys.includes(stage.record.official_key)) &&
-      (!contest || authority.contest_keys.includes(contest.record.official_key)), "source_not_admitted");
     requireRule(validValue(entry, context, authority), "invalid_evidence");
+    if (entry.kind === "contest_metadata") {
+      requireRule(validFields(entry.fields) && entry.fields.every((field) => mapping.allowed_fields.includes(field)) &&
+        Array.isArray(entry.supporting_sources), "invalid_evidence");
+      const groups = new Set(["primary"]);
+      const fields = new Set(entry.fields);
+      for (const input of entry.supporting_sources) {
+        requireRule(exact(input, ["id", "fields", ...PROVENANCE_FIELDS]) && identifier(input.id) &&
+          !groups.has(input.id) && validFields(input.fields), "invalid_evidence");
+        const support = input as ContestSupportingSource;
+        const admitted = inspectProvenance(context, entry, support, now);
+        requireRule(admitted.authority.source_type !== "official_finance" &&
+          support.fields.every((field) => admitted.mapping.allowed_fields.includes(field)), "source_not_admitted");
+        groups.add(support.id);
+        support.fields.forEach((field) => fields.add(field));
+      }
+      requireRule(CONTEST_FIELDS.every((field) => fields.has(field)), "invalid_evidence");
+    }
     if (Object.hasOwn(STATUS_VALUES, entry.kind)) {
       const value = entry.kind === "outcome" ? entry.value.status : entry.value;
       requireRule(typeof value === "string" && mapping.values.includes(value), "source_not_admitted");
     }
-    requireRule(instant(entry.retrieved_at) && instant(entry.verified_at) && instant(entry.current_until) &&
-      entry.retrieved_at <= entry.verified_at && Date.parse(entry.verified_at) <= now.getTime() &&
-      Date.parse(entry.current_until) > Date.parse(entry.verified_at) &&
-      Date.parse(entry.current_until) - Date.parse(entry.verified_at) <= DAY &&
-      validEffect(entry.effective), "invalid_time");
     context.evidence.set(entry.id, entry);
   }
   const jurisdictions = new Map<string, Set<string>>();
@@ -641,11 +673,13 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     }
   }
   for (const entry of data.evidence) {
-    const authority = context.authorities.get(context.documents.get(entry.document_id)!.authority_id)!;
     const lineageJurisdictions = ancestors(context, entry.subject.id)
       .flatMap((ancestor) => [...(jurisdictions.get(ancestor.record.id) ?? [])]);
-    requireRule(lineageJurisdictions.length > 0 &&
-      lineageJurisdictions.every((jurisdiction) => jurisdiction === authority.jurisdiction_id), "source_not_admitted");
+    for (const source of provenanceGroups(entry)) {
+      const authority = context.authorities.get(context.documents.get(source.document_id)!.authority_id)!;
+      requireRule(lineageJurisdictions.length > 0 &&
+        lineageJurisdictions.every((jurisdiction) => jurisdiction === authority.jurisdiction_id), "source_not_admitted");
+    }
     if (entry.kind === "ballot_continuation") {
       const withdrawal = context.evidence.get(entry.value.withdrawal_evidence_id);
       requireRule(withdrawal?.kind === "intent" && withdrawal.value === "withdrawn" &&
@@ -685,7 +719,8 @@ function validAuthority(value: SourceAuthorityPolicy): boolean {
     "stage_keys", "contest_keys", "urls", "mappings", "access_approval", "retention_approval",
     "retention", "current_display_until", "enabled"]) ||
     !identifier(value.id) || !identifier(value.election_issuer) || !publicText(value.election_key) ||
-    !["official_election_authority", "official_ballot_feed", "official_finance", "official_court_record"].includes(value.source_type) ||
+    !["official_election_authority", "official_ballot_feed", "official_finance", "official_court_record",
+      "official_statute", "division_identifier_registry"].includes(value.source_type) ||
     !stateDivision(value.jurisdiction_id) || !textArray(value.stage_keys, 1_000) ||
     !textArray(value.contest_keys, 1_000) || !Array.isArray(value.urls) ||
     value.urls.length === 0 || !value.urls.every(safeSourceUrl) ||
@@ -697,11 +732,16 @@ function validAuthority(value: SourceAuthorityPolicy): boolean {
   const mappings = new Set<string>();
   return value.mappings.every((input) => {
     const mapping = input as ClaimMapping;
-    if (!exact(mapping, ["id", "kind", "subject_kind", "values", "allows_supersession",
+    if (!exact(mapping, ["id", "kind", "subject_kind", "values", "allowed_fields", "allows_supersession",
       "supports_current_snapshot", "date_rule"]) || !identifier(mapping.id) ||
       mappings.has(mapping.id) || !EVIDENCE_KINDS.includes(mapping.kind) ||
       !validSubjectKind(mapping.kind, mapping.subject_kind) || !textArray(mapping.values, 20) ||
       typeof mapping.allows_supersession !== "boolean" || typeof mapping.supports_current_snapshot !== "boolean") return false;
+    if (mapping.kind === "contest_metadata" ? !validFields(mapping.allowed_fields) :
+      !Array.isArray(mapping.allowed_fields) || mapping.allowed_fields.length !== 0) return false;
+    const supportFields = SUPPORT_ONLY_FIELDS[value.source_type];
+    if (supportFields && (mapping.kind !== "contest_metadata" || mapping.allows_supersession ||
+      !mapping.allowed_fields.every((field) => supportFields.includes(field)))) return false;
     mappings.add(mapping.id);
     if (mapping.date_rule !== null && (!exact(mapping.date_rule, ["time_zone", "start", "end"]) ||
       !validTimeZone(mapping.date_rule.time_zone) ||
@@ -794,9 +834,39 @@ function ancestors(context: Context, id: string): LocatedIdentity[] {
   return result;
 }
 
-function sourceMapping(context: Context, entry: ElectionEvidence): ClaimMapping {
+function sourceMapping(context: Context, entry: EvidenceProvenance): ClaimMapping {
   const document = context.documents.get(entry.document_id)!;
   return context.authorities.get(document.authority_id)!.mappings.find((mapping) => mapping.id === entry.mapping_id)!;
+}
+
+function validFields(value: unknown): value is ContestField[] {
+  return textArray(value, CONTEST_FIELDS.length) && value.length > 0 &&
+    value.every((field) => (CONTEST_FIELDS as readonly string[]).includes(field));
+}
+
+function provenanceGroups(entry: ElectionEvidence): readonly EvidenceProvenance[] {
+  return entry.kind === "contest_metadata" ? [entry, ...entry.supporting_sources] : [entry];
+}
+
+function inspectProvenance(context: Context, entry: ElectionEvidence, source: EvidenceProvenance, now: Date) {
+  requireRule(identifier(source.document_id) && identifier(source.mapping_id) &&
+    publicText(source.locator, 500) && publicText(source.original_term, 500), "invalid_evidence");
+  const document = context.documents.get(source.document_id);
+  const authority = document ? context.authorities.get(document.authority_id) : undefined;
+  const mapping = authority?.mappings.find((item) => item.id === source.mapping_id);
+  requireRule(authority && mapping && mapping.kind === entry.kind && mapping.subject_kind === entry.subject.kind,
+    "source_not_admitted");
+  const lineage = ancestors(context, entry.subject.id);
+  const stage = lineage.find((item) => item.kind === "stage");
+  const contest = lineage.find((item) => item.kind === "contest");
+  requireRule((!stage || authority.stage_keys.includes(stage.record.official_key)) &&
+    (!contest || authority.contest_keys.includes(contest.record.official_key)), "source_not_admitted");
+  requireRule(instant(source.retrieved_at) && instant(source.verified_at) && instant(source.current_until) &&
+    source.retrieved_at <= source.verified_at && Date.parse(source.verified_at) <= now.getTime() &&
+    Date.parse(source.current_until) > Date.parse(source.verified_at) &&
+    Date.parse(source.current_until) - Date.parse(source.verified_at) <= DAY &&
+    validEffect(source.effective), "invalid_time");
+  return { authority, mapping };
 }
 
 function validEffect(effect: EffectiveTime): boolean {
@@ -806,34 +876,46 @@ function validEffect(effect: EffectiveTime): boolean {
   return valid(effect.start) && (effect.end === null || (valid(effect.end) && effect.end > effect.start));
 }
 
-function applicability(context: Context, entry: ElectionEvidence, now: Date) {
+function sourceWindow(context: Context, entry: EvidenceProvenance): readonly [number, number] | null {
   const effect = entry.effective;
   const mapping = sourceMapping(context, entry);
-  let begun = false;
-  let applies = false;
-  let known = true;
   if (effect.precision === "instant") {
-    begun = now.getTime() >= Date.parse(effect.start);
-    applies = begun && (effect.end === null || now.getTime() < Date.parse(effect.end));
-  } else if (effect.precision === "date") {
-    const rule = mapping.date_rule;
-    const today = rule ? civilDate(now, rule.time_zone) : null;
-    if (!rule || !today) known = false;
-    else {
-      begun = rule.start === "start_of_day" ? today >= effect.start : today > effect.start;
-      applies = begun && (effect.end === null || (rule.end === "end_of_day" ? today <= effect.end : today < effect.end));
-    }
-  } else if (mapping.supports_current_snapshot) {
-    begun = now.getTime() >= Date.parse(entry.verified_at);
-    applies = begun;
-  } else {
-    known = false;
+    return [Date.parse(effect.start), effect.end === null ? Infinity : Date.parse(effect.end)];
   }
-  const document = context.documents.get(entry.document_id)!;
+  if (effect.precision === "date") {
+    const rule = mapping.date_rule;
+    if (!rule) return null;
+    const start = civilBoundary(effect.start, rule.time_zone, rule.start === "after_date");
+    const end = effect.end === null ? Infinity : civilBoundary(effect.end, rule.time_zone, rule.end === "end_of_day");
+    return start === null || end === null ? null : [start, end];
+  }
+  return mapping.supports_current_snapshot ? [Date.parse(entry.verified_at), Infinity] : null;
+}
+
+function applicability(context: Context, entry: ElectionEvidence, now: Date) {
+  const groups = provenanceGroups(entry);
+  const windows = groups.map((group) => sourceWindow(context, group));
+  const known = windows.every((window) => window !== null);
+  const start = Math.max(...windows.map((window) => window?.[0] ?? Infinity));
+  const end = Math.min(...windows.map((window) => window?.[1] ?? -Infinity));
+  const begun = known && start < end && now.getTime() >= start;
+  const fresh = groups.every((group) => {
+    const authority = context.authorities.get(context.documents.get(group.document_id)!.authority_id)!;
+    return authority.enabled && now.getTime() < Date.parse(group.current_until) &&
+      (authority.current_display_until === null || now.getTime() < Date.parse(authority.current_display_until));
+  });
+  return { begun, applies: begun && now.getTime() < end, known, fresh };
+}
+
+function sourceReference(context: Context, source: EvidenceProvenance): SourceReference {
+  const document = context.documents.get(source.document_id)!;
   const authority = context.authorities.get(document.authority_id)!;
-  const fresh = authority.enabled && now.getTime() < Date.parse(entry.current_until) &&
-    (authority.current_display_until === null || now.getTime() < Date.parse(authority.current_display_until));
-  return { begun, applies, known, fresh };
+  return {
+    source_url: document.url, source_type: authority.source_type,
+    authority_id: authority.id, source_label: document.label, original_term: source.original_term,
+    document_sha256: document.sha256, locator: source.locator, retrieved_at: source.retrieved_at,
+    verified_at: source.verified_at, effective: structuredClone(source.effective), current_until: source.current_until,
+  };
 }
 
 function interpret(context: Context, now: Date) {
@@ -848,14 +930,15 @@ function interpret(context: Context, now: Date) {
     const entries = grouped.get(key) ?? [];
     entries.push(entry);
     grouped.set(key, entries);
-    const document = context.documents.get(entry.document_id)!;
-    const authority = context.authorities.get(document.authority_id)!;
-    references.set(entry.id, {
-      id: entry.id, source_url: document.url, source_type: authority.source_type,
-      authority_id: authority.id, source_label: document.label, original_term: entry.original_term,
-      document_sha256: document.sha256, locator: entry.locator, retrieved_at: entry.retrieved_at,
-      verified_at: entry.verified_at, effective: structuredClone(entry.effective), current_until: entry.current_until,
-    });
+    const reference: EvidenceRef = { id: entry.id, ...sourceReference(context, entry) };
+    if (entry.kind === "contest_metadata") {
+      const groups = [{ ...entry, id: "primary" }, ...entry.supporting_sources].sort((a, b) => compareText(a.id, b.id));
+      const field_sources = Object.fromEntries(CONTEST_FIELDS.map((field) => [field,
+        groups.filter((group) => group.fields.includes(field)).map((group) =>
+          ({ group_id: group.id, ...sourceReference(context, group) })),
+      ])) as Record<ContestField, FieldSourceReference[]>;
+      references.set(entry.id, { ...reference, field_sources });
+    } else references.set(entry.id, reference);
   }
   const precedence: readonly SourceType[] = [
     "official_election_authority", "official_court_record", "official_ballot_feed", "official_finance",
@@ -884,7 +967,8 @@ function interpret(context: Context, now: Date) {
       return {
         state: "verified", value: structuredClone(current[0].value),
         evidence: current.map((entry) => references.get(entry.id)!),
-        verified_at: current.map((entry) => entry.verified_at).sort(compareText).at(-1)!,
+        verified_at: current.map((entry) => provenanceGroups(entry as ElectionEvidence).map((group) => group.verified_at).sort(compareText)[0])
+          .sort(compareText).at(-1)!,
       };
     }
     const previous = unresolved.filter((entry) => effects.get(entry.id)!.begun);
@@ -993,19 +1077,37 @@ function civilDate(now: Date, timeZone: string): string | null {
     return part("year") + "-" + part("month") + "-" + part("day");
   } catch { return null; }
 }
+// Internal interval boundary only. Source date precision and its reviewed rule remain unchanged.
+function civilBoundary(date: string, timeZone: string, after: boolean): number | null {
+  let low = Date.parse(date + "T00:00:00.000Z") - 2 * DAY;
+  let high = low + 4 * DAY;
+  const atBoundary = (time: number) => {
+    const local = civilDate(new Date(time), timeZone);
+    return local && calendarDate(local) ? (after ? local > date : local >= date) : null;
+  };
+  if (atBoundary(low) !== false || atBoundary(high) !== true) return null;
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    const reached = atBoundary(middle);
+    if (reached === null) return null;
+    if (reached) high = middle;
+    else low = middle;
+  }
+  return high;
+}
 function exact(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value) &&
     Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
-function canonical(value: unknown, field?: string): string {
+function canonical(value: unknown, field?: string, normalizeSets = true): string {
   if (Array.isArray(value)) {
-    const values = value.map((item) => canonical(item));
-    if (field === "division_ids" || field === "contest_ids" || field === "successor_stage_ids") values.sort(compareText);
+    const values = value.map((item) => canonical(item, undefined, normalizeSets));
+    if (normalizeSets && (field === "division_ids" || field === "contest_ids" || field === "successor_stage_ids")) values.sort(compareText);
     return "[" + values.join(",") + "]";
   }
   if (typeof value === "object" && value !== null) {
     const record = value as Record<string, unknown>;
-    return "{" + Object.keys(record).sort(compareText).map((key) => JSON.stringify(key) + ":" + canonical(record[key], key)).join(",") + "}";
+    return "{" + Object.keys(record).sort(compareText).map((key) => JSON.stringify(key) + ":" + canonical(record[key], key, normalizeSets)).join(",") + "}";
   }
   return JSON.stringify(value);
 }

@@ -1,5 +1,5 @@
 import type {
-  ClaimMapping, ElectionEvidence, ElectionPackage, ElectionSourcePolicy,
+  ClaimMapping, ContestField, ElectionEvidence, ElectionPackage, ElectionSourcePolicy,
   EvidenceKind, EvidenceValues, Subject,
 } from "../../../src/lib/elections";
 
@@ -10,6 +10,7 @@ export const NOW = new Date("2026-09-12T13:00:00.000Z");
 export const STATE = "ocd-division/country:us/state:ca";
 export const DISTRICT = STATE + "/cd:12";
 export type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
+const contestFields: ContestField[] = ["name", "office", "district", "term", "seats", "form", "level", "jurisdiction_id", "division_ids", "partisanship"];
 
 const metadataKinds = [
   ["election_metadata", "election"], ["stage_metadata", "stage"],
@@ -28,6 +29,7 @@ const statuses = {
 export function mapping(kind: EvidenceKind, subject_kind: Subject["kind"], values: readonly string[] = []): ClaimMapping {
   return {
     id: kind + ":" + subject_kind, kind, subject_kind, values,
+    allowed_fields: kind === "contest_metadata" ? contestFields : [],
     allows_supersession: true, supports_current_snapshot: true,
     date_rule: { time_zone: "America/Los_Angeles", start: "after_date", end: "start_of_day" },
   };
@@ -81,6 +83,7 @@ export function evidence<K extends EvidenceKind>(
     verified_at: VERIFIED_AT,
     effective: { precision: "instant", start: "2026-09-01T00:00:00.000Z", end: null },
     current_until: CURRENT_UNTIL,
+    ...(kind === "contest_metadata" ? { fields: contestFields, supporting_sources: [] } : {}),
     ...overrides,
   }) as Mutable<ElectionEvidence<K>>;
 }
