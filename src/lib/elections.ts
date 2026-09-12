@@ -544,8 +544,10 @@ type Context = {
 };
 
 class InvalidPackage extends Error {
-  constructor(readonly reason: PackageRejection["reason"]) {
+  readonly reason: PackageRejection["reason"];
+  constructor(reason: PackageRejection["reason"]) {
     super(reason);
+    this.reason = reason;
   }
 }
 

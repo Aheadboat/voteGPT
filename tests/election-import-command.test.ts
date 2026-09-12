@@ -2,7 +2,9 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
+import { fixturePackage } from "./fixtures/elections/domain";
 
 describe("election import command boundary", () => {
   it.each([
@@ -45,5 +47,33 @@ describe("election import command boundary", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toBe("");
     expect(result.stderr).toBe("Election import could not read the package.\n");
+  });
+
+  it.each(["--dry-run", "--apply"])("denies a well-formed synthetic package under %s before source or database access", (mode) => {
+    const directory = mkdtempSync(resolve(tmpdir(), "f7-import-"));
+    try {
+      const path = resolve(directory, "synthetic-package.json");
+      const guard = resolve(directory, "deny-network.mjs");
+      writeFileSync(path, JSON.stringify(fixturePackage()));
+      writeFileSync(guard, `import net from 'node:net';
+import tls from 'node:tls';
+import { syncBuiltinESMExports } from 'node:module';
+const fail = () => { process.stderr.write('FORBIDDEN NETWORK ACCESS\\n'); process.exit(77); };
+globalThis.fetch = fail;
+net.Socket.prototype.connect = fail;
+tls.connect = fail;
+syncBuiltinESMExports();\n`);
+      const result = spawnSync(process.execPath, ["--import", pathToFileURL(guard).href, resolve("scripts/import-election-evidence.mts"),
+        "--file", path, "--receipt", "synthetic-import-review", mode], {
+        encoding: "utf8", timeout: 10_000,
+        env: { ...process.env, DATABASE_URL: "postgres://private:secret@127.0.0.1:1/private", ELECTION_ALLOW_SYNTHETIC: "true" },
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toMatchObject({ status: "rejected" });
+      expect(result.stdout).not.toContain("Avery");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
