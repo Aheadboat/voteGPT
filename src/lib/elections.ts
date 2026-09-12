@@ -582,6 +582,7 @@ type Context = {
   evidence: Map<string, ElectionEvidence>;
   documents: Map<string, SourceDocument>;
   authorities: Map<string, SourceAuthorityPolicy>;
+  calendarBases: Map<string, CalendarBasisPolicy>;
 };
 
 class InvalidPackage extends Error {
@@ -618,7 +619,7 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     data.stages.length <= 1_000 && data.contests.length <= 1_000 && data.ballot_lines.length <= 10_000 &&
     data.supersessions.length <= 10_000), "limit_exceeded");
   const context: Context = {
-    data, policy, identities: new Map(), evidence: new Map(), documents: new Map(), authorities: new Map(),
+    data, policy, identities: new Map(), evidence: new Map(), documents: new Map(), authorities: new Map(), calendarBases: new Map(),
   };
   const officialKeys = new Set<string>();
   const groups: readonly [EntityKind, readonly EntityRecord[], string | null][] = [
@@ -661,6 +662,13 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
   for (const authority of policy.authorities) {
     requireRule(validAuthority(authority) && !context.authorities.has(authority.id), "invalid_policy");
     context.authorities.set(authority.id, authority);
+    for (const mapping of authority.mappings) {
+      const basis = mapping.stage_calendar;
+      if (!basis) continue;
+      const previous = context.calendarBases.get(basis.basis_id);
+      requireRule(!previous || calendarMeaning(previous) === calendarMeaning(basis), "invalid_policy");
+      context.calendarBases.set(basis.basis_id, basis);
+    }
   }
   for (const document of data.documents) {
     requireRule(exact(document, ["id", "authority_id", "url", "sha256", "label",
@@ -669,13 +677,23 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
       identifier(document.id) && identifier(document.authority_id) && safeSourceUrl(document.url) &&
       /^[a-f0-9]{64}$/.test(document.sha256) && publicText(document.label) &&
       !context.documents.has(document.id), "invalid_evidence");
+    requireRule(!(Object.hasOwn(document, "calendar_basis_id") && Object.hasOwn(document, "calendar_reference")), "invalid_evidence");
+    if (Object.hasOwn(document, "calendar_basis_id")) {
+      requireRule(identifier(document.calendar_basis_id) && context.calendarBases.has(document.calendar_basis_id), "source_not_admitted");
+    }
     const authority = context.authorities.get(document.authority_id);
-    if (document.calendar_reference) {
-      requireRule(policy.authorities.some((source) => source.mappings.some((mapping) =>
-        mapping.stage_calendar?.basis_id === document.calendar_reference!.basis_id &&
-        mapping.stage_calendar.references.some((reference) => reference.id === document.id &&
-          reference.authority_id === document.authority_id && reference.url === document.url &&
-          reference.kind === document.calendar_reference!.kind))), "source_not_admitted");
+    if (Object.hasOwn(document, "calendar_reference")) {
+      const reference = document.calendar_reference!;
+      requireRule(exact(reference, ["basis_id", "kind", "locator", "original_term", "retrieved_at", "verified_at", "current_until"]) &&
+        identifier(reference.basis_id) && ["iana_tzdb", "time_zone_regulation"].includes(reference.kind) &&
+        publicText(reference.locator, 500) && publicText(reference.original_term, 500), "invalid_evidence");
+      requireRule(instant(reference.retrieved_at) && instant(reference.verified_at) && instant(reference.current_until) &&
+        reference.retrieved_at <= reference.verified_at && Date.parse(reference.verified_at) <= now.getTime() &&
+        reference.current_until > reference.verified_at &&
+        Date.parse(reference.current_until) - Date.parse(reference.verified_at) <= DAY, "invalid_time");
+      requireRule(context.calendarBases.get(reference.basis_id)?.references.some((permitted) =>
+        permitted.id === document.id && permitted.authority_id === document.authority_id &&
+        permitted.url === document.url && permitted.kind === reference.kind), "source_not_admitted");
     } else {
       requireRule(authority && authority.urls.includes(document.url) &&
         authority.election_issuer === data.election.issuer && authority.election_key === data.election.official_key,
@@ -795,6 +813,9 @@ function validAuthority(value: SourceAuthorityPolicy): boolean {
     const supportFields = SUPPORT_ONLY_FIELDS[value.source_type];
     if (supportFields && (mapping.kind !== "contest_metadata" || mapping.allows_supersession ||
       !mapping.allowed_fields.every((field) => supportFields.includes(field)))) return false;
+    if (Object.hasOwn(mapping, "stage_calendar") && (mapping.kind !== "stage_metadata" ||
+      value.source_type === "official_finance" || !validCalendarBasis(mapping.stage_calendar!) ||
+      mapping.stage_calendar!.jurisdiction_id !== value.jurisdiction_id)) return false;
     mappings.add(mapping.id);
     if (mapping.date_rule !== null && (!exact(mapping.date_rule, ["time_zone", "start", "end"]) ||
       !validTimeZone(mapping.date_rule.time_zone) ||
@@ -805,6 +826,26 @@ function validAuthority(value: SourceAuthorityPolicy): boolean {
       return mapping.values.length > 0 && mapping.values.every((item) => allowed.includes(item));
     }
     return mapping.values.length === 0;
+  });
+}
+
+function validCalendarBasis(basis: CalendarBasisPolicy): boolean {
+  return exact(basis, ["basis_id", "jurisdiction_id", "time_zone", "references", "enabled", "current_display_until"]) &&
+    identifier(basis.basis_id) && stateDivision(basis.jurisdiction_id) && validTimeZone(basis.time_zone) &&
+    typeof basis.enabled === "boolean" && (basis.current_display_until === null || instant(basis.current_display_until)) &&
+    Array.isArray(basis.references) && basis.references.length > 0 &&
+    basis.references.every((reference) => exact(reference, ["id", "authority_id", "url", "kind", "access_approval", "retention_approval", "retention"]) &&
+      identifier(reference.id) && identifier(reference.authority_id) && safeSourceUrl(reference.url) &&
+      (reference.kind === "iana_tzdb" || reference.kind === "time_zone_regulation") &&
+      publicText(reference.access_approval, 500) && publicText(reference.retention_approval, 500) && reference.retention === "indefinite") &&
+    new Set(basis.references.map((reference) => reference.id)).size === basis.references.length;
+}
+
+function calendarMeaning(basis: CalendarBasisPolicy): string {
+  return canonical({
+    jurisdiction_id: basis.jurisdiction_id, time_zone: basis.time_zone,
+    references: basis.references.map(({ id, authority_id, url, kind }) => ({ id, authority_id, url, kind }))
+      .sort((a, b) => compareText(a.id, b.id)),
   });
 }
 
@@ -903,7 +944,7 @@ function provenanceGroups(entry: ElectionEvidence): readonly EvidenceProvenance[
 
 function calendarDocuments(context: Context, source: EvidenceProvenance): readonly SourceDocument[] {
   return sourceMapping(context, source).stage_calendar?.references.map((reference) =>
-    context.documents.get(reference.id)!) ?? [];
+    context.documents.get(reference.id)!).sort((a, b) => compareText(a.url, b.url) || compareText(a.id, b.id)) ?? [];
 }
 
 function inspectProvenance(context: Context, entry: ElectionEvidence, source: EvidenceProvenance, now: Date) {
@@ -912,8 +953,18 @@ function inspectProvenance(context: Context, entry: ElectionEvidence, source: Ev
   const document = context.documents.get(source.document_id);
   const authority = document ? context.authorities.get(document.authority_id) : undefined;
   const mapping = authority?.mappings.find((item) => item.id === source.mapping_id);
-  requireRule(authority && mapping && mapping.kind === entry.kind && mapping.subject_kind === entry.subject.kind,
+  requireRule(authority && mapping && !document?.calendar_reference && mapping.kind === entry.kind && mapping.subject_kind === entry.subject.kind,
     "source_not_admitted");
+  if (mapping.stage_calendar) {
+    const basis = mapping.stage_calendar;
+    requireRule(document?.calendar_basis_id === basis.basis_id && entry.kind === "stage_metadata" &&
+      entry.value.time_zone === basis.time_zone, "source_not_admitted");
+    for (const required of basis.references) {
+      const reference = context.documents.get(required.id);
+      requireRule(reference?.calendar_reference?.basis_id === basis.basis_id && reference.authority_id === required.authority_id &&
+        reference.url === required.url && reference.calendar_reference.kind === required.kind, "source_not_admitted");
+    }
+  } else if (entry.kind === "stage_metadata") requireRule(!document?.calendar_basis_id, "source_not_admitted");
   const lineage = ancestors(context, entry.subject.id);
   const stage = lineage.find((item) => item.kind === "stage");
   const contest = lineage.find((item) => item.kind === "contest");
@@ -959,8 +1010,12 @@ function applicability(context: Context, entry: ElectionEvidence, now: Date) {
   const begun = known && start < end && now.getTime() >= start;
   const fresh = groups.every((group) => {
     const authority = context.authorities.get(context.documents.get(group.document_id)!.authority_id)!;
+    const calendar = sourceMapping(context, group).stage_calendar;
     return authority.enabled && now.getTime() < Date.parse(group.current_until) &&
-      (authority.current_display_until === null || now.getTime() < Date.parse(authority.current_display_until));
+      (authority.current_display_until === null || now.getTime() < Date.parse(authority.current_display_until)) &&
+      (!calendar || (calendar.enabled &&
+        (calendar.current_display_until === null || now.getTime() < Date.parse(calendar.current_display_until)) &&
+        calendarDocuments(context, group).every((document) => now.getTime() < Date.parse(document.calendar_reference!.current_until))));
   });
   return { begun, applies: begun && now.getTime() < end, known, fresh };
 }
