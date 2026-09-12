@@ -1,0 +1,14 @@
+.shell { max-width: 76rem; margin: 0 auto; padding: 1rem; color: #1f2937; background: #fff; overflow-wrap: anywhere; }
+.shell h1, .shell h2, .shell h3, .shell h4 { color: #111827; }
+.shell a { color: #1d4ed8; text-decoration: underline; text-underline-offset: .2em; }
+.shell a:focus-visible, .shell summary:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 4px; }
+.shell summary { cursor: pointer; padding: .75rem 0; font-weight: 650; }
+.shell nav { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: 1rem; }
+.shell dt { font-weight: 700; }
+.shell dd { margin: 0; }
+.fact, .tracks > div { padding-block: .75rem; border-bottom: 1px solid #d1d5db; }
+.source { display: grid; gap: .3rem; margin-block: .6rem; font-size: .875rem; }
+.candidate { margin-block: 1.25rem; padding: 1rem; border: 1px solid #9ca3af; border-radius: .5rem; }
+.line { margin-block: 1rem; padding: .75rem; background: #f3f4f6; }
+.notice { padding: .75rem; border-left: 4px solid #6b7280; background: #f3f4f6; }
+@media (min-width: 48rem) { .shell { padding: 2rem; } .tracks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; } }

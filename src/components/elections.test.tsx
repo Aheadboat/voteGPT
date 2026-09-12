@@ -40,11 +40,12 @@ describe("source-backed election contest", () => {
     const avery = screen.getByRole("article", { name: "Avery Example" });
     const blair = screen.getByRole("article", { name: "Blair Sample" });
     for (const candidate of [avery, blair]) {
+      const candidateTracks = candidate.querySelector(":scope > dl") as HTMLElement;
       for (const track of ["Intent", "Filing", "Ballot qualification", "Ballot appearance", "Outcome", "Finance filing"]) {
-        expect(within(candidate).getByText(track, { exact: true })).toBeInTheDocument();
+        expect(within(candidateTracks).getByText(track, { exact: true })).toBeInTheDocument();
       }
     }
-    for (const status of ["accepted", "certified", "withdrawn", "listed_for_ballot"]) {
+    for (const status of ["Accepted", "Certified", "Withdrawn", "Listed for ballot"]) {
       expect(within(avery).getByText(status, { exact: true })).toBeInTheDocument();
     }
     expect(within(avery).getAllByRole("link", { name: "Synthetic election office list" }).length).toBeGreaterThan(0);
@@ -140,5 +141,36 @@ describe("source-backed election contest", () => {
     for (const link of screen.getAllByRole("link")) {
       expect(link.getAttribute("href")).not.toMatch(/ocd-division|address|latitude|longitude/);
     }
+  });
+
+  it("retains historical names and field-specific provenance when metadata becomes stale", () => {
+    const result = view();
+    if (result.contest.state !== "verified" || result.candidates[0].metadata.state !== "verified") throw new Error("Invalid test setup");
+    const contest = result.contest;
+    const candidate = result.candidates[0];
+    const metadata = candidate.metadata;
+    if (metadata.state !== "verified") throw new Error("Invalid test setup");
+    render(<ElectionContest result={{ ...result, verification: "historical", contest: {
+      state: "stale", previous: [{ value: contest.value, evidence: contest.evidence[0] }],
+    }, candidates: [{ ...candidate, metadata: { state: "stale", previous: [{ value: metadata.value, evidence: metadata.evidence[0] }] } }] }} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Synthetic House contest" })).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Avery Example" })).toBeInTheDocument();
+    expect(screen.getByTestId("contest-fact-term")).toHaveTextContent("2027-2029");
+    expect(within(screen.getByTestId("contest-fact-term")).getByRole("link", { name: "Synthetic election office list" })).toBeInTheDocument();
+  });
+
+  it("keeps current ballot-line conflicts visible outside disclosure", () => {
+    const result = view();
+    if (result.contest.state !== "verified") throw new Error("Invalid test setup");
+    const candidate = result.candidates[0];
+    const line = candidate.ballot_lines[0];
+    const source = result.contest.evidence[0];
+    render(<ElectionContest result={{ ...result, candidates: [{ ...candidate, ballot_lines: [{ ...line, tracks: {
+      ...line.tracks, ballot_appearance: { state: "conflict", assertions: [
+        { value: "listed_for_ballot", evidence: { ...source, source_label: "Listed source" } },
+        { value: "not_on_ballot", evidence: { ...source, source_label: "Removed source" } },
+      ] },
+    } }] }] }} />);
+    for (const label of ["Listed source", "Removed source"]) expect(screen.getByRole("link", { name: label }).closest("details")).toBeNull();
   });
 });
