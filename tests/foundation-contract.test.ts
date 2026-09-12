@@ -54,20 +54,23 @@ function readHistoricalFile(revision: string, path: string): string {
   })
 }
 
-function expectF7DesignActivation(roadmap: string, readme: string, paths: string[], plan = readRepositoryFile("F7-DESIGN-PLAN.md"), sourceDecision = readRepositoryFile("F7-SOURCE-DECISION.md")): void {
+function expectF7DesignActivation(roadmap: string, readme: string, paths: string[], plan = readRepositoryFile("F7-DESIGN-PLAN.md"), sourceDecision = readRepositoryFile("F7-SOURCE-DECISION.md"), supplementalDecision = readRepositoryFile("F7-SUPPLEMENTAL-SOURCE-DECISION.md")): void {
   const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
   const normalizedReadme = normalizeGovernanceDocument(readme)
   const baseRoadmap = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "ROADMAP.md"))
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "a05e1ba70938107d3fc762f350d5fa98df2fe89846312eb5e87487c66fd199bb",
+    "c836402127ef333ba3007426a1ca32a50df5d6d850cbb74e899573e2ba77bc53",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
   )
   expect(governanceSha256(sourceDecision), "exact limited F7 source approval, publication pending").toBe(
     "000eead0dd267144924179281c9c6d337af784fe3cdd36c00ff893f892a77236",
+  )
+  expect(governanceSha256(supplementalDecision), "exact supplemental F7 source approval, package and publication pending").toBe(
+    "ecc57f20d9d97130fc145e04f95fe984ef6d31e38fc21f07ee5193ebe4bb0de7",
   )
   expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
   expect(normalizedReadme).toBe(replaceExactlyOnce(
@@ -77,7 +80,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
     "F7 README activation",
   ))
   for (const path of paths) {
-    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
+    expect(["ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "F7-SUPPLEMENTAL-SOURCE-DECISION.md", "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts"], "F7 approved changed path: " + path).toContain(path)
   }
 }
 
@@ -2012,6 +2015,7 @@ describe("concurrent roadmap delivery contract", () => {
     expectF7DesignActivation(roadmap, readme, changed)
     expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md") + "\nHuman Gate A approved.\n")).toThrow()
     expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md"), readRepositoryFile("F7-SOURCE-DECISION.md") + "\nProduction publication approved.\n")).toThrow()
+    expect(() => expectF7DesignActivation(roadmap, readme, changed, readRepositoryFile("F7-DESIGN-PLAN.md"), readRepositoryFile("F7-SOURCE-DECISION.md"), readRepositoryFile("F7-SUPPLEMENTAL-SOURCE-DECISION.md") + "\nExact package and publication approved.\n")).toThrow()
     for (const [before, after] of [
       ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
       ["[IN PROGRESS (RED)]", "[IN PROGRESS (GREEN)]"],
