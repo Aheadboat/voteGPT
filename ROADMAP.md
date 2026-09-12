@@ -715,13 +715,37 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #29](https://github.com/Aheadboat/voteGPT/pull/29) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.
 
-## F7 — Elections and Deterministic Candidate Validity [TODO]
+## F7 — Elections and Deterministic Candidate Validity [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
 - **Outcome:** Upcoming contests and candidates display exact source-backed legal status.
 - **Dependencies:** G1 completed with approved vendor or documented public-source fallback.
 - **Tests first:** FEC filing not ballot qualification; declared/filed/accepted/pending/certified/withdrawn/withdrawn-still-on-ballot/removed/disqualified/advanced/won/lost; conflicts; special elections; stages; ballot lines; write-ins; cross-filing.
 - **Done:** Election, stage, contest, candidacy, and append-only evidence records exist; intent/filing/ballot/outcome/finance tracks stay separate; every status shows source and `verified_at`; LLM cannot change status.
 - **Non-goals:** AI validity decisions, inferred winners, or unsupported historical completeness.
+
+- **Authorization:** On 2026-09-12, the user selected F7 In progress on the roadmap board and requested a separate Codex task. This authorizes F7 activation and DISCOVER/DESIGN/PLAN only; Human Gates A and B remain unapproved. F8 and every later item remain TODO and inactive.
+- **Pre-activation audit:** Coordinator-only read-only audit on 2026-09-12 confirmed clean root main and origin/main at `8bf9efb37a1e07d40aaea7a9caca12ab327c942a`, G1 DONE through closeout PR #29, zero active items, no open PR or existing F7 branch/worktree, and a documented official-source fallback in `G1-VENDOR-DECISION.md`. G1 remains NO-GO (reopenable); vendor access and production use remain disabled. F7 depends on the completed decision with documented fallback, not vendor enablement. No concurrent item or coupled cross-item interface exists; single-item admission is N/A. Audit completed before inert setup; no feature discovery or implementation occurred during audit.
+- **Activation setup:** Coordinator created inert `codex/f7-elections-candidate-validity` at `.worktrees/f7-elections-candidate-validity` under `C:/Users/Aheadboat/Desktop/voteGPT` from the audited base. The app-managed checkout is the coordinator checkout. This coordinator-owned activation PR is the sole authority for F7 activation and ownership; it must pass review and hosted CI and merge to main, then its merge must be integrated into the feature branch before any feature-agent dispatch or DISCOVER/DESIGN/PLAN.
+- **Applicable UX DNA IDs:** UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-07, UX-08, UX-09. Discovery will map each to proposed behavioral and manual evidence before Human Gate A.
+- **Human Gate A approval:** Pending; no F7 RED tests or production implementation authorized.
+- **Human Gate B approval:** Pending; no feature merge authorized.
+
+### Coordination record
+
+- **Phase:** `DISCOVER/DESIGN/PLAN`
+- **Branch:** `codex/f7-elections-candidate-validity`
+- **Base commit:** `8bf9efb37a1e07d40aaea7a9caca12ab327c942a`
+- **Integrated-main commit:** `8bf9efb37a1e07d40aaea7a9caca12ab327c942a`
+- **Admission result:** `N/A` — F7 is the sole active item; G1 is DONE with documented official-source fallback; no concurrent pair is admitted.
+- **Assigned feature lead:** `f7_elections_candidate_validity_lead` — dispatch only after the activation merge is integrated; discovery/design/plan only until explicit Human Gate A approval.
+- **Ownership:** The coordinator exclusively owns `AGENTS.md`, `ROADMAP.md`, `README.md`, `tests/foundation-contract.test.ts`, activation and gate records, review, GitHub CI/PRs/merges, post-merge checks, closeout, and CodeGraph maintenance. The F7 feature lead owns F7-scoped election/stage/contest/candidacy/evidence domain, persistence/migration, official-source ingestion, display, fixtures, tests, `PROJECT-MAP.md`, and `TEMPORARY.md` only in the isolated F7 worktree after Gate A and within its approved task graph. Existing identity, residence, federal/state officials, and G1 evaluation contracts are read-only consumption boundaries until the Gate A task graph names necessary integration changes. Only F7 owns its migration sequence and integration surfaces; shared CI and unrelated generated artifacts remain frozen. No vendor outreach, credentials, terms, quote, spend, production vendor use, research, comparison, or later item is authorized. The parent task owns the roadmap board and its exports; F7 does not edit them.
+- **Merge order:** F7 feature PR → post-merge verification on main → F7 status-only closeout PR/CI/merge. No later item activates automatically.
+- **Feature PR/CI:** Pending; activation PR is governance-only and is not a feature PR.
+- **Blockers:** Human Gate A required before RED or production work. Vendor access remains disabled; discovery uses the documented official-source fallback.
+- **Feature merge:** Pending.
+- **Post-merge evidence:** Pending.
+- **Closeout PR/CI/merge:** Pending.
+- **Next Human Gate:** Human Gate A — review the overall design, tests-first task graph, interfaces, parallel lanes, applicable DNA, risks, and non-goals before any F7 RED or production work.
 
 ## F8 — Neutral Candidate Comparison [TODO]
 
