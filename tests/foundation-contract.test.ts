@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "df32361c78545cb3414a60dc81e5e3341eb548469277d4a1e99fcd0df8f04375",
+    "a328ba9f0cf8ee9ccf93432cf4d47b2e3a5efec55caed922f8ab864694a44b34",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -71,6 +71,9 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   )
   expect(governanceSha256(supplementalDecision), "exact supplemental F7 source approval, package and publication pending").toBe(
     "ecc57f20d9d97130fc145e04f95fe984ef6d31e38fc21f07ee5193ebe4bb0de7",
+  )
+  expect(governanceSha256(readRepositoryFile("F7-CALENDAR-SOURCE-DECISION.md")), "exact F7 calendar source and snapshot mapping approval, human verification pending").toBe(
+    "87521915a9b134f7fd839e3a99614ce1db0ac6e8ccbfdb1c57592698fffc2017",
   )
   expect(replaceExactlyOnce(normalizedRoadmap, item, readRoadmapItem(baseRoadmap, "F7"), "F7 activation section")).toBe(baseRoadmap)
   expect(normalizedReadme).toBe(replaceExactlyOnce(
@@ -82,6 +85,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   for (const path of paths) {
     expect([
       "ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "F7-SUPPLEMENTAL-SOURCE-DECISION.md",
+      "F7-CALENDAR-SOURCE-DECISION.md",
       "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts",
       "src/lib/election-repository.ts", "src/lib/election-repository.test.ts", "integration/election-evidence.test.ts",
       "src/db/schema.ts", "drizzle/0005_election_evidence.sql", "drizzle/meta/0005_snapshot.json", "drizzle/meta/_journal.json",

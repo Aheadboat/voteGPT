@@ -92,12 +92,24 @@ export type EffectiveTime =
   | Readonly<{ precision: "instant"; start: string; end: string | null }>
   | Readonly<{ precision: "date"; start: string; end: string | null }>
   | Readonly<{ precision: "unknown"; reason: "not_published" }>;
+export type CalendarReferenceKind = "iana_tzdb" | "time_zone_regulation";
+export type CalendarReference = Readonly<{
+  basis_id: string;
+  kind: CalendarReferenceKind;
+  locator: string;
+  original_term: string;
+  retrieved_at: string;
+  verified_at: string;
+  current_until: string;
+}>;
 export type SourceDocument = Readonly<{
   id: string;
   authority_id: string;
   url: string;
   sha256: string;
   label: string;
+  calendar_basis_id?: string;
+  calendar_reference?: CalendarReference;
 }>;
 export type EvidenceProvenance = Readonly<{
   document_id: string;
@@ -129,6 +141,22 @@ export type Supersession = Readonly<{
   predecessor_id: string;
   reason: string;
 }>;
+export type CalendarBasisPolicy = Readonly<{
+  basis_id: string;
+  jurisdiction_id: string;
+  time_zone: string;
+  references: readonly Readonly<{
+    id: string;
+    authority_id: string;
+    url: string;
+    kind: CalendarReferenceKind;
+    access_approval: string;
+    retention_approval: string;
+    retention: "indefinite";
+  }>[];
+  enabled: boolean;
+  current_display_until: string | null;
+}>;
 export type ClaimMapping = Readonly<{
   id: string;
   kind: EvidenceKind;
@@ -137,6 +165,7 @@ export type ClaimMapping = Readonly<{
   allowed_fields: readonly ContestField[];
   allows_supersession: boolean;
   supports_current_snapshot: boolean;
+  stage_calendar?: CalendarBasisPolicy;
   date_rule: Readonly<{
     time_zone: string;
     start: "start_of_day" | "after_date";
@@ -233,6 +262,18 @@ export type SourceReference = Readonly<{
   verified_at: string;
   effective: EffectiveTime;
   current_until: string;
+  calendar_basis?: Readonly<{
+    basis_id: string;
+    mapping_id: string;
+    jurisdiction_id: string;
+    time_zone: string;
+    references: readonly (CalendarReference & Readonly<{
+      source_url: string;
+      source_label: string;
+      document_sha256: string;
+      authority_id: string;
+    }>)[];
+  }>;
 }>;
 export type FieldSourceReference = SourceReference & Readonly<{ group_id: string }>;
 export type EvidenceRef = SourceReference & Readonly<{
@@ -622,14 +663,24 @@ function inspectRecords(input: unknown, policy: ElectionSourcePolicy, now: Date,
     context.authorities.set(authority.id, authority);
   }
   for (const document of data.documents) {
-    requireRule(exact(document, ["id", "authority_id", "url", "sha256", "label"]) &&
+    requireRule(exact(document, ["id", "authority_id", "url", "sha256", "label",
+      ...(Object.hasOwn(document, "calendar_basis_id") ? ["calendar_basis_id"] : []),
+      ...(Object.hasOwn(document, "calendar_reference") ? ["calendar_reference"] : [])]) &&
       identifier(document.id) && identifier(document.authority_id) && safeSourceUrl(document.url) &&
       /^[a-f0-9]{64}$/.test(document.sha256) && publicText(document.label) &&
       !context.documents.has(document.id), "invalid_evidence");
     const authority = context.authorities.get(document.authority_id);
-    requireRule(authority && authority.urls.includes(document.url) &&
-      authority.election_issuer === data.election.issuer && authority.election_key === data.election.official_key,
-    "source_not_admitted");
+    if (document.calendar_reference) {
+      requireRule(policy.authorities.some((source) => source.mappings.some((mapping) =>
+        mapping.stage_calendar?.basis_id === document.calendar_reference!.basis_id &&
+        mapping.stage_calendar.references.some((reference) => reference.id === document.id &&
+          reference.authority_id === document.authority_id && reference.url === document.url &&
+          reference.kind === document.calendar_reference!.kind))), "source_not_admitted");
+    } else {
+      requireRule(authority && authority.urls.includes(document.url) &&
+        authority.election_issuer === data.election.issuer && authority.election_key === data.election.official_key,
+      "source_not_admitted");
+    }
     context.documents.set(document.id, document);
   }
   for (const entry of data.evidence) {
@@ -735,7 +786,7 @@ function validAuthority(value: SourceAuthorityPolicy): boolean {
   return value.mappings.every((input) => {
     const mapping = input as ClaimMapping;
     if (!exact(mapping, ["id", "kind", "subject_kind", "values", "allowed_fields", "allows_supersession",
-      "supports_current_snapshot", "date_rule"]) || !identifier(mapping.id) ||
+      "supports_current_snapshot", "date_rule", ...(Object.hasOwn(mapping, "stage_calendar") ? ["stage_calendar"] : [])]) || !identifier(mapping.id) ||
       mappings.has(mapping.id) || !EVIDENCE_KINDS.includes(mapping.kind) ||
       !validSubjectKind(mapping.kind, mapping.subject_kind) || !textArray(mapping.values, 20) ||
       typeof mapping.allows_supersession !== "boolean" || typeof mapping.supports_current_snapshot !== "boolean") return false;
@@ -850,6 +901,11 @@ function provenanceGroups(entry: ElectionEvidence): readonly EvidenceProvenance[
   return entry.kind === "contest_metadata" ? [entry, ...entry.supporting_sources] : [entry];
 }
 
+function calendarDocuments(context: Context, source: EvidenceProvenance): readonly SourceDocument[] {
+  return sourceMapping(context, source).stage_calendar?.references.map((reference) =>
+    context.documents.get(reference.id)!) ?? [];
+}
+
 function inspectProvenance(context: Context, entry: ElectionEvidence, source: EvidenceProvenance, now: Date) {
   requireRule(identifier(source.document_id) && identifier(source.mapping_id) &&
     publicText(source.locator, 500) && publicText(source.original_term, 500), "invalid_evidence");
@@ -912,11 +968,20 @@ function applicability(context: Context, entry: ElectionEvidence, now: Date) {
 function sourceReference(context: Context, source: EvidenceProvenance): SourceReference {
   const document = context.documents.get(source.document_id)!;
   const authority = context.authorities.get(document.authority_id)!;
+  const calendar = sourceMapping(context, source).stage_calendar;
   return {
     source_url: document.url, source_type: authority.source_type,
     authority_id: authority.id, source_label: document.label, original_term: source.original_term,
     document_sha256: document.sha256, locator: source.locator, retrieved_at: source.retrieved_at,
     verified_at: source.verified_at, effective: structuredClone(source.effective), current_until: source.current_until,
+    ...(calendar ? { calendar_basis: {
+      basis_id: calendar.basis_id, mapping_id: source.mapping_id,
+      jurisdiction_id: calendar.jurisdiction_id, time_zone: calendar.time_zone,
+      references: calendarDocuments(context, source).map((reference) => ({
+        ...reference.calendar_reference!, source_url: reference.url, source_label: reference.label,
+        document_sha256: reference.sha256, authority_id: reference.authority_id,
+      })),
+    } } : {}),
   };
 }
 
@@ -969,7 +1034,9 @@ function interpret(context: Context, now: Date) {
       return {
         state: "verified", value: structuredClone(current[0].value),
         evidence: current.map((entry) => references.get(entry.id)!),
-        verified_at: current.map((entry) => provenanceGroups(entry as ElectionEvidence).map((group) => group.verified_at).sort(compareText)[0])
+        verified_at: current.map((entry) => provenanceGroups(entry as ElectionEvidence).flatMap((group) => [
+          group.verified_at, ...calendarDocuments(context, group).map((document) => document.calendar_reference!.verified_at),
+        ]).sort(compareText)[0])
           .sort(compareText).at(-1)!,
       };
     }

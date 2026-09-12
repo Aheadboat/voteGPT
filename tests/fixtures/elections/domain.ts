@@ -154,8 +154,8 @@ export function fixtureCalendarGraph(): FixtureGraph {
     label: "Synthetic election date notice", calendar_basis_id: basisId,
   };
   const references = [
-    { id: "calendar-zone-reference", authority_id: "synthetic-zone-reference", url: "https://time.example.test/northamerica", kind: "iana_tzdb", label: "Synthetic timezone reference", sha256: "c".repeat(64), locator: "Synthetic California zone entry", original_term: "Synthetic America/Los_Angeles zone" },
-    { id: "calendar-boundary-reference", authority_id: "synthetic-boundary-reference", url: "https://time.example.test/pacific-boundary", kind: "time_zone_regulation", label: "Synthetic civil boundary reference", sha256: "d".repeat(64), locator: "Synthetic Pacific boundary paragraph", original_term: "Synthetic California civil boundary" },
+    { id: "calendar-zone-reference", authority_id: "synthetic-zone-reference", url: "https://time.example.test/northamerica", kind: "iana_tzdb" as const, label: "Synthetic timezone reference", sha256: "c".repeat(64), locator: "Synthetic California zone entry", original_term: "Synthetic America/Los_Angeles zone" },
+    { id: "calendar-boundary-reference", authority_id: "synthetic-boundary-reference", url: "https://time.example.test/pacific-boundary", kind: "time_zone_regulation" as const, label: "Synthetic civil boundary reference", sha256: "d".repeat(64), locator: "Synthetic Pacific boundary paragraph", original_term: "Synthetic California civil boundary" },
   ];
   graph.package.documents.push(primary, ...references.map(({ kind, locator, original_term, ...document }) => ({
     ...document,

@@ -1388,4 +1388,185 @@ describe("package-held calendar provenance", () => {
     expect(JSON.stringify(result)).not.toContain("synthetic-calendar-access-only");
     expect(JSON.stringify(result)).not.toContain("synthetic-calendar-retention-only");
   });
+
+  it.each([
+    ["missing primary basis", (f) => { delete f.primary.calendar_basis_id; }],
+    ["wrong primary basis", (f) => { f.primary.calendar_basis_id = "another-basis"; }],
+    ["two document roles", (f) => { f.primary.calendar_reference = structuredClone(f.reference.calendar_reference); }],
+    ["reference also binds a factual basis", (f) => { f.reference.calendar_basis_id = f.basis.basis_id; }],
+    ["missing required reference", (f) => { f.graph.package.documents = f.graph.package.documents.filter((d) => d.id !== f.reference.id); }],
+    ["wrong reference basis", (f) => { f.reference.calendar_reference!.basis_id = "another-basis"; }],
+    ["wrong reference kind", (f) => { f.reference.calendar_reference!.kind = "time_zone_regulation"; }],
+    ["wrong reference URL", (f) => { f.reference.url = "https://time.example.test/unreviewed"; }],
+    ["wrong reference authority", (f) => { f.reference.authority_id = "unreviewed-reference-authority"; }],
+    ["extra reference", (f) => { f.graph.package.documents.push({ ...structuredClone(f.reference), id: "unlisted-reference" }); }],
+    ["package reference self-approval", (f) => { Object.assign(f.reference.calendar_reference!, { access_approval: "self-approved" }); }],
+    ["unknown reference field", (f) => { Object.assign(f.reference.calendar_reference!, { guessed_timezone: "America/Los_Angeles" }); }],
+    ["empty reference locator", (f) => { f.reference.calendar_reference!.locator = ""; }],
+    ["empty reference original term", (f) => { f.reference.calendar_reference!.original_term = ""; }],
+    ["control character reference term", (f) => { f.reference.calendar_reference!.original_term = "term\nprivate"; }],
+    ["malformed reference time", (f) => { f.reference.calendar_reference!.retrieved_at = "yesterday"; }],
+    ["future reference review", (f) => { Object.assign(f.reference.calendar_reference!, { verified_at: "2026-09-12T14:00:00.000Z", current_until: "2026-09-13T14:00:00.000Z" }); }],
+    ["reference retrieval after review", (f) => { f.reference.calendar_reference!.retrieved_at = "2026-09-12T11:46:00.000Z"; }],
+    ["zero reference review window", (f) => { f.reference.calendar_reference!.current_until = f.reference.calendar_reference!.verified_at; }],
+    ["reference review exceeds 24 hours", (f) => { f.reference.calendar_reference!.current_until = "2026-09-13T11:45:00.001Z"; }],
+    ["unknown basis field", (f) => { Object.assign(f.basis, { inferred: true }); }],
+    ["invalid basis ID", (f) => { f.basis.basis_id = "invalid basis"; f.primary.calendar_basis_id = "invalid basis"; f.graph.package.documents.filter((d) => d.calendar_reference).forEach((d) => { d.calendar_reference!.basis_id = "invalid basis"; }); }],
+    ["wrong jurisdiction", (f) => { f.basis.jurisdiction_id = "ocd-division/country:us/state:ny"; }],
+    ["wrong stage timezone", (f) => { f.basis.time_zone = "America/New_York"; }],
+    ["unknown stage timezone", (f) => { metadata(f.graph, "stage_metadata").value.time_zone = null; }],
+    ["unknown enabled state", (f) => { Object.assign(f.basis, { enabled: "yes" }); }],
+    ["invalid display cutoff", (f) => { f.basis.current_display_until = "tomorrow"; }],
+    ["empty reference allowlist", (f) => { f.basis.references = []; f.graph.package.documents = f.graph.package.documents.filter((d) => !d.calendar_reference); }],
+    ["duplicate reference identity", (f) => { f.basis.references.push(structuredClone(f.basis.references[0])); }],
+    ["unknown permitted reference kind", (f) => { Object.assign(f.basis.references[0], { kind: "campaign" }); Object.assign(f.reference.calendar_reference!, { kind: "campaign" }); }],
+    ["missing access decision", (f) => { f.basis.references[0].access_approval = ""; }],
+    ["missing retention decision", (f) => { f.basis.references[0].retention_approval = ""; }],
+    ["finite retention", (f) => { Object.assign(f.basis.references[0], { retention: "24-hours" }); }],
+    ["unknown retention", (f) => { Object.assign(f.basis.references[0], { retention: null }); }],
+    ["calendar permission on a status mapping", (f) => { f.graph.policy.authorities[0].mappings.find((m) => m.kind === "ballot_qualification")!.stage_calendar = structuredClone(f.basis); }],
+    ["calendar permission on a finance mapping", (f) => { f.graph.policy.authorities[1].mappings[0].stage_calendar = structuredClone(f.basis); }],
+    ["calendar permission on a retirement mapping", (f) => { f.graph.policy.authorities[0].mappings.find((m) => m.kind === "retirement")!.stage_calendar = structuredClone(f.basis); }],
+    ["unapproved date interpretation extension", (f) => { Object.assign(f.mapping.date_rule!, { calendar: structuredClone(f.basis) }); }],
+  ] satisfies readonly [string, (fixture: ReturnType<typeof calendarFixture>) => void][])(
+    "rejects %s after an admitted derived-calendar control", (_name, change) => {
+      const fixture = calendarFixture();
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("valid");
+      change(fixture);
+      expect(validateElectionPackage(fixture.graph.package, fixture.graph.policy, NOW).status).toBe("rejected");
+      expect(projectContest(readGraph(fixture.graph), NOW).status).toBe("unverified");
+    },
+  );
+
+  it("never grants a normative reference ordinary candidate-status authority", () => {
+    const f = calendarFixture();
+    expect(validateElectionPackage(f.graph.package, f.graph.policy, NOW).status).toBe("valid");
+    f.graph.policy.authorities.push({
+      ...structuredClone(f.graph.policy.authorities[0]), id: f.reference.authority_id,
+      urls: [f.reference.url],
+    });
+    f.graph.package.evidence.push(evidence("ballot_qualification", "certified", { document_id: f.reference.id }));
+    expect(validateElectionPackage(f.graph.package, f.graph.policy, NOW).status).toBe("rejected");
+    expect(projectContest(readGraph(f.graph), NOW).status).toBe("unverified");
+  });
+
+  it.each(["jurisdiction", "timezone", "reference_identity", "reference_url", "reference_kind"] as const)(
+    "requires repeated basis IDs to retain identical %s meaning", (change) => {
+      const f = calendarFixture();
+      const repeated = structuredClone(f.mapping);
+      repeated.id = "same-basis-other-stage-mapping";
+      f.graph.policy.authorities[0].mappings.push(repeated);
+      expect(validateElectionPackage(f.graph.package, f.graph.policy, NOW).status).toBe("valid");
+      if (change === "jurisdiction") repeated.stage_calendar!.jurisdiction_id = "ocd-division/country:us/state:ny";
+      if (change === "timezone") repeated.stage_calendar!.time_zone = "America/New_York";
+      if (change === "reference_identity") repeated.stage_calendar!.references[0].id = "changed-reference";
+      if (change === "reference_url") repeated.stage_calendar!.references[0].url = "https://time.example.test/replaced";
+      if (change === "reference_kind") repeated.stage_calendar!.references[0].kind = "time_zone_regulation";
+      expect(validateElectionPackage(f.graph.package, f.graph.policy, NOW).status).toBe("rejected");
+    },
+  );
+
+  it("allows per-use freshness revocation for identical retained basis meanings", () => {
+    const f = calendarFixture();
+    const repeated = structuredClone(f.mapping);
+    repeated.id = "same-basis-disabled-use";
+    repeated.stage_calendar!.enabled = false;
+    repeated.stage_calendar!.current_display_until = "2026-09-12T12:30:00.000Z";
+    f.graph.policy.authorities[0].mappings.push(repeated);
+    expect(validateElectionPackage(f.graph.package, f.graph.policy, NOW).status).toBe("valid");
+    expect(view(f.graph).stage.state).toBe("verified");
+  });
+
+  it("makes calendar reference ordering irrelevant without changing retained package evidence", () => {
+    const f = calendarFixture();
+    const before = view(f.graph);
+    f.basis.references.reverse();
+    f.graph.package.documents.reverse();
+    expect(view(f.graph)).toEqual(before);
+    expect(f.graph.package.documents[0].id).toBe("calendar-boundary-reference");
+  });
+
+  it.each(["reference_expiry", "basis_disabled", "basis_cutoff"] as const)(
+    "withholds a current calendar at %s while retaining precise source history", (change) => {
+      const f = calendarFixture();
+      expect(view(f.graph).stage.state).toBe("verified");
+      if (change === "reference_expiry") f.reference.calendar_reference!.current_until = NOW.toISOString();
+      if (change === "basis_disabled") f.basis.enabled = false;
+      if (change === "basis_cutoff") f.basis.current_display_until = NOW.toISOString();
+      const result = view(f.graph);
+      expect(result.stage.state).toBe("stale");
+      expect(result.upcoming).toBeNull();
+      const history = result.history.find((entry) => entry.kind === "stage_metadata")!;
+      expect(history.applicability).toBe("historical");
+      expect(history.evidence.calendar_basis?.references).toEqual(expect.arrayContaining([
+        expect.objectContaining({ source_url: "https://time.example.test/northamerica", locator: "Synthetic California zone entry", verified_at: "2026-09-12T11:45:00.000Z" }),
+      ]));
+    },
+  );
+
+  it("never resurrects superseded stage metadata when its calendar basis expires", () => {
+    const f = calendarFixture();
+    const stage = metadata(f.graph, "stage_metadata");
+    const prior = structuredClone(stage);
+    prior.id = "earlier-literal-stage";
+    prior.document_id = "election-document";
+    prior.mapping_id = "literal-stage-mapping";
+    const literalMapping = structuredClone(f.mapping);
+    literalMapping.id = prior.mapping_id;
+    delete literalMapping.stage_calendar;
+    f.graph.policy.authorities[0].mappings.push(literalMapping);
+    f.graph.package.evidence.push(prior);
+    stage.value.name = "Synthetic corrected general stage";
+    f.graph.package.supersessions.push({ predecessor_id: prior.id, replacement_id: stage.id, reason: "Synthetic stage correction" });
+    expect(view(f.graph).stage).toMatchObject({ state: "verified", value: { name: "Synthetic corrected general stage" } });
+    f.basis.enabled = false;
+    const result = view(f.graph);
+    expect(result.stage).toMatchObject({ state: "stale", previous: [{ value: { name: "Synthetic corrected general stage" } }] });
+    expect(result.history.find((entry) => entry.evidence.id === prior.id)?.superseded).toBe(true);
+  });
+
+  it("retains old mapping references after a policy version update and current-display revocation", () => {
+    const f = calendarFixture();
+    const before = view(f.graph);
+    f.graph.policy.version = "fixture-policy-v2";
+    const newer = structuredClone(f.mapping);
+    newer.id = "new-stage-calendar-mapping";
+    newer.stage_calendar!.basis_id = "new-synthetic-calendar-basis";
+    newer.stage_calendar!.references.forEach((reference) => { reference.id += "-new"; });
+    f.graph.policy.authorities[0].mappings.push(newer);
+    expect(view(f.graph)).toEqual(before);
+    f.basis.enabled = false;
+    const result = view(f.graph);
+    expect(result.stage.state).toBe("stale");
+    expect(result.history.find((entry) => entry.kind === "stage_metadata")?.evidence.calendar_basis).toEqual(
+      before.history.find((entry) => entry.kind === "stage_metadata")?.evidence.calendar_basis,
+    );
+  });
+
+  it("keeps every conflicting stage's actual calendar references outside historical pagination", () => {
+    const f = calendarFixture();
+    const other = structuredClone(metadata(f.graph, "stage_metadata"));
+    other.id = "contradictory-stage-date";
+    other.value.date = "2026-11-04";
+    f.graph.package.evidence.push(other);
+    const graph = { ...readGraph(f.graph), history_page: { offset: 100, limit: 1 } };
+    const result = projectContest(graph, NOW);
+    expect(result.status).toBe("unverified");
+    if (result.status !== "unverified") throw new Error("Expected conflicting stage metadata");
+    expect(result.metadata_conflicts?.filter((entry) => entry.kind === "stage_metadata")).toHaveLength(2);
+    for (const entry of result.metadata_conflicts ?? []) {
+      expect(entry.evidence.calendar_basis?.references).toHaveLength(2);
+      expect(entry.evidence.calendar_basis?.references[0].original_term).toBe("Synthetic America/Los_Angeles zone");
+    }
+  });
 });
+
+function calendarFixture() {
+  const graph = fixtureCalendarGraph();
+  const mapping = graph.policy.authorities[0].mappings.find((entry) => entry.kind === "stage_metadata")!;
+  return {
+    graph, mapping, basis: mapping.stage_calendar!,
+    primary: graph.package.documents.find((entry) => entry.id === "calendar-date-document")!,
+    reference: graph.package.documents.find((entry) => entry.id === "calendar-zone-reference")!,
+  };
+}
