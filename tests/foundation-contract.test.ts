@@ -61,7 +61,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(f7DependencyBase, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "667cb361cb9027ed49644c691e3344c1f0777b81062a7ae621db5fc28883e2eb",
+    "569ad1169ff17edfe6b211e761f806ccf66a71503978ce8a4140c6a408119faf",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
@@ -85,7 +85,7 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   for (const path of paths) {
     expect([
       "ROADMAP.md", "README.md", "F7-DESIGN-PLAN.md", "F7-SOURCE-DECISION.md", "F7-SUPPLEMENTAL-SOURCE-DECISION.md",
-      "F7-CALENDAR-SOURCE-DECISION.md",
+      "F7-CALENDAR-SOURCE-DECISION.md", "PROJECT-MAP.md",
       "tests/foundation-contract.test.ts", "src/lib/elections.ts", "src/lib/elections.test.ts", "tests/fixtures/elections/domain.ts",
       "src/lib/election-repository.ts", "src/lib/election-repository.test.ts", "integration/election-evidence.test.ts",
       "src/db/schema.ts", "drizzle/0005_election_evidence.sql", "drizzle/meta/0005_snapshot.json", "drizzle/meta/_journal.json",

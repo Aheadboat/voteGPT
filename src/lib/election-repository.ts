@@ -42,6 +42,7 @@ function bindReviewedPackage(value: ElectionPackage, receiptId: string, options:
     const sources = value.evidence.flatMap<EvidenceProvenance>((entry) => entry.kind === "contest_metadata" ? [entry, ...entry.supporting_sources] : [entry]);
     if (receipt.package_sha256 !== package_sha256 || receipt.policy_version !== value.policy_version ||
       sources.some((source) => source.verified_at > receipt.verified_at) ||
+      value.documents.some((document) => document.calendar_reference && document.calendar_reference.verified_at > receipt.verified_at) ||
       receipt.documents.length !== value.documents.length || receipt.contest_inventory.length !== value.contests.length) {
       return { status: "rejected", reason: "receipt_mismatch" };
     }
