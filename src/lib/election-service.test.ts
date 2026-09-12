@@ -127,4 +127,14 @@ describe("election reads", () => {
     expect(await getStatewideElections(service, [{ id: georgia, idScheme: "ocd", name: "Georgia", type: "state" }], "state")).toEqual({ status: "unsupported" });
     expect(repository.readUpcoming).not.toHaveBeenCalled();
   });
+  it("rechecks current time after a storage read crosses verification expiry", async () => {
+    const { repository } = setup();
+    let clockReads = 0;
+    const service = createElectionService({ repository, now: () => clockReads++ === 0 ? NOW : new Date("2026-09-13T12:00:00.000Z") });
+    const result = await service.getUpcoming(scope);
+    expect(result.status).toBe("available");
+    if (result.status !== "available") throw new Error("Missing recovery result");
+    expect(result.contests).toHaveLength(0);
+    expect(result.unverified_count).toBe(1);
+  });
 });

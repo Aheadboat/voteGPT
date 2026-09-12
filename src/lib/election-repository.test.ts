@@ -179,7 +179,7 @@ describe("immutable election persistence", () => {
     const result = await repository.readContest(first.graph.contest_id, { offset: 0, limit: 1 });
     expect(result?.ledger.evidence.filter((entry) => entry.kind === "intent")).toHaveLength(2);
     const projected = result && projectContest(result, NOW);
-    expect(projected).toMatchObject({ status: "available", candidates: [{ tracks: { intent: { state: "conflict", assertions: [expect.anything(), expect.anything()] } } }], history_page: { limit: 1, total: 9, next_offset: 1 } });
+    expect(projected).toMatchObject({ status: "available", candidates: [{ id: "candidate-avery", tracks: { intent: { state: "conflict", assertions: [expect.anything(), expect.anything()] } } }, { id: "candidate-blair" }], history_page: { limit: 1, total: 9, next_offset: 1 } });
   });
 
   it("serializes concurrent distinct imports without dropping either assertion", async () => {
@@ -281,5 +281,77 @@ describe("immutable election persistence", () => {
     expect(await repository.importReviewedPackage(graph.package, receipt.id)).toMatchObject({ status: "rejected", reason: "source_not_admitted" });
     options.policy.authorities[0].urls = ["https://elections.example.test/unrelated"];
     await expect(repository.readContest(graph.contest_id)).rejects.toThrow("Election read is not verified");
+  });
+
+  it("rejects a raw three-edge correction cycle after admitting its acyclic control", async () => {
+    const graph = fixtureGraph();
+    for (const id of ["cycle-a", "cycle-b", "cycle-c"]) graph.package.evidence.push(evidence("intent", "declared", { id }));
+    graph.package.supersessions.push(
+      { replacement_id: "cycle-b", predecessor_id: "cycle-a", reason: "Synthetic first correction" },
+      { replacement_id: "cycle-c", predecessor_id: "cycle-b", reason: "Synthetic second correction" },
+    );
+    const { receipt, options } = reviewedFixture(graph);
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    expect((await repository.readContest(graph.contest_id))?.ledger.supersessions).toHaveLength(2);
+    await expect(database.insert(electionEvidenceSupersession).values({
+      replacement_id: "cycle-a", predecessor_id: "cycle-c", reason: "Synthetic invalid cycle", batch_sha256: receipt.package_sha256,
+    })).rejects.toThrow();
+  });
+
+  it("keeps disputed contest metadata visible as unverified in its public index scope", async () => {
+    const graph = fixtureGraph();
+    const original = graph.package.evidence.find((entry) => entry.kind === "contest_metadata")!;
+    graph.package.evidence.push({ ...structuredClone(original), id: "disputed-office", value: { ...original.value, office: "Disputed synthetic office" } });
+    const { receipt, options } = reviewedFixture(graph);
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    const direct = await repository.readContest(graph.contest_id);
+    expect(direct && projectContest(direct, NOW)).toMatchObject({ status: "unverified", reason: "unverified_metadata" });
+    const index = await repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, NOW);
+    expect(index.map((item) => item.contest_id)).toEqual([graph.contest_id]);
+    expect(projectContest(index[0], NOW)).toMatchObject({ status: "unverified", metadata_conflicts: [expect.anything(), expect.anything()] });
+  });
+
+  it.each([
+    { level: "federal", jurisdiction_id: STATE, division_ids: [STATE], address: "Synthetic private input" },
+    { level: "federal", jurisdiction_id: STATE, division_ids: [STATE + "?address=private"] },
+    { level: "federal", jurisdiction_id: STATE, division_ids: ["ocd-division/country:us/state:ny/cd:12"] },
+    { level: "federal", jurisdiction_id: STATE, division_ids: [STATE, STATE] },
+  ])("rejects invalid public read scope %# even when storage is empty", async (scope) => {
+    const { options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect(await repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, NOW)).toEqual([]);
+    await expect(repository.readUpcoming(scope as Parameters<typeof repository.readUpcoming>[0], NOW)).rejects.toThrow("Election read is not verified");
+  });
+
+  it("rejects invalid clocks before returning an empty public read", async () => {
+    const { options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect(await repository.readContest("missing-contest")).toBeNull();
+    await expect(repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, new Date(NaN))).rejects.toThrow("Election read is not verified");
+    options.now = () => new Date(NaN);
+    await expect(repository.readContest("missing-contest")).rejects.toThrow("Election read is not verified");
+  });
+
+  it("rejects invalid history requests without returning incomplete graphs", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    expect((await repository.readContest(graph.contest_id, { offset: 0, limit: 1 }))?.history_page.limit).toBe(1);
+    for (const page of [{ offset: -1, limit: 1 }, { offset: 0, limit: 101 }, { offset: 0.5, limit: 1 }, { offset: 0, limit: 1, address: "private" }]) {
+      await expect(repository.readContest(graph.contest_id, page)).rejects.toThrow("Election read is not verified");
+    }
+  });
+
+  it("does not read an unrelated unadmitted election into an admitted public scope", async () => {
+    const { graph, receipt, options } = reviewedFixture();
+    const repository = createElectionRepository(database, options);
+    expect((await repository.importReviewedPackage(graph.package, receipt.id)).status).toBe("imported");
+    // Another domain dataset can coexist; its intentionally invalid batch is outside this source policy.
+    await database.execute(sql`insert into election(id,issuer,official_key,revision,dataset_kind) values('unrelated','other-issuer','other-election','original','synthetic')`);
+    await database.execute(sql`insert into election_import_batch(package_sha256,election_id,schema_version,policy_version,receipt_id,canonical_package,accepted_at)
+      values(${"c".repeat(64)},'unrelated','f7-v1','unrelated-policy','unrelated-receipt','{}',${NOW.toISOString()})`);
+    expect((await repository.readUpcoming({ level: "federal", jurisdiction_id: STATE, division_ids: [STATE] }, NOW)).map((item) => item.contest_id)).toEqual([graph.contest_id]);
   });
 });
