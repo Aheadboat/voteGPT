@@ -1,3 +1,7 @@
+.page { box-sizing: border-box; width: min(100%, 76rem); margin-inline: auto; padding: clamp(1rem, 4vw, 2.5rem); overflow-wrap: anywhere; }
+.page h1 { max-width: 28ch; margin-block: .5rem 1.25rem; font-size: clamp(2rem, 4vw, 3rem); line-height: 1.15; letter-spacing: -.025em; }
+.page p { max-width: 72ch; margin-block: .75rem; line-height: 1.6; }
+.page > .shell { margin-block: 1.5rem; padding: 0; }
 .shell { max-width: 76rem; margin: 0 auto; padding: 1rem; color: #1f2937; background: #fff; overflow-wrap: anywhere; }
 .shell h1, .shell h2, .shell h3, .shell h4 { color: #111827; }
 .shell a { color: #1d4ed8; text-decoration: underline; text-underline-offset: .2em; }

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { databaseSchema } from "@/db/schema";
@@ -157,7 +157,81 @@ describe("PostgreSQL append-only election ledger", () => {
       expect((await writer.readContest(initial.graph.contest_id))?.ledger.evidence).toHaveLength(8);
     } finally { release(); await pending.catch(() => undefined); client.release(); }
   });
+
+  it("rejects a foreign-batch opposite edge while the actual election's correction is uncommitted", async () => {
+    const own = await correctionFixture();
+    const foreign = reviewed(fixture());
+    expect((await createElectionRepository(database, foreign.options).importReviewedPackage(foreign.graph.package, foreign.receipt.id)).status).toBe("imported");
+    const holder = await pool.connect();
+    const contender = await writerPool.connect();
+    try {
+      await holder.query("begin isolation level read committed");
+      expect((await insertCorrection(holder, own.right, own.left, own.receipt.package_sha256)).rowCount).toBe(1);
+      await contender.query("begin isolation level read committed");
+      await contender.query("set local statement_timeout = '2s'");
+      await expect(insertCorrection(contender, own.left, own.right, foreign.receipt.package_sha256)).rejects.toThrow("Election correction batch does not match subject election");
+      await contender.query("rollback");
+      await holder.query("commit");
+      expect((await pool.query("select count(*)::int as count from election_evidence_supersession where replacement_id = any($1::text[])", [[own.left, own.right]])).rows[0].count).toBe(1);
+    } finally {
+      await Promise.all([holder.query("rollback"), contender.query("rollback")]);
+      holder.release(); contender.release();
+    }
+  });
+
+  it("serializes same-election raw opposite edges at read committed and rejects the cycle", async () => {
+    const own = await correctionFixture();
+    const holder = await pool.connect();
+    const contender = await writerPool.connect();
+    let pending: Promise<{ error: unknown }> | undefined;
+    try {
+      await holder.query("begin isolation level read committed");
+      expect((await insertCorrection(holder, own.right, own.left, own.receipt.package_sha256)).rowCount).toBe(1);
+      await contender.query("begin isolation level read committed");
+      await contender.query("set local statement_timeout = '3s'");
+      const pid = (await contender.query("select pg_backend_pid() as pid")).rows[0].pid as number;
+      pending = insertCorrection(contender, own.left, own.right, own.receipt.package_sha256).then(() => ({ error: null }), (error: unknown) => ({ error }));
+      await waitForLock(pid);
+      await holder.query("commit");
+      expect((await pending).error).toMatchObject({ message: "Election correction is cyclic" });
+      await contender.query("rollback");
+      expect((await pool.query("select count(*)::int as count from election_evidence_supersession where replacement_id = any($1::text[])", [[own.left, own.right]])).rows[0].count).toBe(1);
+    } finally {
+      await holder.query("rollback");
+      if (pending) await pending;
+      await contender.query("rollback");
+      holder.release(); contender.release();
+    }
+  });
+
+  it("rejects a raw opposite correction from a repeatable snapshot older than a committed edge", async () => {
+    const own = await correctionFixture();
+    const stale = await writerPool.connect();
+    try {
+      await stale.query("begin isolation level repeatable read");
+      const count = () => stale.query("select count(*)::int as count from election_evidence_supersession where replacement_id = any($1::text[])", [[own.left, own.right]]);
+      expect((await count()).rows[0].count).toBe(0);
+      expect((await pool.query("insert into election_evidence_supersession(replacement_id,predecessor_id,batch_sha256,reason) values($1,$2,$3,'Synthetic committed correction')", [own.right, own.left, own.receipt.package_sha256])).rowCount).toBe(1);
+      expect((await count()).rows[0].count).toBe(0);
+      await expect(insertCorrection(stale, own.left, own.right, own.receipt.package_sha256)).rejects.toThrow("Election corrections require read committed");
+      await stale.query("rollback");
+      expect((await pool.query("select count(*)::int as count from election_evidence_supersession where replacement_id = any($1::text[])", [[own.left, own.right]])).rows[0].count).toBe(1);
+    } finally { await stale.query("rollback"); stale.release(); }
+  });
 });
+
+async function correctionFixture() {
+  const graph = fixture();
+  addIntent(graph, "declared", "left");
+  addIntent(graph, "withdrawn", "right");
+  const own = reviewed(graph);
+  expect((await createElectionRepository(database, own.options).importReviewedPackage(graph.package, own.receipt.id)).status).toBe("imported");
+  return { ...own, left: graph.package.evidence.at(-2)!.id, right: graph.package.evidence.at(-1)!.id };
+}
+
+function insertCorrection(client: PoolClient, replacement: string, predecessor: string, batch: string) {
+  return client.query("insert into election_evidence_supersession(replacement_id,predecessor_id,batch_sha256,reason) values($1,$2,$3,'Synthetic physical correction')", [replacement, predecessor, batch]);
+}
 
 async function waitForLock(pid: number) {
   const deadline = Date.now() + 2_000;

@@ -102,7 +102,7 @@ export function createElectionRepository(database: Database, options: ElectionRe
             ({ ...entry, batch_sha256: reviewed.package_sha256 }))).onConflictDoNothing();
           await loadLedger(transaction, value.election.id, config);
           return { status: "imported" as const, package_sha256: reviewed.package_sha256 };
-        });
+        }, { isolationLevel: "read committed" });
       } catch {
         return { status: "unavailable" };
       }

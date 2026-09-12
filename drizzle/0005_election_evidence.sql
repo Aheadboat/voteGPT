@@ -126,7 +126,11 @@ $$;
 CREATE FUNCTION election_supersession_scope() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE replacement election_evidence%ROWTYPE;
 DECLARE predecessor election_evidence%ROWTYPE;
+DECLARE subject_election_id text;
 BEGIN
+  IF current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'Election corrections require read committed';
+  END IF;
   SELECT * INTO STRICT replacement FROM election_evidence WHERE id = NEW.replacement_id;
   SELECT * INTO STRICT predecessor FROM election_evidence WHERE id = NEW.predecessor_id;
   IF replacement.kind <> predecessor.kind OR
@@ -134,7 +138,17 @@ BEGIN
     IS DISTINCT FROM ROW(predecessor.election_id, predecessor.stage_id, predecessor.contest_id, predecessor.candidacy_id, predecessor.ballot_line_id) THEN
     RAISE EXCEPTION 'Election correction crosses subject or claim scope';
   END IF;
-  PERFORM 1 FROM election WHERE id = (SELECT election_id FROM election_import_batch WHERE package_sha256 = NEW.batch_sha256) FOR UPDATE;
+  SELECT coalesce(replacement.election_id, source_stage.election_id) INTO subject_election_id
+    FROM (SELECT 1) anchor
+    LEFT JOIN election_ballot_line source_line ON source_line.id = replacement.ballot_line_id
+    LEFT JOIN election_candidacy source_candidate ON source_candidate.id = coalesce(replacement.candidacy_id, source_line.candidacy_id)
+    LEFT JOIN election_contest source_contest ON source_contest.id = coalesce(replacement.contest_id, source_candidate.contest_id)
+    LEFT JOIN election_stage source_stage ON source_stage.id = coalesce(replacement.stage_id, source_contest.stage_id);
+  IF subject_election_id IS NULL OR
+    (SELECT election_id FROM election_import_batch WHERE package_sha256 = NEW.batch_sha256) IS DISTINCT FROM subject_election_id THEN
+    RAISE EXCEPTION 'Election correction batch does not match subject election';
+  END IF;
+  PERFORM 1 FROM election WHERE id = subject_election_id FOR UPDATE;
   IF EXISTS (
     WITH RECURSIVE predecessors(id) AS (
       SELECT NEW.predecessor_id

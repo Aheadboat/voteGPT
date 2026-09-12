@@ -1,6 +1,7 @@
 import { ElectionIndex } from "@/components/elections";
 import { getRuntimeElectionService } from "@/lib/election-service";
 import type { ElectionIndexResult } from "@/lib/elections";
+import styles from "@/components/elections.module.css";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,7 +16,7 @@ export default async function ElectionsPage() {
     status: "available", contests: available.flatMap((entry) => entry.contests),
     unverified_count: available.reduce((total, entry) => total + entry.unverified_count, 0),
   } : { status: "unavailable" };
-  return <main id="main-content">
+  return <main className={styles.page} id="main-content">
     <h1>Elections</h1>
     <p>Browse reviewed California election records without signing in. Coverage is limited to the admitted statewide and district contests shown below. Other jurisdictions are unavailable.</p>
     <p>Superintendent of Public Instruction write-in verification is pending. Judicial-retention questions are unavailable in this coverage.</p>
