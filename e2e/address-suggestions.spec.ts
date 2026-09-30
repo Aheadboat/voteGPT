@@ -45,6 +45,8 @@ test("lets a voter opt in, select a correction with the keyboard, then explicitl
     await input.scrollIntoViewIfNeeded();
     await expect(page.getByRole("option", { name: corrected })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const checkButton = await page.getByRole("button", { name: "Check residence" }).boundingBox();
+    expect(checkButton?.height).toBeLessThanOrEqual(60);
     await page.screenshot({ path: testInfo.outputPath(`address-suggestions-${viewport.width}.png`), fullPage: true });
   }
   await input.focus();
@@ -89,8 +91,11 @@ test("ignores interrupted suggestions, closes on Escape, and recovers after prov
   await expect(page.getByRole("option", { name: newer })).toBeVisible();
   await pending!();
   await expect(page.getByRole("option", { name: corrected })).toHaveCount(0);
+  const consent = page.getByRole("checkbox", { name: "Enable address suggestions" });
+  const consentBeforeDismiss = await consent.boundingBox();
   await input.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
+  expect((await consent.boundingBox())?.y).toBe(consentBeforeDismiss?.y);
   await input.fill("offline address");
   await expect(page.locator(".address-suggestion-status")).toHaveText(/Suggestions are unavailable/);
   await expect(input).toBeEnabled();
@@ -126,4 +131,9 @@ test("keeps every keyboard-highlighted address visible in an overflowing mobile 
     return row.top >= box.top && row.bottom <= box.bottom;
   })).toBe(true);
   await page.screenshot({ path: testInfo.outputPath("address-keyboard-overflow-375.png"), fullPage: true });
+  await page.getByRole("heading", { name: "Preview your voting residence" }).click();
+  await expect(list).toHaveCount(0);
+  await page.getByRole("checkbox", { name: "Enable address suggestions" }).uncheck();
+  await expect(page.getByRole("checkbox", { name: "Enable address suggestions" })).not.toBeChecked();
+  await expect(page.getByLabel("Voting residence address")).toHaveValue("100 Long Example");
 });

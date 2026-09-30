@@ -129,63 +129,65 @@ export function AddressAutocomplete({
 
   return (
     <div className="address-autocomplete">
-      <input
-        aria-autocomplete={available && enabled ? "list" : undefined}
-        aria-controls={showList ? "residence-address-suggestions" : undefined}
-        aria-describedby="residence-address-help residence-suggestion-status"
-        aria-expanded={available && enabled ? showList : undefined}
-        aria-activedescendant={showList && activeIndex >= 0 ? `residence-suggestion-${activeIndex}` : undefined}
-        autoComplete={enabled ? "off" : "street-address"}
-        disabled={disabled}
-        id="voting-residence"
-        maxLength={300}
-        onBlur={dismiss}
-        onChange={(event) => {
-          dismiss();
-          setSuggestions([]);
-          selectedValueRef.current = "";
-          onChange(event.target.value);
-        }}
-        onFocus={() => {
-          if (suggestions.length && responseQuery === value.trim()) setOpen(true);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            if (showList) event.preventDefault();
+      <div className="address-input">
+        <input
+          aria-autocomplete={available && enabled ? "list" : undefined}
+          aria-controls={showList ? "residence-address-suggestions" : undefined}
+          aria-describedby="residence-address-help residence-suggestion-status"
+          aria-expanded={available && enabled ? showList : undefined}
+          aria-activedescendant={showList && activeIndex >= 0 ? `residence-suggestion-${activeIndex}` : undefined}
+          autoComplete={enabled ? "off" : "street-address"}
+          disabled={disabled}
+          id="voting-residence"
+          maxLength={300}
+          onBlur={dismiss}
+          onChange={(event) => {
             dismiss();
-          } else if (showList && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-            event.preventDefault();
-            setActiveIndex((index) => event.key === "ArrowDown"
-              ? (index + 1) % suggestions.length
-              : index < 0 ? suggestions.length - 1 : (index - 1 + suggestions.length) % suggestions.length);
-          } else if (showList && event.key === "Enter" && activeIndex >= 0) {
-            event.preventDefault();
-            select(suggestions[activeIndex]);
-          }
-        }}
-        ref={inputRef}
-        required
-        role={available && enabled ? "combobox" : undefined}
-        type="text"
-        value={value}
-      />
-      {showList && (
-        <ul aria-label="Address suggestions" className="address-suggestions" id="residence-address-suggestions" ref={listRef} role="listbox">
-          {suggestions.map((suggestion, index) => (
-            <li
-              aria-selected={index === activeIndex}
-              id={`residence-suggestion-${index}`}
-              key={suggestion.id}
-              onClick={() => select(suggestion)}
-              onMouseDown={(event) => event.preventDefault()}
-              onPointerMove={() => setActiveIndex(index)}
-              role="option"
-            >
-              {suggestion.address}
-            </li>
-          ))}
-        </ul>
-      )}
+            setSuggestions([]);
+            selectedValueRef.current = "";
+            onChange(event.target.value);
+          }}
+          onFocus={() => {
+            if (suggestions.length && responseQuery === value.trim()) setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              if (showList) event.preventDefault();
+              dismiss();
+            } else if (showList && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+              event.preventDefault();
+              setActiveIndex((index) => event.key === "ArrowDown"
+                ? (index + 1) % suggestions.length
+                : index < 0 ? suggestions.length - 1 : (index - 1 + suggestions.length) % suggestions.length);
+            } else if (showList && event.key === "Enter" && activeIndex >= 0) {
+              event.preventDefault();
+              select(suggestions[activeIndex]);
+            }
+          }}
+          ref={inputRef}
+          required
+          role={available && enabled ? "combobox" : undefined}
+          type="text"
+          value={value}
+        />
+        {showList && (
+          <ul aria-label="Address suggestions" className="address-suggestions" id="residence-address-suggestions" ref={listRef} role="listbox">
+            {suggestions.map((suggestion, index) => (
+              <li
+                aria-selected={index === activeIndex}
+                id={`residence-suggestion-${index}`}
+                key={suggestion.id}
+                onClick={() => select(suggestion)}
+                onMouseDown={(event) => event.preventDefault()}
+                onPointerMove={() => setActiveIndex(index)}
+                role="option"
+              >
+                {suggestion.address}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       <p className="address-help" id="residence-address-help">
         Enter the full street address, city, state, and ZIP code. Suggestions do not verify a voting residence.
       </p>

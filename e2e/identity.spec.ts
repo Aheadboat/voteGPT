@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("keeps the public landing page anonymous and exposes sign-in choices", async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto("/");
 
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
@@ -16,6 +16,11 @@ test("keeps the public landing page anonymous and exposes sign-in choices", asyn
   await expect(
     page.getByRole("button", { name: "Continue with Google" }),
   ).toBeVisible();
+  for (const viewport of [{ width: 375, height: 812 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(viewport);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`sign-in-${viewport.width}.png`), fullPage: true });
+  }
 });
 
 test("redirects an anonymous dashboard request to a recoverable sign-in", async ({

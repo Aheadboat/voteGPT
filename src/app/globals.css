@@ -402,12 +402,19 @@ input:disabled {
   font: inherit;
 }
 
+.residence-form > button {
+  align-self: start;
+}
+
 .address-autocomplete {
   min-width: 0;
+}
+
+.address-input {
   position: relative;
 }
 
-.address-autocomplete > input {
+.address-input > input {
   box-sizing: border-box;
   width: 100%;
 }
@@ -442,6 +449,10 @@ input:disabled {
 }
 
 .address-suggestions {
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  z-index: 2;
   background: #fff;
   border: 1px solid #767676;
   border-radius: 0.4rem;

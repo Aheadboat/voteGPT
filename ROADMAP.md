@@ -734,7 +734,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **T2 RED/GREEN evidence:** Lead reports 21/21 suggestion provider/route tests passing with synthetic fixtures, bounded transport, origin/auth/consent validation, safe failures and account rate limiting.
 - **Verification evidence:** Final `npm run check` passed 45 files/1,395 tests, typecheck, zero-warning lint and optimized production build. Migration checks and 37/37 PostgreSQL contracts passed. Coordinator focused rerun passed 92/92 tests. Local browser launch was blocked by environment socket restrictions; hosted browser CI and artifact inspection remain required.
 - **Independent review:** Read-only reviewer found both initial P2 issues resolved: delayed Google initiation after navigation and keyboard-active suggestion scrolling. Final independent focused run passed 64/64 tests with no unresolved Critical/Important/P2 findings. Coordinator independently reran 92/92 identity/provider/UI/governance tests; diff checks are clean. Full final non-browser checks passed; hosted browser CI remains pending.
-- **Evidence / PR / CI:** Implementation and review fixes integrated; final fresh local non-browser checks passed; draft PR and hosted verification pending. No merge or completion claimed.
+- **Evidence / PR / CI:** Draft [PR #31](https://github.com/Aheadboat/voteGPT/pull/31) contains implementation snapshot `76e7f4616887e0695f3142e4d1e6eba39e0c8fc6`. Hosted [run 36758688824](https://github.com/Aheadboat/voteGPT/actions/runs/36758688824) passed non-browser checks and PostgreSQL contracts, and 32/33 browser tests. The remaining test exposed suggestion-list layout shift interrupting the consent-checkbox click; a focused layout correction and regression are under review. No merge or completion claimed.
 - **Next checkpoint:** Fresh full checks and hosted browser verification, then draft PR for user review. No DONE status until the normal authorized merge/closeout process.
 
 ### Coordination record
@@ -747,7 +747,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Assigned feature lead:** R3 login/address recovery lead, with disjoint auth and suggestion-provider lanes.
 - **Ownership:** Feature lead owns production/tests/project map; coordinator owns authoritative docs, governance-test maintenance, PR/review/CI and status. Auth/provider lanes do not edit shared UI surfaces.
 - **Merge order:** Pending user review; this task stops at draft PR. No F7 merge or reorder is authorized.
-- **Feature PR/CI:** Pending integration, independent review, and fresh exact-head verification.
+- **Feature PR/CI:** Draft [PR #31](https://github.com/Aheadboat/voteGPT/pull/31); first hosted head `76e7f4616887e0695f3142e4d1e6eba39e0c8fc6` passed non-browser/database verification and 32/33 browser tests. Layout correction is pending exact-head rerun.
 - **Blockers:** No paid provider or credential provisioning authorized. Real Google smoke test requires deployed OAuth credentials; fixture tests remain deterministic evidence only.
 - **Feature merge:** Pending; not authorized by the request to send a PR.
 - **Post-merge evidence:** Pending; no merge performed.
