@@ -21,6 +21,33 @@ import type { ResolutionResponse } from "@/lib/residence";
 import type { SavedResidenceView } from "@/lib/saved-residence";
 import { ResidencePreview } from "./residence-preview";
 
+describe("opted-in residence suggestion integration", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("fills a selected correction but still requires an explicit residence check", async () => {
+    const selected = "123 Main Street, Springfield, Illinois 62701";
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === "/api/v1/residence") return Response.json({ status: "empty" });
+      if (url === "/api/v1/location/suggest") return Response.json({
+        status: "ok", suggestions: [{ id: "one", address: selected }],
+      });
+      return Response.json({ status: "no_match", message: "No matching divisions." });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ResidencePreview suggestionsAvailable />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Enable address suggestions" }));
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "123 Mian Street" } });
+    fireEvent.click(await screen.findByRole("option", { name: selected }));
+    expect(screen.getByLabelText("Voting residence address")).toHaveValue(selected);
+    expect(fetchMock.mock.calls.filter(([url]) => url === "/api/v1/location/resolve")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Check residence" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/v1/location/resolve", expect.objectContaining({
+      body: JSON.stringify({ kind: "address", address: selected }),
+    })));
+    expect(screen.queryByRole("button", { name: "Save residence" })).not.toBeInTheDocument();
+  });
+});
+
 const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 

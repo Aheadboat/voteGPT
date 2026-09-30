@@ -55,6 +55,7 @@ const {
 }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getRuntimeAuth: vi.fn() }));
 vi.mock("@/db", () => ({
@@ -240,6 +241,17 @@ const savedResidence = {
 } as const satisfies SavedResidenceView;
 
 describe("signed-in dashboard", () => {
+  it("exposes opt-in suggestions only when a server-side provider is configured", async () => {
+    vi.stubEnv("PHOTON_BASE_URL", "https://geocoder.example.test");
+    try {
+      render(await DashboardPage());
+      expect(screen.getByRole("checkbox", { name: "Enable address suggestions" })).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("https://geocoder.example.test");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(headers).mockResolvedValue(

@@ -8,6 +8,7 @@ import {
   type FormEvent,
 } from "react";
 import * as navigation from "next/navigation";
+import { AddressAutocomplete } from "./address-autocomplete";
 import type {
   ResidenceInput,
   ResolutionErrorResponse,
@@ -49,7 +50,7 @@ const unauthenticatedMessage =
 const strongResidenceEtagPattern =
   /^"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"$/;
 
-export function ResidencePreview() {
+export function ResidencePreview({ suggestionsAvailable = false }: { suggestionsAvailable?: boolean } = {}) {
   const router = "useRouter" in navigation ? navigation.useRouter() : null;
   const [address, setAddress] = useState("");
   const [pending, setPending] = useState(false);
@@ -872,18 +873,15 @@ export function ResidencePreview() {
 
         <form className="residence-form" onSubmit={submitAddress}>
           <label htmlFor="voting-residence">Voting residence address</label>
-          <input
-            autoComplete="street-address"
+          <AddressAutocomplete
+            available={suggestionsAvailable}
             disabled={pending || mutationPending}
-            id="voting-residence"
-            maxLength={300}
-            onChange={(event) => {
-              setAddress(event.target.value);
+            inputRef={inputRef}
+            onChange={(value) => {
+              setAddress(value);
               clearCandidate();
             }}
-            ref={inputRef}
-            required
-            type="text"
+            onUnauthenticated={() => invalidatePrivateResidence(unauthenticatedMessage)}
             value={address}
           />
           <button disabled={pending || mutationPending} type="submit">

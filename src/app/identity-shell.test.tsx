@@ -111,6 +111,90 @@ describe("public identity shell", () => {
     ).toBeInTheDocument();
   });
 
+  it("recovers from an offline email request without losing the address", async () => {
+    vi.mocked(authClient.signIn.magicLink).mockRejectedValueOnce(new Error("offline"));
+    render(<SignInForm />);
+    fireEvent.change(screen.getByLabelText("Email address"), {
+      target: { value: "voter@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Email me a sign-in link" }));
+
+    await waitFor(() => expect(screen.getByText(
+      "We could not reach the sign-in service. Check your connection and try again.",
+    )).toBeInTheDocument());
+    expect(screen.getByLabelText("Email address")).toHaveValue("voter@example.com");
+    expect(screen.getByRole("button", { name: "Email me a sign-in link" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+  });
+
+  it("recovers from an offline Google request", async () => {
+    vi.mocked(authClient.signIn.social).mockRejectedValueOnce(new Error("offline"));
+    render(<SignInForm />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    await waitFor(() => expect(screen.getByText(
+      "We could not reach the sign-in service. Check your connection and try again.",
+    )).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+  });
+
+  it("offers a retry if Google navigation does not leave the page", async () => {
+    vi.mocked(authClient.signIn.social).mockResolvedValue({
+      data: { redirect: true, url: "https://accounts.google.com/o/oauth2/v2/auth" },
+      error: null,
+    });
+    render(<SignInForm />);
+    vi.stubGlobal("window", { document, location: { assign: vi.fn() } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+
+    await waitFor(() => expect(screen.getByRole("button", {
+      name: "Continue with Google",
+    })).toBeEnabled());
+    expect(screen.getByText("Google should open in this tab. If it does not, try again.")).toBeInTheDocument();
+  });
+
+  it("shows only available sign-in methods", () => {
+    render(<SignInForm methods={{ email: false, google: true }} />);
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+    expect(screen.queryByText("or")).not.toBeInTheDocument();
+  });
+
+  it("keeps public information reachable when no method is configured", () => {
+    render(<SignInForm methods={{ email: false, google: false }} />);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText("Sign-in is not available right now. You can still browse public information.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Browse public information" })).toHaveAttribute("href", "/");
+  });
+
+  it("shows which request is pending and ignores repeated submissions", async () => {
+    let complete!: (value: { data: { status: boolean }; error: null }) => void;
+    vi.mocked(authClient.signIn.magicLink).mockImplementationOnce(() => new Promise((resolve) => { complete = resolve; }));
+    render(<SignInForm />);
+    fireEvent.change(screen.getByLabelText("Email address"), { target: { value: "voter@example.com" } });
+    const form = screen.getByRole("button", { name: "Email me a sign-in link" }).closest("form")!;
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    expect(screen.getByText("Sending your sign-in link…")).toBeInTheDocument();
+    expect(authClient.signIn.magicLink).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
+    complete({ data: { status: true }, error: null });
+    await waitFor(() => expect(screen.getByText("Check your email. The link expires soon and can be used once.")).toBeInTheDocument());
+  });
+
+  it("preserves a safe destination across Google initiation and recovery", async () => {
+    vi.mocked(authClient.signIn.social).mockResolvedValue({ data: null, error: { message: "unavailable", status: 503, statusText: "Unavailable" } });
+    render(<SignInForm methods={{ email: false, google: true }} callbackURL="/dashboard?level=state&mode=in-office&category=legislature" />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await waitFor(() => expect(screen.getByText("Google sign-in did not complete. Try again.")).toBeInTheDocument());
+    expect(authClient.signIn.social).toHaveBeenCalledWith({
+      callbackURL: "/dashboard?level=state&mode=in-office&category=legislature",
+      errorCallbackURL: "/sign-in?next=%2Fdashboard%3Flevel%3Dstate%26mode%3Din-office%26category%3Dlegislature",
+      disableRedirect: true,
+      provider: "google",
+    }, { signal: expect.any(AbortSignal) });
+  });
+
   it("requires typed confirmation before account deletion", () => {
     render(<AccountControls />);
 

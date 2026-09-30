@@ -75,3 +75,82 @@ test("keeps the primary sign-in flow in a visible keyboard order", async ({
     await expect(target).toBeFocused();
   }
 });
+
+test("recovers both sign-in methods from a network interruption", async ({ page }) => {
+  await page.route("**/api/auth/sign-in/**", (route) => route.abort("internetdisconnected"));
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Continue with Google" }).click();
+  await expect(page.getByText("We could not reach the sign-in service. Check your connection and try again.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+
+  await page.getByLabel("Email address").fill("voter@example.com");
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(page.getByText("We could not reach the sign-in service. Check your connection and try again.")).toBeVisible();
+  await expect(page.getByLabel("Email address")).toHaveValue("voter@example.com");
+  await expect(page.getByRole("button", { name: "Email me a sign-in link" })).toBeEnabled();
+  await expect(page.getByRole("link", { name: "Browse public information" })).toHaveAttribute("href", "/");
+});
+
+test("does not initiate another Google request while one is pending", async ({ page }) => {
+  let requests = 0;
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    requests += 1;
+    await pending;
+    await route.fulfill({ status: 503, json: { message: "Temporarily unavailable" } });
+  });
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Continue with Google" }).dblclick();
+  await expect(page.getByText("Connecting to Google…")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Email me a sign-in link" })).toBeDisabled();
+  expect(requests).toBe(1);
+  release();
+  await expect(page.getByText("Google sign-in did not complete. Try again or use email.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeEnabled();
+});
+
+test("keeps sign-in return navigation on the application dashboard", async ({ page }) => {
+  let submitted: Record<string, string> | undefined;
+  await page.route("**/api/auth/sign-in/magic-link", async (route) => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ json: { status: true } });
+  });
+  await page.goto("/sign-in?next=https%3A%2F%2Fattacker.example");
+  await page.getByLabel("Email address").fill("voter@example.com");
+  await page.getByRole("button", { name: "Email me a sign-in link" }).click();
+  await expect(page.getByText("Check your email. The link expires soon and can be used once.")).toBeVisible();
+  expect(submitted).toMatchObject({ callbackURL: "/dashboard", errorCallbackURL: "/sign-in" });
+});
+
+test("leaving sign-in cancels a delayed Google response", async ({ page }) => {
+  let release!: () => void;
+  let started!: () => void;
+  const requested = new Promise<void>((resolve) => { started = resolve; });
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let googleRequests = 0;
+  await page.route("https://accounts.google.com/**", async (route) => {
+    googleRequests += 1;
+    await route.abort();
+  });
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    started();
+    await pending;
+    // An aborted route can no longer accept a response. If it is still live,
+    // this deliberately delayed response must not navigate away from home.
+    await route.fulfill({ json: {
+      redirect: true,
+      url: "https://accounts.google.com/o/oauth2/v2/auth?state=fixture",
+    } }).catch(() => undefined);
+  });
+  await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Continue with Google" }).click();
+  await requested;
+  await page.getByRole("link", { name: "Browse public information" }).click();
+  await expect(page).toHaveURL("/");
+  release();
+  await page.waitForLoadState("networkidle");
+  await expect(page).toHaveURL("/");
+  expect(googleRequests).toBe(0);
+});

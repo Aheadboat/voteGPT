@@ -179,6 +179,8 @@ test("resolves a manual residence with equal provenance and coverage", async ({
   await tabTo(page, address);
 
   for (const target of [
+    page.getByRole("checkbox", { name: "Enable address suggestions" }),
+    page.getByRole("link", { name: "OpenStreetMap contributors" }),
     page.getByRole("button", { name: "Check residence" }),
     page.getByRole("button", { name: "Use this device once" }),
   ]) {
@@ -992,7 +994,7 @@ async function expectSavedGetCountStable(
 }
 
 function residenceStatus(page: Page) {
-  return page.locator(".residence-preview").getByRole("status");
+  return page.locator(".residence-preview .residence-status");
 }
 
 async function tabTo(page: Page, target: Locator) {
