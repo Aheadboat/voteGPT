@@ -45,6 +45,7 @@ export default defineConfig({
       GOOGLE_CIVIC_API_KEY: "",
       GOOGLE_CLIENT_ID: "e2e",
       GOOGLE_CLIENT_SECRET: "e2e",
+      PHOTON_BASE_URL: "https://photon.example.test",
       RESIDENCE_ENCRYPTION_ACTIVE_KEY: "e2e-legacy",
       RESIDENCE_ENCRYPTION_KEYS: residenceEncryptionKeys,
     },

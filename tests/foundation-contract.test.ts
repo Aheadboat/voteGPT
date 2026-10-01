@@ -8,6 +8,59 @@ import { describe, expect, it } from "vitest"
 const repositoryRoot = process.cwd()
 const g1ReviewedHead = "a64aa7b7f5cd3f13a99b1baa1531456a261bdeba"
 const f7DependencyBase = "8bf9efb37a1e07d40aaea7a9caca12ab327c942a"
+const r3DependencyBase = "bfd1fd17a37f74990d62f2553dc767d5369cbf5f"
+const r3AllowedPaths = [
+  ".env.example",
+  ".github/workflows/ci.yml",
+  "PROJECT-MAP.md",
+  "README.md",
+  "ROADMAP.md",
+  "tests/foundation-contract.test.ts",
+  "tests/ci-artifacts.test.ts",
+  "playwright.config.ts",
+  "e2e/address-suggestions.spec.ts",
+  "e2e/federal-officials.spec.ts",
+  "e2e/identity.spec.ts",
+  "e2e/residence.spec.ts",
+  "src/app/api/v1/location/suggest/route.ts",
+  "src/app/api/v1/location/suggest/route.test.ts",
+  "src/app/dashboard/page.tsx",
+  "src/app/dashboard/page.test.tsx",
+  "src/app/globals.css",
+  "src/app/identity-shell.test.tsx",
+  "src/app/sign-in/page.tsx",
+  "src/app/sign-in/page.test.tsx",
+  "src/auth.test.ts",
+  "src/components/address-autocomplete.tsx",
+  "src/components/address-autocomplete.test.tsx",
+  "src/components/residence-preview.tsx",
+  "src/components/residence-preview.test.tsx",
+  "src/components/sign-in-form.tsx",
+  "src/lib/address-suggestions-contract.ts",
+  "src/lib/address-suggestions.ts",
+  "src/lib/address-suggestions.test.ts",
+  "src/lib/auth-client.ts",
+  "src/lib/auth-client.test.ts",
+  "src/lib/auth.ts",
+  "src/lib/auth-runtime.test.ts",
+  "src/lib/auth-navigation.test.tsx",
+  "tests/fixtures/address-suggestions.ts",
+]
+const r3ReadmeStatus =
+  "R3 — Login and Address Search Recovery is being prepared on `codex/r3-login-address` as a separate review-only draft PR. Its bounded scope is Google/SSO recovery and optional address autocomplete. It does not merge or deploy changes or alter the separate F7 feature branch. See [R3 scope and verification](ROADMAP.md).\n\n"
+const r3ArtifactStep = `      - name: Retain synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: synthetic-browser-evidence
+          path: |
+            test-results/**/*.png
+            test-results/**/trace.zip
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false
+
+`
 const expectedG1GovernanceSnapshots = {
   "README.md":
     "a31c9a633916534599b7e0b89242b96ad0928b0a932545c2f230f00e53c0ab6a",
@@ -73,6 +126,106 @@ function expectF7DesignActivation(roadmap: string, readme: string, paths: string
   for (const path of paths) {
     expect(["ROADMAP.md", "README.md", "tests/foundation-contract.test.ts"], "F7 pre-Gate-A changed path: " + path).toContain(path)
   }
+}
+
+function expectR3RecoveryScope(roadmap: string, readme: string, paths: string[]): void {
+  const normalizedRoadmap = normalizeGovernanceDocument(roadmap)
+  const normalizedReadme = normalizeGovernanceDocument(readme)
+  const item = readRoadmapItem(normalizedRoadmap, "R3")
+  const status = readRoadmapStatuses(normalizedRoadmap).get("R3") ?? ""
+  const phase = expectedActivePhase(status)
+  expect(["DISCOVER/DESIGN/PLAN", "RED", "GREEN", "REFACTOR", "VERIFIED"]).toContain(phase)
+  expect(item.split("\n", 1)[0]).toBe(
+    "## R3 — Login and Address Search Recovery [" + status + "]",
+  )
+  expect(readCoordinationField(item, "Phase").replaceAll("`", "")).toBe(phase)
+
+  // Only progress evidence can evolve. The authorization, design, provider,
+  // ownership, branch and no-merge boundaries remain immutable.
+  const body = item.slice(item.indexOf("\n") + 1)
+  const evidenceStart = body.indexOf("- **Baseline evidence:**")
+  expect(evidenceStart).toBeGreaterThan(0)
+  expect(governanceSha256(body.slice(0, evidenceStart)), "bounded R3 scope and design").toBe(
+    "b91900a7d9548e9fc8234d9baa69bdae7ee86cf13ff888a3083146de30e04bf4",
+  )
+  const coordination = readMarkdownSection(item, "### Coordination record")
+  expect(body.endsWith(coordination), "R3 has no unvalidated trailing section").toBe(true)
+  const evidence = body.slice(evidenceStart, body.indexOf(coordination)).trim().split("\n")
+  const evidenceLabels = new Set<string>()
+  for (const line of evidence) {
+    const match = line.match(/^- \*\*(Baseline evidence|T[1-4] RED\/GREEN evidence|Evidence \/ PR \/ CI|Verification evidence|Independent review|Remaining limitations|Next checkpoint):\*\* \S.*$/)
+    expect(match, "R3 permits only named, single-line progress evidence").not.toBeNull()
+    const label = match?.[1] ?? ""
+    expect(evidenceLabels.has(label), "duplicate R3 evidence: " + label).toBe(false)
+    evidenceLabels.add(label)
+  }
+  for (const label of ["Baseline evidence", "Evidence / PR / CI", "Next checkpoint"]) {
+    expect(evidenceLabels.has(label), "required R3 evidence: " + label).toBe(true)
+  }
+  const immutableCoordination = coordination
+    .slice("### Coordination record\n".length)
+    .replace(/^- \*\*(?:Phase|Feature PR\/CI|Blockers):\*\*.*\n/gm, "")
+  expect(governanceSha256(immutableCoordination), "R3 branch-local ownership and no-merge boundaries").toBe(
+    "c0a1fb274064d82e24eb19f87419f81f93e9cf50268e8276d14e5109f8d2710c",
+  )
+  for (const label of ["Phase", "Feature PR/CI", "Blockers"]) {
+    readCoordinationField(item, label)
+    expect(coordination.split("- **" + label + ":**")).toHaveLength(2)
+  }
+
+  const identitySetup = readMarkdownSection(normalizedReadme, "## Local identity setup")
+  const suggestionsSetup = readMarkdownSection(normalizedReadme, "## Optional address suggestions")
+  expect(governanceSha256(identitySetup), "R3 identity setup instructions").toBe(
+    "f92a251e86b925007210a75974393248ed10ce1f23dca3ff433837022c7b7b93",
+  )
+  expect(governanceSha256(suggestionsSetup), "R3 optional provider instructions").toBe(
+    "5109dc6dc539b846e81d737ccdc61182a8d10b9b0c0819aeb04dc24cb28f401a",
+  )
+  let reconstructedReadme = replaceExactlyOnce(normalizedReadme, r3ReadmeStatus, "", "R3 README status")
+  reconstructedReadme = replaceExactlyOnce(reconstructedReadme, suggestionsSetup, "", "R3 provider setup")
+  reconstructedReadme = replaceExactlyOnce(
+    reconstructedReadme,
+    identitySetup,
+    readMarkdownSection(normalizeGovernanceDocument(readHistoricalFile(r3DependencyBase, "README.md")), "## Local identity setup"),
+    "R3 identity setup",
+  )
+  const reconstructedRoadmap = replaceExactlyOnce(normalizedRoadmap, item, "", "R3 recovery section")
+  // Reuse the original F7 hash and complete-document reconstruction unchanged.
+  expectF7DesignActivation(reconstructedRoadmap, reconstructedReadme, [])
+  for (const path of paths) {
+    expect(r3AllowedPaths, "R3 authorized changed path: " + path).toContain(path)
+  }
+}
+
+function expectR3IntegrationBoundaries(workflow: string, federalJourney: string, dashboard: string): void {
+  const baseWorkflow = normalizeGovernanceDocument(readHistoricalFile(r3DependencyBase, ".github/workflows/ci.yml"))
+  expect(normalizeGovernanceDocument(workflow)).toBe(replaceExactlyOnce(
+    baseWorkflow,
+    "      - name: Destroy disposable databases\n",
+    r3ArtifactStep + "      - name: Destroy disposable databases\n",
+    "R3 synthetic artifact step only",
+  ))
+  const baseFederalJourney = normalizeGovernanceDocument(readHistoricalFile(r3DependencyBase, "e2e/federal-officials.spec.ts"))
+  const oldStatusSelector = 'page.locator(".residence-preview").getByRole("status")'
+  expect(baseFederalJourney.split(oldStatusSelector)).toHaveLength(3)
+  expect(normalizeGovernanceDocument(federalJourney)).toBe(baseFederalJourney.replaceAll(
+    oldStatusSelector,
+    'page.locator(".residence-preview .residence-status")',
+  ))
+  const baseDashboard = normalizeGovernanceDocument(readHistoricalFile(r3DependencyBase, "src/app/dashboard/page.tsx"))
+  const authImport = 'import { getRuntimeAuth } from "@/lib/auth";\n'
+  const withSuggestionImport = replaceExactlyOnce(
+    baseDashboard,
+    authImport,
+    authImport + 'import { areAddressSuggestionsConfigured } from "@/lib/address-suggestions";\n',
+    "R3 dashboard configuration import only",
+  )
+  expect(normalizeGovernanceDocument(dashboard)).toBe(replaceExactlyOnce(
+    withSuggestionImport,
+    "<ResidencePreview />",
+    "<ResidencePreview suggestionsAvailable={areAddressSuggestionsConfigured()} />",
+    "R3 dashboard residence availability only",
+  ))
 }
 
 function governanceSha256(contents: string): string {
@@ -1250,6 +1403,10 @@ describe("development foundation", () => {
     expect(findUnsafeEnvironmentEntries("civic_provider_url=\n")).toEqual([
       "civic_provider_url=",
     ])
+    expect(findUnsafeEnvironmentEntries("PHOTON_BASE_URL=\n")).toEqual([])
+    expect(findUnsafeEnvironmentEntries("PHOTON_BASE_URL=https://photon.example.test\n")).toEqual([
+      "PHOTON_BASE_URL=https://photon.example.test",
+    ])
   })
 
   it("exposes the standard local verification commands", () => {
@@ -1308,13 +1465,14 @@ describe("development foundation", () => {
       [...workflow.matchAll(/^\s*if:\s*(.+?)\s*$/gm)].map(
         ([, condition]) => condition,
       ),
-    ).toEqual(["always()"])
+    ).toEqual(["always()", "always()"])
     expectTokensInOrder(workflow, [
       "Validate and apply database migrations",
       "Run PostgreSQL auth contract",
       "Run non-E2E checks",
       "Install Chromium",
       "Provision and run marked destructive E2E tests",
+      "Retain synthetic browser evidence",
       "Destroy disposable databases",
     ])
   })
@@ -1340,6 +1498,7 @@ describe("development foundation", () => {
         "GOOGLE_CLIENT_SECRET=",
         "GOOGLE_CIVIC_API_KEY=",
         "OPENSTATES_API_KEY=",
+        "PHOTON_BASE_URL=",
         "RESIDENCE_ENCRYPTION_ACTIVE_KEY=",
         "RESIDENCE_ENCRYPTION_KEYS=",
       ].sort(),
@@ -1380,10 +1539,17 @@ describe("repository context and hygiene contract", () => {
     expectTokensInOrder(capabilities, [
       "Public shell, identity, and account",
       "Residence preview",
+      "Optional address suggestions",
       "Saved residence",
       "Federal officials",
       "Persistence",
       "Verification and delivery",
+    ])
+    expect(readLocalMarkdownLinks(readMarkdownSection(projectMap, "### Optional address suggestions"))).toEqual([
+      "src/components/address-autocomplete.tsx",
+      "src/app/api/v1/location/suggest/route.ts",
+      "src/lib/address-suggestions.ts",
+      "src/lib/address-suggestions-contract.ts",
     ])
     for (const path of localLinks) {
       expect(
@@ -1986,7 +2152,7 @@ describe("concurrent roadmap delivery contract", () => {
     )
   })
 
-  it("activates only F7 design after the immutable G1 closeout", () => {
+  it("preserves F7's design-only activation at the immutable pre-R3 base", () => {
     ensureG1MainHistoryAvailable()
     execFileSync("git", ["merge-base", "--is-ancestor", f7DependencyBase, "HEAD"], { cwd: repositoryRoot, stdio: "pipe" })
     const closeout = readGitCommitRecord(f7DependencyBase)
@@ -1995,14 +2161,9 @@ describe("concurrent roadmap delivery contract", () => {
       "34c60a3b3eeeb8a784a8ace72a9f7e77b316d0aa",
     ])
     expect(closeout.message.split("\n", 1)[0]).toBe("Merge pull request #29 from Aheadboat/codex/g1-closeout")
-    const changed = [...new Set([
-      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z", f7DependencyBase, "HEAD"]),
-      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z"]),
-      ...readNullDelimitedGitPaths(["diff", "--cached", "--name-only", "-z"]),
-      ...readNullDelimitedGitPaths(["ls-files", "--others", "--exclude-standard", "-z"]),
-    ])]
-    const roadmap = readRepositoryFile("ROADMAP.md")
-    const readme = readRepositoryFile("README.md")
+    const changed = readNullDelimitedGitPaths(["diff", "--name-only", "-z", f7DependencyBase, r3DependencyBase])
+    const roadmap = readHistoricalFile(r3DependencyBase, "ROADMAP.md")
+    const readme = readHistoricalFile(r3DependencyBase, "README.md")
     expectF7DesignActivation(roadmap, readme, changed)
     for (const [before, after] of [
       ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
@@ -2025,6 +2186,90 @@ describe("concurrent roadmap delivery contract", () => {
     for (const path of ["src/lib/elections.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "scratch.txt"]) {
       expect(() => expectF7DesignActivation(roadmap, readme, [...changed, path])).toThrow()
     }
+  }, 30_000)
+
+  it("permits only the authorized branch-local R3 recovery while retaining F7's freeze", () => {
+    ensureG1MainHistoryAvailable()
+    execFileSync("git", ["merge-base", "--is-ancestor", r3DependencyBase, "HEAD"], { cwd: repositoryRoot, stdio: "pipe" })
+    const changed = [...new Set([
+      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z", r3DependencyBase, "HEAD"]),
+      ...readNullDelimitedGitPaths(["diff", "--name-only", "-z"]),
+      ...readNullDelimitedGitPaths(["diff", "--cached", "--name-only", "-z"]),
+      ...readNullDelimitedGitPaths(["ls-files", "--others", "--exclude-standard", "-z"]),
+    ])]
+    const roadmap = readRepositoryFile("ROADMAP.md")
+    const readme = readRepositoryFile("README.md")
+    expectR3RecoveryScope(roadmap, readme, changed)
+    const item = readRoadmapItem(roadmap, "R3")
+    const currentStatus = readRoadmapStatuses(roadmap).get("R3") ?? ""
+    const currentPhase = readCoordinationField(item, "Phase")
+    for (const status of ["IN PROGRESS (DISCOVER/DESIGN/PLAN)", "IN PROGRESS (RED)", "IN PROGRESS (GREEN)", "IN PROGRESS (REFACTOR)", "VERIFIED"]) {
+      const progressedItem = item
+        .replace("[" + currentStatus + "]", "[" + status + "]")
+        .replace("- **Phase:** " + currentPhase, "- **Phase:** " + expectedActivePhase(status))
+      expectR3RecoveryScope(roadmap.replace(item, progressedItem), readme, changed)
+    }
+    for (const [before, after] of [
+      ["F7 election implementation is excluded.", "F7 election implementation is included."],
+      ["No activation merge to main has occurred or is claimed.", "The R3 activation is approved on main."],
+      ["No feature merge, deployment, new paid service, or persistent credential change is authorized", "Feature merge, deployment, new paid service, and persistent credential change are authorized"],
+      ["Pending; not authorized by the request to send a PR.", "Merged after approval."],
+      ["Pending; no merge performed.", "Production deployed."],
+      ["Pending; no closeout created.", "DONE on main."],
+      ["Human Gate B — review final delivered behavior", "Human Gate B approved — review final delivered behavior"],
+      ["## F8 — Neutral Candidate Comparison [TODO]", "## F8 — Neutral Candidate Comparison [IN PROGRESS (RED)]"],
+    ]) {
+      const mutated = roadmap.replace(before, after)
+      expect(mutated).not.toBe(roadmap)
+      expect(() => expectR3RecoveryScope(mutated, readme, changed)).toThrow()
+    }
+    for (const suffix of ["\n- **Extra authorization:** Implement elections.\n", "### Extra authorization\n\nImplement elections.\n", "\n## R3 — Duplicate [TODO]\n"]) {
+      expect(() => expectR3RecoveryScope(roadmap.replace(item, item + suffix), readme, changed)).toThrow()
+    }
+    for (const status of ["TODO", "DONE", "IN PROGRESS (DEPLOY)"]) {
+      expect(() => expectR3RecoveryScope(roadmap.replace(item, item.replace("[" + currentStatus + "]", "[" + status + "]")), readme, changed)).toThrow()
+    }
+    const f7 = readRoadmapItem(roadmap, "F7")
+    for (const [before, after] of [
+      ["[IN PROGRESS (DISCOVER/DESIGN/PLAN)]", "[IN PROGRESS (RED)]"],
+      ["- **Human Gate A approval:** Pending;", "- **Human Gate A approval:** Approved;"],
+      ["- **Human Gate B approval:** Pending;", "- **Human Gate B approval:** Approved;"],
+    ]) {
+      expect(() => expectR3RecoveryScope(roadmap.replace(f7, f7.replace(before, after)), readme, changed)).toThrow()
+    }
+    for (const suffix of ["\nGlobal workflow no longer requires approval.\n", "\nVendor access authorized.\n"]) {
+      expect(() => expectR3RecoveryScope(roadmap + suffix, readme, changed)).toThrow()
+      expect(() => expectR3RecoveryScope(roadmap, readme + suffix, changed)).toThrow()
+    }
+    expect(() => expectR3RecoveryScope(roadmap, readme.replace("It does not merge or deploy changes", "It may merge and deploy changes"), changed)).toThrow()
+    for (const path of ["AGENTS.md", ".github/workflows/deploy.yml", "src/lib/elections.ts", "src/lib/address-suggestions-election.ts", "src/app/api/v1/location/suggest/admin.ts", "src/components/elections.tsx", "src/db/schema.ts", "G1-VENDOR-DECISION.md", "drizzle/0005_elections.sql", "package.json", "scratch.txt"]) {
+      expect(() => expectR3RecoveryScope(roadmap, readme, [...changed, path])).toThrow()
+    }
+  }, 30_000)
+
+  it("limits R3 integration to residence wiring, two status selectors, and synthetic CI artifacts", () => {
+    ensureG1MainHistoryAvailable()
+    const workflow = readRepositoryFile(".github/workflows/ci.yml")
+    const federalJourney = readRepositoryFile("e2e/federal-officials.spec.ts")
+    const dashboard = readRepositoryFile("src/app/dashboard/page.tsx")
+    expectR3IntegrationBoundaries(workflow, federalJourney, dashboard)
+    for (const [before, after] of [
+      ["retention-days: 7", "retention-days: 90"],
+      ["test-results/**/*.png", "**/*"],
+      ["include-hidden-files: false", "include-hidden-files: true"],
+      ["if: always()", "if: success()"],
+      ["actions/upload-artifact@v7", "untrusted/upload-artifact@v1"],
+      ["contents: read", "contents: write"],
+      ["run: npm run check", "run: echo skipped"],
+      ["Destroy disposable databases", "Skip database cleanup"],
+    ]) {
+      const mutated = workflow.replace(before, after)
+      expect(mutated).not.toBe(workflow)
+      expect(() => expectR3IntegrationBoundaries(mutated, federalJourney, dashboard)).toThrow()
+    }
+    expect(() => expectR3IntegrationBoundaries(workflow, federalJourney.replace("Check residence", "Skip residence"), dashboard)).toThrow()
+    expect(() => expectR3IntegrationBoundaries(workflow, federalJourney, dashboard.replace("Election information is unavailable until F7.", "Election results are verified."))).toThrow()
+    expect(() => expectR3IntegrationBoundaries(workflow, federalJourney, dashboard + '\nimport { Elections } from "@/components/elections";\n')).toThrow()
   }, 30_000)
 
   it("preserves the reviewed G1 lifecycle and adversarial regressions", () => {

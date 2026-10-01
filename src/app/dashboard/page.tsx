@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createDatabase } from "@/db";
 import { getRuntimeAuth } from "@/lib/auth";
+import { areAddressSuggestionsConfigured } from "@/lib/address-suggestions";
 import { AccountControls } from "@/components/account-controls";
 import { FederalOfficials } from "@/components/federal-officials";
 import { GovernmentNavigation } from "@/components/government-navigation";
@@ -75,7 +76,7 @@ export default async function DashboardPage({
             panels={{ [navigation.level]: selectedPanel }}
             searchParams={{ level: navigation.level, mode: navigation.mode }}
           />
-          <ResidencePreview />
+          <ResidencePreview suggestionsAvailable={areAddressSuggestionsConfigured()} />
         </AccountControls>
       </section>
     </main>

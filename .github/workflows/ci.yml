@@ -79,6 +79,18 @@ jobs:
           SQL
           E2E_DATABASE_MARKER="$marker" E2E_DATABASE_URL="$e2e_database_url" E2E_DESTRUCTIVE_OPT_IN="1" npm run test:e2e
 
+      - name: Retain synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: synthetic-browser-evidence
+          path: |
+            test-results/**/*.png
+            test-results/**/trace.zip
+          retention-days: 7
+          if-no-files-found: ignore
+          include-hidden-files: false
+
       - name: Destroy disposable databases
         if: always()
         env:

@@ -599,7 +599,7 @@ async function saveResidence(page: Page, address: string) {
   await input.fill(address);
   await page.getByRole("button", { name: "Check residence" }).click();
   await expect(
-    page.locator(".residence-preview").getByRole("status"),
+    page.locator(".residence-preview .residence-status"),
   ).toHaveText("Residence matched. Review the divisions and source below.");
   await page
     .getByRole("checkbox", {
@@ -609,7 +609,7 @@ async function saveResidence(page: Page, address: string) {
     .check();
   await page.getByRole("button", { name: "Save residence" }).click();
   await expect(
-    page.locator(".residence-preview").getByRole("status"),
+    page.locator(".residence-preview .residence-status"),
   ).toHaveText(/Saved residence was (?:saved|replaced)\./);
 }
 
