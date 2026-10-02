@@ -715,7 +715,7 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **Closeout PR/CI/merge:** [PR #29](https://github.com/Aheadboat/voteGPT/pull/29) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
 - **Next Human Gate:** None; Human Gate B was approved before the feature merge, this closeout activates no later item, and G1 is complete only when this closeout merge reaches `main`.
 
-## R3 — Login and Address Search Recovery [IN PROGRESS (REFACTOR)]
+## R3 — Login and Address Search Recovery [DONE]
 
 - **Authorization (2026-09-30):** User requested independent planning, implementation, iteration, verification, and a review PR for Google/SSO login and address search. Address scope is an autocomplete dropdown with tolerant/approximate matching; map-point selection is optional to evaluate. SSO means single sign-on, not SSL.
 - **Task-specific execution direction:** The user's latest instruction, “come up with a plan, do it on your own ... iterate ... send me a PR once you're done,” delegates intermediate design decisions for this bounded recovery. This branch records the exception to the earlier activation-merge and Human Gate A sequence for this task only. No activation merge to main has occurred or is claimed. Global workflow rules and F7 remain unchanged. No feature merge, deployment, new paid service, or persistent credential change is authorized; stop at the draft PR for review.
@@ -732,27 +732,29 @@ Get-ChildItem -LiteralPath drizzle -File -Recurse | Sort-Object FullName | Get-F
 - **T3 RED/GREEN evidence:** Lead observed missing-autocomplete-component RED and explicit residence-integration failure, then 78/78 tests passed across the new 10-test suggestion component suite and residence component suite. Covered consent before transmission, debounce, keyboard selection, no automatic check/save, out-of-order responses, Escape, blur, disabling, offline and expired-session recovery. Independent/full verification remains pending.
 - **T1 RED/GREEN evidence:** Lead reports 47/47 focused identity tests passing after Google-only configuration and recovery regressions. Deterministic Better Auth redirect/state/callback/session tests use a mocked Google token endpoint; no live OAuth or SMTP success is claimed.
 - **T2 RED/GREEN evidence:** Lead reports 21/21 suggestion provider/route tests passing with synthetic fixtures, bounded transport, origin/auth/consent validation, safe failures and account rate limiting.
-- **Verification evidence:** Final `npm run check` passed 45 files/1,395 tests, typecheck, zero-warning lint and optimized production build. Migration checks and 37/37 PostgreSQL contracts passed. Coordinator focused rerun passed 92/92 tests. Local browser launch was blocked by environment socket restrictions; hosted browser CI and artifact inspection remain required.
-- **Independent review:** Read-only reviewer found both initial P2 issues resolved: delayed Google initiation after navigation and keyboard-active suggestion scrolling. Final independent focused run passed 64/64 tests with no unresolved Critical/Important/P2 findings. Coordinator independently reran 92/92 identity/provider/UI/governance tests; diff checks are clean. Full final non-browser checks passed; hosted browser CI remains pending.
-- **Evidence / PR / CI:** Draft [PR #31](https://github.com/Aheadboat/voteGPT/pull/31) contains implementation snapshot `76e7f4616887e0695f3142e4d1e6eba39e0c8fc6`. Hosted [run 36758688824](https://github.com/Aheadboat/voteGPT/actions/runs/36758688824) passed non-browser checks and PostgreSQL contracts, and 32/33 browser tests. The remaining test exposed suggestion-list layout shift interrupting the consent-checkbox click; a focused layout correction and regression are under review. No merge or completion claimed.
-- **Next checkpoint:** Fresh full checks and hosted browser verification, then draft PR for user review. No DONE status until the normal authorized merge/closeout process.
+- **Verification evidence:** Reviewed head `febdcf6f0b98c44930c5b58296f205a2891221bb` passed exact-head push [run 36760096289](https://github.com/Aheadboat/voteGPT/actions/runs/36760096289) and pull-request [run 36760101915](https://github.com/Aheadboat/voteGPT/actions/runs/36760101915): 45 files/1,395 tests, typecheck, zero-warning lint, production build, migration checks, 37/37 PostgreSQL tests, and 33/33 Chromium journeys. Five synthetic screenshots were inspected at 375px and 1280px widths. Real Google OAuth and live Photon accuracy/availability remain unverified; no deployment is claimed.
+- **Independent review:** Independent source review resolved the delayed Google-navigation and keyboard-active suggestion findings. The hosted browser layout-shift regression passed after correction; final synthetic screenshots were inspected. No unresolved Critical/Important finding remains in the approved PR #31 scope.
+- **Evidence / PR / CI:** [PR #31](https://github.com/Aheadboat/voteGPT/pull/31) merged the approved final head `febdcf6f0b98c44930c5b58296f205a2891221bb` after both exact-head CI triggers passed. The earlier 32/33 browser result was corrected and the final result is 33/33; no unresolved browser failure is carried into this closeout.
+- **Next checkpoint:** Status-only closeout; R3 becomes DONE on main only when the linked closeout PR merges. No later item activates automatically.
+
+- **Human Gate B approval (2026-10-01):** At 17:15 UTC the user said “Ok, lgtm. Resolve PR and merge in.” This supersedes the initial draft-PR-only merge stop for PR #31; deployment, new paid services, and persistent credential changes remain unauthorized. The earlier request-scope and planning bullets are historical; no F7 work or wider scope is approved.
 
 ### Coordination record
 
-- **Phase:** REFACTOR
+- **Phase:** DONE
 - **Branch:** `codex/r3-login-address` in `.worktrees/r3-login-address`.
 - **Base commit:** `bfd1fd17a37f74990d62f2553dc767d5369cbf5f`
 - **Integrated-main commit:** `bfd1fd17a37f74990d62f2553dc767d5369cbf5f`
 - **Admission result:** Single recovery lane; task-specific branch-local exception recorded above. No main activation merge is claimed. F7 is unchanged and not implemented by this task.
 - **Assigned feature lead:** R3 login/address recovery lead, with disjoint auth and suggestion-provider lanes.
 - **Ownership:** Feature lead owns production/tests/project map; coordinator owns authoritative docs, governance-test maintenance, PR/review/CI and status. Auth/provider lanes do not edit shared UI surfaces.
-- **Merge order:** Pending user review; this task stops at draft PR. No F7 merge or reorder is authorized.
-- **Feature PR/CI:** Draft [PR #31](https://github.com/Aheadboat/voteGPT/pull/31); first hosted head `76e7f4616887e0695f3142e4d1e6eba39e0c8fc6` passed non-browser/database verification and 32/33 browser tests. Layout correction is pending exact-head rerun.
+- **Merge order:** PR #31 feature merge → successful post-merge verification → this status-only closeout. No F7 merge or reorder is authorized.
+- **Feature PR/CI:** Reviewed head `febdcf6f0b98c44930c5b58296f205a2891221bb` passed exact-head push [run 36760096289](https://github.com/Aheadboat/voteGPT/actions/runs/36760096289) and pull-request [run 36760101915](https://github.com/Aheadboat/voteGPT/actions/runs/36760101915): 45 files/1,395 tests, typecheck, zero-warning lint, production build, migration checks, 37/37 PostgreSQL tests, and 33/33 Chromium journeys. Five synthetic screenshots were inspected at 375px and 1280px widths. Real Google OAuth and live Photon accuracy/availability remain unverified; no deployment is claimed.
 - **Blockers:** No paid provider or credential provisioning authorized. Real Google smoke test requires deployed OAuth credentials; fixture tests remain deterministic evidence only.
-- **Feature merge:** Pending; not authorized by the request to send a PR.
-- **Post-merge evidence:** Pending; no merge performed.
-- **Closeout PR/CI/merge:** Pending; no closeout created.
-- **Next Human Gate:** Human Gate B — review final delivered behavior, design, tradeoffs, verification, and remaining limitations before any merge.
+- **Feature merge:** [PR #31](https://github.com/Aheadboat/voteGPT/pull/31) merged to `main` on 2026-10-01 at 17:17 UTC as `899c19f03c1514901258a0a6b57fbd5dfbd1bb38`, after the user's 17:15 UTC approval. Parents are `bfd1fd17a37f74990d62f2553dc767d5369cbf5f` and `febdcf6f0b98c44930c5b58296f205a2891221bb`; tree is `ad54851f0aca27218bfa26ef0f8a6db9d9669500`.
+- **Post-merge evidence:** Exact merged `main` `899c19f03c1514901258a0a6b57fbd5dfbd1bb38` passed hosted push [run 36898244130](https://github.com/Aheadboat/voteGPT/actions/runs/36898244130), including migrations, PostgreSQL contracts, non-E2E checks, Chromium journeys, synthetic artifact retention, and both disposable-database drops. The merge tree equals approved feature head `febdcf6f0b98c44930c5b58296f205a2891221bb`; no production change or deployment is included in lifecycle maintenance.
+- **Closeout PR/CI/merge:** [PR #<CLOSEOUT_PR_NUMBER>](https://github.com/Aheadboat/voteGPT/pull/<CLOSEOUT_PR_NUMBER>) changes only `ROADMAP.md` and `README.md`; current-head hosted CI and its merge provide final closeout proof.
+- **Next Human Gate:** None; Human Gate B approved PR #31 before its feature merge. This closeout activates no later item, authorizes no deployment, and makes R3 DONE only when merged to main.
 
 ## F7 — Elections and Deterministic Candidate Validity [IN PROGRESS (DISCOVER/DESIGN/PLAN)]
 
