@@ -63,6 +63,7 @@ const {
 vi.mock("@/lib/election-service", () => ({ getRuntimeElectionService, getStatewideElections }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
+vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getRuntimeAuth: vi.fn() }));
 vi.mock("@/db", () => ({
@@ -248,6 +249,17 @@ const savedResidence = {
 } as const satisfies SavedResidenceView;
 
 describe("signed-in dashboard", () => {
+  it("exposes opt-in suggestions only when a server-side provider is configured", async () => {
+    vi.stubEnv("PHOTON_BASE_URL", "https://geocoder.example.test");
+    try {
+      render(await DashboardPage());
+      expect(screen.getByRole("checkbox", { name: "Enable address suggestions" })).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("https://geocoder.example.test");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(headers).mockResolvedValue(
@@ -492,6 +504,47 @@ describe("signed-in dashboard", () => {
     expect(fetchCongressRoster).not.toHaveBeenCalled();
     expect(fetchCurrentHouseVacancies).not.toHaveBeenCalled();
     for (const link of screen.getAllByRole("link")) expect(link.getAttribute("href")).not.toMatch(/ocd-division|voter@example|address=/);
+  });
+
+  it("keeps configured address suggestions private alongside saved-division Elections", async () => {
+    const privateProviderUrl = "https://private-geocoder.example.test/photon/";
+    vi.stubEnv("PHOTON_BASE_URL", privateProviderUrl);
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+
+    try {
+      const page = await dashboardFor({ level: "state", mode: "elections" });
+      expect(JSON.stringify(page)).not.toContain(privateProviderUrl);
+      const { container } = render(page);
+
+      expect(screen.getByRole("checkbox", { name: "Enable address suggestions" })).not.toBeChecked();
+      const address = screen.getByRole("textbox", { name: "Voting residence address" });
+      fireEvent.change(address, { target: { value: ownerVisibleAddress } });
+      expect(address).toHaveValue(ownerVisibleAddress);
+
+      const navigation = screen.getByRole("region", { name: "Government information" });
+      expect(within(navigation).getByRole("tab", { name: "State" })).toHaveAttribute("aria-selected", "true");
+      expect(within(navigation).getByRole("link", { name: "Elections" })).toHaveAttribute("aria-current", "page");
+      expect(within(navigation).getByRole("heading", { name: "Elections" })).toBeVisible();
+      expect(within(navigation).getByRole("region", { name: "Upcoming contests" })).toHaveTextContent(
+        /This does not mean there are no elections or candidates/,
+      );
+      expect(within(navigation).getByText(/district matching.*not verified/i)).toBeVisible();
+      expect(within(navigation).getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections");
+
+      expect(getSavedResidenceDivisions).toHaveBeenCalledWith(sessionUserId);
+      expect(getStatewideElections).toHaveBeenCalledExactlyOnceWith(electionService, stateDivisions, "state");
+      expect(getSavedResidence).not.toHaveBeenCalled();
+      expect(navigation).not.toHaveTextContent(ownerVisibleAddress);
+      expect(JSON.stringify(governmentNavigationProps.mock.calls)).not.toContain(ownerVisibleAddress);
+      expect(container.innerHTML).not.toContain(privateProviderUrl);
+      for (const link of navigation.querySelectorAll("a[href]")) {
+        const href = decodeURIComponent(link.getAttribute("href")!);
+        expect(href).not.toContain(ownerVisibleAddress);
+        expect(href).not.toContain(privateProviderUrl);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("explains unsupported saved scopes without implying that no elections exist", async () => {

@@ -17,6 +17,10 @@ Start: [public page](src/app/page.tsx), [application layout](src/app/layout.tsx)
 
 Start: [preview component](src/components/residence-preview.tsx), [resolution route](src/app/api/v1/location/resolve/route.ts). Adjacent: [residence service](src/lib/residence.ts), [residence policy](src/lib/residence-policy.ts). Check: `npm.cmd test -- src/components/residence-preview.test.tsx src/app/api/v1/location/resolve/route.test.ts`.
 
+### Optional address suggestions
+
+Start: [accessible opt-in input](src/components/address-autocomplete.tsx), [suggestion route](src/app/api/v1/location/suggest/route.ts). Adjacent: [Photon adapter and configuration](src/lib/address-suggestions.ts), [client-safe contract](src/lib/address-suggestions-contract.ts). Suggestions only fill the manual input; the existing residence preview verifies political divisions. Check: `npm test -- src/components/address-autocomplete.test.tsx src/lib/address-suggestions.test.ts src/app/api/v1/location/suggest/route.test.ts`; browser checks: `npm run test:e2e -- e2e/address-suggestions.spec.ts`.
+
 ### Saved residence
 
 Start: [residence route](src/app/api/v1/residence/route.ts), [dashboard](src/app/dashboard/page.tsx). Adjacent: [saved-residence service](src/lib/saved-residence.ts), [service tests](src/lib/saved-residence.test.ts). Check: `npm.cmd test -- src/app/api/v1/residence/route.test.ts src/lib/saved-residence.test.ts`.

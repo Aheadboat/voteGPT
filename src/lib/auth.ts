@@ -17,7 +17,7 @@ type CreateAuthOptions = {
   };
   magicLinkExpiresIn?: number;
   secret: string;
-  sendMagicLink: MagicLinkOptions["sendMagicLink"];
+  sendMagicLink?: MagicLinkOptions["sendMagicLink"];
 };
 
 export function createAuth({
@@ -42,17 +42,20 @@ export function createAuth({
       ipAddress: { disableIpTracking: true },
     },
     baseURL,
+    onAPIError: { errorURL: new URL("/sign-in", baseURL).toString() },
     database: drizzleAdapter(database, {
       provider: "pg",
       schema: authSchema,
     }),
-    plugins: [
-      magicLink({
-        expiresIn: magicLinkExpiresIn,
-        sendMagicLink,
-        storeToken: "hashed",
-      }),
-    ],
+    plugins: sendMagicLink
+      ? [
+          magicLink({
+            expiresIn: magicLinkExpiresIn,
+            sendMagicLink,
+            storeToken: "hashed",
+          }),
+        ]
+      : [],
     secret,
     session: {
       cookieCache: { enabled: false },
@@ -84,6 +87,17 @@ function verifiedGoogleOptions(
   };
 }
 
+export function getSignInMethods() {
+  return {
+    email: Boolean(
+      process.env.EMAIL_FROM?.trim() && process.env.EMAIL_SERVER?.trim(),
+    ),
+    google: Boolean(
+      process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim(),
+    ),
+  };
+}
+
 let runtimeAuth: Promise<ReturnType<typeof createAuth>> | undefined;
 
 function requiredEnvironment(name: string) {
@@ -101,31 +115,41 @@ export function getRuntimeAuth() {
     return runtimeAuth;
   }
 
-  runtimeAuth = createRuntimeAuth();
-  return runtimeAuth;
+  const initialization = createRuntimeAuth();
+  runtimeAuth = initialization;
+  void initialization.catch(() => {
+    if (runtimeAuth === initialization) {
+      runtimeAuth = undefined;
+    }
+  });
+  return initialization;
 }
 
 async function createRuntimeAuth() {
-  const emailFrom = requiredEnvironment("EMAIL_FROM");
-  const transport = nodemailer.createTransport(
-    requiredEnvironment("EMAIL_SERVER"),
-  );
+  const emailFrom = process.env.EMAIL_FROM?.trim();
+  const emailServer = process.env.EMAIL_SERVER?.trim();
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const transport = emailFrom && emailServer
+    ? nodemailer.createTransport(emailServer)
+    : undefined;
 
   return createAuth({
     baseURL: requiredEnvironment("BETTER_AUTH_URL"),
     database: await createDatabase(requiredEnvironment("DATABASE_URL")),
-    google: {
-      clientId: requiredEnvironment("GOOGLE_CLIENT_ID"),
-      clientSecret: requiredEnvironment("GOOGLE_CLIENT_SECRET"),
-    },
+    google: googleClientId && googleClientSecret
+      ? { clientId: googleClientId, clientSecret: googleClientSecret }
+      : undefined,
     secret: requiredEnvironment("BETTER_AUTH_SECRET"),
-    sendMagicLink: async ({ email, url }) => {
-      await transport.sendMail({
-        from: emailFrom,
-        subject: "Your voteGPT sign-in link",
-        text: `Use this one-time link to sign in to voteGPT:\n\n${url}\n\nIf you did not request it, you can ignore this email.`,
-        to: email,
-      });
-    },
+    sendMagicLink: transport
+      ? async ({ email, url }) => {
+          await transport.sendMail({
+            from: emailFrom,
+            subject: "Your voteGPT sign-in link",
+            text: `Use this one-time link to sign in to voteGPT:\n\n${url}\n\nIf you did not request it, you can ignore this email.`,
+            to: email,
+          });
+        }
+      : undefined,
   });
 }
