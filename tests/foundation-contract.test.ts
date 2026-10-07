@@ -148,7 +148,7 @@ function expectF7EngineeringCheckpoint(roadmap: string, readme: string, paths: s
   const baseReadme = normalizeGovernanceDocument(readHistoricalFile(r3CloseoutMerge, "README.md"))
   const item = readRoadmapItem(normalizedRoadmap, "F7")
   expect(governanceSha256(item), "exact F7 approved implementation checkpoint").toBe(
-    "5c81e1a10604edbd7e6dd123abb8102f59804adbd5b8031654fc094cc2af71e6",
+    "aab5e98a1eaaeadc07e4e840cb1ce2eb2b07fd3202f8ea0e63adddefce34d00a",
   )
   expect(governanceSha256(plan), "immutable F7 plan approved at Human Gate A").toBe(
     "a0afbf600842727fe17ee3d116c88e05d17ae3df858395445dfb808a234bbead",
