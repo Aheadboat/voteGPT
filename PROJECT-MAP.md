@@ -39,20 +39,20 @@ Start: [public-evidence decision](G1-VENDOR-DECISION.md). Check: `npm.cmd test -
 
 ### Public and saved-state Elections
 
-Start: [public Elections](src/app/elections/page.tsx), [contest details](src/app/elections/contests/[contestId]/page.tsx), [dashboard](src/app/dashboard/page.tsx). Adjacent: [evidence display](src/components/elections.tsx), [read service and saved-state selection](src/lib/election-service.ts). Personalized selection uses validated saved-state divisions for statewide contests; district matching is explicitly unverified. Check: `npm.cmd test -- src/components/elections.test.tsx src/lib/election-service.test.ts src/app/elections/page.test.tsx "src/app/elections/contests/[contestId]/page.test.tsx" src/app/dashboard/page.test.tsx`.
+Start: [public Elections](src/app/elections/page.tsx), [contest details](src/app/elections/contests/[contestId]/page.tsx), [dashboard](src/app/dashboard/page.tsx). Adjacent: [evidence display](src/components/elections.tsx), [read service and saved-state selection](src/lib/election-service.ts). Personalized selection uses validated saved-state divisions for statewide contests; district matching is explicitly unverified. Check: `npm test -- tests/election-integration.test.ts tests/election-pages.integration.test.tsx src/app/dashboard/page.test.tsx`; browser journeys: `npm run test:e2e -- e2e/government-navigation.spec.ts`.
 
 ### Deterministic election evidence
 
-Start: [package validation and contest projection](src/lib/elections.ts). Adjacent: [protected source policy](src/lib/election-source-policy.ts). Routes source attribution, calendar normalization, separate candidate status tracks, freshness, conflicts, and history. Check: `npm.cmd test -- src/lib/elections.test.ts src/lib/election-source-policy.test.ts`.
+Start: [package validation and contest projection](src/lib/elections.ts). Adjacent: [protected source policy](src/lib/election-source-policy.ts). Routes source attribution, calendar normalization, separate candidate status tracks, freshness, conflicts, and history. Check: `npm test -- tests/election-integration.test.ts`.
 
 ### Controlled election import
 
-Start: [local import command](scripts/import-election-evidence.mts), [import service](src/lib/election-import.ts). Adjacent: [package and receipt review](src/lib/election-repository.ts), [protected admission options](src/lib/election-source-policy.ts). Dry-run validates before storage initialization; apply requires an approved receipt. Check: `npm.cmd test -- src/lib/election-import.test.ts tests/election-import-command.test.ts`.
+Start: [local import command](scripts/import-election-evidence.mts), [import service](src/lib/election-import.ts). Adjacent: [package and receipt review](src/lib/election-repository.ts), [protected admission options](src/lib/election-source-policy.ts). Dry-run validates before storage initialization; apply requires an approved receipt. Check: `npm test -- tests/election-integration.test.ts tests/election-import-command.test.ts`.
 
 ### Persistence
 
-Start: [database schema](src/db/schema.ts), [database access](src/db/index.ts). Adjacent: [election repository](src/lib/election-repository.ts), [latest migration](drizzle/0005_election_evidence.sql), [State-cache integration contract](integration/state-official-cache.test.ts), [election-ledger integration contract](integration/election-evidence.test.ts). Check: `npm.cmd test -- src/db/index.test.ts src/lib/election-repository.test.ts`.
+Start: [database schema](src/db/schema.ts), [database access](src/db/index.ts). Adjacent: [election repository](src/lib/election-repository.ts), [latest migration](drizzle/0005_election_evidence.sql), [State-cache integration contract](integration/state-official-cache.test.ts), [election-ledger integration contract](integration/election-evidence.test.ts). Check: `npm test -- src/db/index.test.ts tests/election-integration.test.ts`; PostgreSQL contracts: `npm run test:postgres`.
 
 ### Verification and delivery
 
-Start: [package scripts](package.json), [CI workflow](.github/workflows/ci.yml). Adjacent: [foundation contract](tests/foundation-contract.test.ts), [Playwright configuration](playwright.config.ts). Check: `npm.cmd test -- tests/foundation-contract.test.ts`.
+Start: [package scripts](package.json), [CI workflow](.github/workflows/ci.yml). Adjacent: [testing rules](AGENTS.md#testing-and-verification), [PostgreSQL test configuration](vitest.postgres.config.mts), [Playwright configuration](playwright.config.ts). Check: `npm run check`, `npm run db:check`, `npm run test:postgres`, and `npm run test:e2e`. Keep coverage focused on critical runtime integrations; authorization and release decisions remain review gates.

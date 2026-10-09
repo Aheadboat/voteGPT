@@ -140,7 +140,7 @@ Preserve In office behavior, tab semantics, native links, manual activation, vis
 
 F7-D1 code/interface discovery, F7-D2 primary-source diligence, and coordinator UI/integration review are complete read-only. Their falsifiable check is that every roadmap criterion maps below and no production row is claimed from an unread source. Implementation tasks remain unstarted.
 
-For each T1–T6 implementation slice: write the named smallest behavioral test; run and confirm its expected missing behavior; coordinator records RED in ROADMAP; write minimum production code; rerun focused checks; refactor only green code; return exact evidence and diff for independent review. No skipped/quarantined tests or arbitrary coverage target.
+Updated 2026-10-09 by explicit user instruction: keep the smallest useful set of critical integration tests. TDD and RED-first execution are optional. The task table below is the historical approved plan; its per-file unit matrices and test-first sequencing are superseded by `AGENTS.md`. Current F7 proof is `tests/election-integration.test.ts`, `tests/election-pages.integration.test.tsx`, the protected CLI subprocess suite, PostgreSQL ledger contracts, existing dashboard/privacy checks and browser journeys. Source admission, real-corpus evidence and human gates remain mandatory.
 
 | Task / outcome | Expected RED and concrete assertions | Allowed files / interfaces | Depends on / focused checks / done criteria |
 | --- | --- | --- | --- |
@@ -153,7 +153,7 @@ For each T1–T6 implementation slice: write the named smallest behavioral test;
 
 Parallel lanes begin only after T1 contracts settle: T2 owns schema/migration/repository; T3 owns policy/import/CLI; T4 owns view components/routes and service. T4 can test its DTO presentation before T2 finishes, but service integration waits for T2. No production fake repository or placeholder adapter is added. The feature lead exclusively owns shared `elections.ts` changes and serializes interface changes. T5 alone owns real-package/source-policy integration after T3. T6 follows integration. No agent edits another worktree or coordinator-owned file.
 
-The coordinator records RED, independently reruns returned tests, reviews diffs, owns authoritative records/PRs/CI/gates/merges, and does not implement feature production code. The feature lead owns only approved F7 production/test/map surfaces. Shared CI, unrelated generated artifacts, existing G1 sources, the parent roadmap board, and every later item stay outside these lanes.
+The coordinator records verification evidence, independently reruns returned tests, reviews diffs, owns authoritative records/PRs/CI/gates/merges, and does not implement feature production code. The feature lead owns only approved F7 production/test/map surfaces. Shared CI, unrelated generated artifacts, existing G1 sources, the parent roadmap board, and every later item stay outside these lanes.
 
 ## UX evidence and completion conditions
 
