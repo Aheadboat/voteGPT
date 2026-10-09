@@ -4,7 +4,8 @@ export default function HomePage() {
       <div className="landing">
         <section className="intro" aria-labelledby="page-title">
           <p className="status">
-            voteGPT is in development. Civic coverage is not available yet.
+            voteGPT is in development. Civic coverage is limited. California elections
+            can be browsed with explicit source, freshness, and coverage limits.
           </p>
           <h1 id="page-title">Clear civic information, grounded in sources.</h1>
           <p className="lede">
@@ -14,6 +15,9 @@ export default function HomePage() {
           </p>
           <a className="disclosure-link" href="#principles">
             How voteGPT works
+          </a>
+          <a className="disclosure-link" href="/elections">
+            Browse elections
           </a>
         </section>
 

@@ -30,7 +30,7 @@ If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is 
 
 ## Roadmap item protocol
 
-Roadmap items move through `TODO → explicit authorization → read-only dependency/interface/admission audit → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → RED → GREEN → REFACTOR → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
+Roadmap items move through `TODO → explicit authorization → read-only dependency/interface/admission audit → inert feature branch/worktree → activation record PR/CI/merge → IN PROGRESS (DISCOVER/DESIGN/PLAN) → Human Gate A → IMPLEMENT → VERIFIED → feature PR/CI/review → Human Gate B → feature merge → post-merge verification → closeout PR/CI → closeout merge → DONE`.
 
 - Only explicit user authorization starts an item.
 - After explicit user authorization and before creating inert item branches/worktrees or an activation PR, the coordinator-only pre-activation step is a read-only dependency/interface/admission audit; the audit may inspect repository and roadmap state but cannot modify files or external state; no feature agent or `DISCOVER/DESIGN/PLAN` dispatch occurs during the audit; `PASS` or `CONDITIONAL` may proceed to paired activation; unsettled or coupled interfaces yield `FAIL`; `FAIL` does not create paired activation; the coordinator reports `FAIL` and requires explicit user activation order for sequential work.
@@ -47,7 +47,7 @@ Roadmap items move through `TODO → explicit authorization → read-only depend
 - Confirm the user outcome, dependencies, applicable domain DNA, risks, non-goals, and unresolved decisions.
 - Record phase, branch, base and integrated-main commits, concurrency admission, assigned feature lead, ownership, merge order, PR/CI state, blockers, evidence, and next Human Gate.
 - Prefer vertical, independently testable user outcomes over frontend/backend layer splits.
-- Build a task graph. Each implementation task records its outcome, expected RED failure, files or interfaces, dependencies, and done criteria. Non-implementation tasks record a falsifiable check and expected result.
+- Build a task graph. Each implementation task records its outcome, material risks, critical integration checks, files or interfaces, dependencies, and done criteria. Non-implementation tasks record a falsifiable check and expected result.
 - Mark parallel lanes only after dependencies and interfaces are settled and mutable files or external state are disjoint or exclusively owned.
 - Keep the plan in the active `ROADMAP.md` item while it remains readable. If it cannot stay concise, create one linked plan file. Do not create a plan directory in advance.
 
@@ -61,16 +61,16 @@ Roadmap items move through `TODO → explicit authorization → read-only depend
 
 ### Human Gate A
 
-Before RED or production work for an item, present its overall design, tests-first implementation plan, task graph, proposed parallel lanes, risks, dependencies, and non-goals. Continue that item only after explicit user approval.
+Before implementation work for an item, present its overall design, risk-based implementation and verification plan, task graph, proposed parallel lanes, risks, dependencies, and non-goals. Continue that item only after explicit user approval.
 
 ### Task graph and delegation
 
 - The coordinator owns dependency and concurrency audits, branch/worktree creation, task briefs, `AGENTS.md`, `ROADMAP.md`, `README.md`, roadmap status, Human Gates, review orchestration, CI/PR monitoring, merge decisions, post-merge checks, closeout PRs, and blocker reports; it does not implement feature production code.
 - One feature lead owns one roadmap item from discovery through `VERIFIED` and may coordinate bounded implementation subtasks. It cannot change roadmap status, merge, edit another worktree, or modify coordinator-owned authoritative files.
-- Give each subagent one bounded task with the roadmap/task ID, outcome, allowed files, applicable DNA IDs, dependencies and interfaces, expected RED failure, focused test command, and stop condition.
+- Give each subagent one bounded task with the roadmap/task ID, outcome, allowed files, applicable DNA IDs, dependencies and interfaces, critical behavior to verify, focused integration command, and stop condition.
 - Every feature-design dispatch copies this exact portable line: `Required skills: invoke ponytail full, then caveman full, before exploration.` This applies to every dispatch that includes `DISCOVER/DESIGN/PLAN`, including the feature lead. Resolve both skills by name from the agent's available skill catalog; never hardcode a machine path.
 - Ponytail governs design scope but cannot simplify away explicit requirements, trust-boundary validation, data-loss prevention, privacy, security, accessibility, or required tests.
-- Caveman governs communication but cannot omit outcome, dependencies, interfaces, decisions, rejected alternatives, risks, non-goals, expected RED, evidence, Human Gates, or blockers. Use full prose whenever compression would create ambiguity.
+- Caveman governs communication but cannot omit outcome, dependencies, interfaces, decisions, rejected alternatives, risks, non-goals, verification scope, evidence, Human Gates, or blockers. Use full prose whenever compression would create ambiguity.
 - Subagents do not change roadmap status or mark work complete. The coordinator inspects their diffs and reruns their tests.
 - Independent review agents remain read-only unless the coordinator assigns a separately approved fix task.
 
@@ -141,29 +141,23 @@ Each contract declares **Applies when**, **Principles**, and **Required evidence
 - **UX-08 — Use progressive disclosure.** Lead with task-relevant facts, defer supporting detail, and minimize required choices without hiding sources or alternatives.
 - **UX-09 — State coverage honestly.** Show unavailable and unverified coverage explicitly; never imply completeness the evidence does not support.
 
-**Required evidence:** At RED, record the applicable IDs and expected behavioral failures. At VERIFIED, map each applicable ID to automated evidence or a recorded accessibility, responsive, visual, or recovery-state check.
+**Required evidence:** During planning, record the applicable IDs and material user-facing risks. At VERIFIED, map each applicable ID to relevant integration evidence or a recorded accessibility, responsive, visual, or recovery-state check; one check may cover several IDs.
 
 Visual identity is not locked yet. Typography, color, spacing, shape, iconography, and motion stay feature-local until a real application shell proves reusable patterns.
 
-## TDD workflow
+## Testing and verification
 
-Within an authorized roadmap item, code changes follow `RED → GREEN → REFACTOR → VERIFIED`.
+Use the smallest useful test suite, chosen by risk. Critical integration coverage is the default; TDD and a RED/GREEN sequence are not required. Implement and verify in the order that best fits the change.
 
-1. Write the smallest behavioral test that proves the missing outcome.
-2. Run it and confirm it fails for the expected reason.
-3. Record the test and failure in `ROADMAP.md`.
-4. Write minimum production code required to pass.
-5. Refactor only proven code while tests stay green.
-6. Run focused tests, then full verification.
-7. Record evidence, complete feature PR CI/review, present Human Gate B, and stop. After approval, merge, verify `main`, and complete the closeout PR/CI/merge before recording `DONE`.
-
-Rules:
-
-- No skipped or quarantined tests.
-- No arbitrary coverage target. Every business rule, privacy boundary, security rule, provider contract, and editorial rule needs a behavioral test.
-- External APIs use small checked-in fixtures and contract tests. Live smoke tests are optional and require credentials.
+- Prefer tests that exercise real application boundaries together: route/service/storage flows, migrations and PostgreSQL constraints, import commands, and essential browser journeys. Use small synthetic fixtures; live smoke tests are optional and require credentials.
+- Add or retain a test only when it protects an important user outcome or a material privacy, security, authorization, data-integrity, or source/publication boundary. Cover distinct failure modes at those boundaries without duplicating the same behavior across layers.
+- Do not add routine unit tests for helpers, individual fields, or implementation details. A narrow test is justified only for an important risk that integration coverage cannot reasonably exercise; explain that gap in the change.
+- No test-count or coverage quotas, one-test-per-rule requirement, or mandatory failing-test evidence. Delete redundant tests rather than preserving their count or skipping/quarantining them.
+- Do not encode roadmap prose, document hashes, historical commit IDs, changed-file allowlists, or governance wording in automated tests. Authorization, source approvals, Human Gates, and release decisions remain mandatory documented review checks; removing prose assertions does not relax runtime source or publication gates.
+- For documentation-only changes, review the affected instructions and links rather than adding tests. Record the checks actually run and any relevant verification gaps.
+- Run focused critical integration checks while working, then required full verification before `VERIFIED`. After F1, standard verification is `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run test:e2e`; `npm run check` combines non-E2E checks. Run `npm run db:check` and `npm run test:postgres` for database changes and as required by CI.
+- Record evidence, complete feature PR CI/review, present Human Gate B, and stop. After approval, merge, verify `main`, and complete the closeout PR/CI/merge before recording `DONE`.
 - Add an abstraction only when a second real implementation or measured need requires it.
-- After F1, standard verification is `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`, and `npm run test:e2e`; `npm run check` combines non-E2E checks.
 
 ## Privacy and security
 

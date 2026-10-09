@@ -321,18 +321,20 @@ test("serves State and unavailable recovery panels without JavaScript", async ({
     await page.getByRole("link", { name: "Elections" }).click();
     await expect(page).toHaveURL(/level=local&mode=elections/);
     await expect(page.getByRole("tabpanel").getByRole("status")).toHaveText(
-      "Election information is unavailable until F7. Choose In office for current officials.",
+      "Local election coverage is unavailable. Public California contests can be browsed separately.",
     );
     await page.getByRole("tab", { name: "State" }).click();
     await expect(page).toHaveURL(/level=state&mode=elections/);
-    await expect(page.getByRole("tabpanel").getByRole("status")).toHaveText(
-      "Election information is unavailable until F7. Choose In office for current officials.",
-    );
+    await expect(page.getByRole("tabpanel").getByText(
+      "Election coverage is unavailable for your saved state or selected level. Public California contests remain browsable.",
+      { exact: true },
+    )).toBeVisible();
     await page.getByRole("tab", { name: "Federal" }).click();
     await expect(page).toHaveURL(/level=federal&mode=elections/);
-    await expect(page.getByRole("tabpanel").getByRole("status")).toHaveText(
-      "Election information is unavailable until F7. Choose In office for current officials.",
-    );
+    await expect(page.getByRole("tabpanel").getByText(
+      "Election coverage is unavailable for your saved state or selected level. Public California contests remain browsable.",
+      { exact: true },
+    )).toBeVisible();
     await page.getByRole("link", { name: "In office" }).click();
     await expect(page).toHaveURL(/level=federal&mode=in-office&category=congress/);
     await expect(page.getByRole("tabpanel").getByRole("region", {
@@ -469,7 +471,7 @@ async function assertReducedMotion(page: Page, tabs: Locator) {
     ),
   ).toBe(true);
   const controls = tabs.getByRole("tab").or(
-    page.getByRole("navigation", { name: "Official status" }).getByRole("link"),
+    page.getByRole("navigation", { name: "Information type" }).getByRole("link"),
   );
   await expect(controls).toHaveCount(5);
   const motion = await controls.evaluateAll((elements) =>
@@ -506,10 +508,10 @@ async function assertResponsiveGovernmentSurface(
     await page.setViewportSize(viewport);
     const targets = [
       page.getByRole("tablist", { name: "Government level" }),
-      page.getByRole("navigation", { name: "Official status" }),
+      page.getByRole("navigation", { name: "Information type" }),
       page.getByRole("tabpanel"),
       ...(await page.getByRole("tab").all()),
-      ...(await page.getByRole("navigation", { name: "Official status" }).getByRole("link").all()),
+      ...(await page.getByRole("navigation", { name: "Information type" }).getByRole("link").all()),
       ...(await roster.getByRole("article").all()),
       ...(await roster.getByRole("link").all()),
     ];

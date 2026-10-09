@@ -35,10 +35,10 @@ export function GovernmentNavigation({
   const panelId = `government-level-${state.level}-panel`;
 
   return (
-    <section aria-label="Government officials" className={styles.shell}>
+    <section aria-label="Government information" className={styles.shell}>
       <GovernmentLevelTabs key={state.level} panelId={panelId} state={state} />
 
-      <nav aria-label="Official status" className={styles.modes}>
+      <nav aria-label="Information type" className={styles.modes}>
         {GOVERNMENT_MODES.map((mode) => (
           <a
             aria-current={mode === state.mode ? "page" : undefined}

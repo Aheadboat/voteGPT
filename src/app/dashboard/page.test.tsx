@@ -45,6 +45,9 @@ const {
   governmentNavigationProps,
   runtimeDatabase,
   stateCache,
+  electionService,
+  getRuntimeElectionService,
+  getStatewideElections,
 } = vi.hoisted(() => ({
   federalCache: { kind: "federal-cache" },
   getOfficials: vi.fn(),
@@ -52,7 +55,12 @@ const {
   governmentNavigationProps: vi.fn(),
   runtimeDatabase: { kind: "runtime-database" },
   stateCache: { kind: "state-cache" },
+  electionService: { getUpcoming: vi.fn() },
+  getRuntimeElectionService: vi.fn(),
+  getStatewideElections: vi.fn(),
 }));
+
+vi.mock("@/lib/election-service", () => ({ getRuntimeElectionService, getStatewideElections }));
 
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -271,6 +279,8 @@ describe("signed-in dashboard", () => {
       new Error("Exact residence access is forbidden in federal lookup"),
     );
     getOfficials.mockResolvedValue({ status: "unavailable" });
+    getRuntimeElectionService.mockResolvedValue(electionService);
+    getStatewideElections.mockResolvedValue({ status: "available", contests: [], unverified_count: 0 });
   });
 
   it("keeps saved-home account state before one manual-first residence preview", async () => {
@@ -454,16 +464,95 @@ describe("signed-in dashboard", () => {
       expect(
         page.getByText(
           selection.mode === "elections"
-            ? /unavailable until F7/i
+            ? selection.level === "local" ? /Local election coverage is unavailable/i : /Save a voting residence.*statewide elections/i
             : /Local coverage is unavailable/i,
         ),
       ).toBeVisible();
-      expect(getSavedResidenceDivisions).not.toHaveBeenCalled();
+      if (selection.mode === "elections" && selection.level !== "local") {
+        expect(getSavedResidenceDivisions).toHaveBeenCalledWith(sessionUserId);
+        expect(page.getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections");
+      } else expect(getSavedResidenceDivisions).not.toHaveBeenCalled();
       expect(getSavedResidence).not.toHaveBeenCalled();
       expectNoStateLookup();
       expectNoFederalLookup();
       page.unmount();
     }
+  });
+
+  it("explains unverified district matching and provides public recovery when saved-residence storage fails", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockRejectedValue(new Error(ownerVisibleAddress));
+    render(await dashboardFor({ level: "state", mode: "elections" }));
+    expect(screen.getByText(/district matching.*not verified/i)).toBeInTheDocument();
+    expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections");
+    expect(screen.queryByText(ownerVisibleAddress)).not.toBeInTheDocument();
+    expect(getSavedResidence).not.toHaveBeenCalled();
+    expectNoStateLookup();
+    expectNoFederalLookup();
+  });
+
+  it("sends only saved divisions through the statewide selection boundary and keeps district limits explicit", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+    render(await dashboardFor({ level: "state", mode: "elections" }));
+    expect(getStatewideElections).toHaveBeenCalledWith(electionService, stateDivisions, "state");
+    expect(screen.getByText(/district matching.*not verified/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /official election office/i })).toBeInTheDocument();
+    expect(getSavedResidence).not.toHaveBeenCalled();
+    expect(getOfficials).not.toHaveBeenCalled();
+    expect(getStateOfficials).not.toHaveBeenCalled();
+    expect(fetchStateLegislators).not.toHaveBeenCalled();
+    expect(fetchCongressRoster).not.toHaveBeenCalled();
+    expect(fetchCurrentHouseVacancies).not.toHaveBeenCalled();
+    for (const link of screen.getAllByRole("link")) expect(link.getAttribute("href")).not.toMatch(/ocd-division|voter@example|address=/);
+  });
+
+  it("keeps configured address suggestions private alongside saved-division Elections", async () => {
+    const privateProviderUrl = "https://private-geocoder.example.test/photon/";
+    vi.stubEnv("PHOTON_BASE_URL", privateProviderUrl);
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+
+    try {
+      const page = await dashboardFor({ level: "state", mode: "elections" });
+      expect(JSON.stringify(page)).not.toContain(privateProviderUrl);
+      const { container } = render(page);
+
+      expect(screen.getByRole("checkbox", { name: "Enable address suggestions" })).not.toBeChecked();
+      const address = screen.getByRole("textbox", { name: "Voting residence address" });
+      fireEvent.change(address, { target: { value: ownerVisibleAddress } });
+      expect(address).toHaveValue(ownerVisibleAddress);
+
+      const navigation = screen.getByRole("region", { name: "Government information" });
+      expect(within(navigation).getByRole("tab", { name: "State" })).toHaveAttribute("aria-selected", "true");
+      expect(within(navigation).getByRole("link", { name: "Elections" })).toHaveAttribute("aria-current", "page");
+      expect(within(navigation).getByRole("heading", { name: "Elections" })).toBeVisible();
+      expect(within(navigation).getByRole("region", { name: "Upcoming contests" })).toHaveTextContent(
+        /This does not mean there are no elections or candidates/,
+      );
+      expect(within(navigation).getByText(/district matching.*not verified/i)).toBeVisible();
+      expect(within(navigation).getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections");
+
+      expect(getSavedResidenceDivisions).toHaveBeenCalledWith(sessionUserId);
+      expect(getStatewideElections).toHaveBeenCalledExactlyOnceWith(electionService, stateDivisions, "state");
+      expect(getSavedResidence).not.toHaveBeenCalled();
+      expect(navigation).not.toHaveTextContent(ownerVisibleAddress);
+      expect(JSON.stringify(governmentNavigationProps.mock.calls)).not.toContain(ownerVisibleAddress);
+      expect(container.innerHTML).not.toContain(privateProviderUrl);
+      for (const link of navigation.querySelectorAll("a[href]")) {
+        const href = decodeURIComponent(link.getAttribute("href")!);
+        expect(href).not.toContain(ownerVisibleAddress);
+        expect(href).not.toContain(privateProviderUrl);
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("explains unsupported saved scopes without implying that no elections exist", async () => {
+    vi.mocked(getSavedResidenceDivisions).mockResolvedValue(stateDivisions);
+    getStatewideElections.mockResolvedValue({ status: "unsupported" });
+    render(await dashboardFor({ level: "state", mode: "elections" }));
+    expect(screen.getByText(/coverage is unavailable.*saved state/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Browse elections" })).toHaveAttribute("href", "/elections");
   });
 
   it("normalizes invalid or repeated directives before selecting one safe federal panel", async () => {
